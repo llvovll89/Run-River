@@ -42,7 +42,7 @@ export default function Home() {
   }
 
   const { theme, toggle } = useTheme();
-  const { browser, canInstall, promptInstall } = usePWAInstall();
+  const { mode: installMode, canInstall, promptInstall } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const canStart  = !!(startPoint && endPoint);
   const isRun     = activityType === "running";
@@ -79,7 +79,7 @@ export default function Home() {
         <div className="flex items-center gap-2">
           {canInstall && (
             <button
-              onClick={browser === "ios-safari" ? () => setShowIOSGuide(true) : promptInstall}
+              onClick={installMode === "ios" ? () => setShowIOSGuide(true) : promptInstall}
               className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
               aria-label="앱 설치"
             >

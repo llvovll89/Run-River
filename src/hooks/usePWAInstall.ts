@@ -2,24 +2,22 @@
 
 import { useEffect, useState } from "react";
 
-type Browser = "chrome-android" | "ios-safari" | "unsupported";
+type InstallMode = "prompt" | "ios" | "unsupported";
+
+type DeferredPrompt = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: string }>;
+};
 
 interface PWAInstallState {
-  browser: Browser;
+  mode: InstallMode;
   canInstall: boolean;
-  isInstalled: boolean;
   promptInstall: () => Promise<void>;
 }
 
-function detectBrowser(): Browser {
-  if (typeof navigator === "undefined") return "unsupported";
-  const ua = navigator.userAgent;
-  const isIOS = /iPhone|iPad|iPod/.test(ua);
-  if (isIOS) return "ios-safari";
-  const isAndroid = /Android/.test(ua);
-  const isChrome = /Chrome/.test(ua) && !/Edge|OPR/.test(ua);
-  if (isAndroid && isChrome) return "chrome-android";
-  return "unsupported";
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 
 function isStandalone(): boolean {
@@ -31,39 +29,38 @@ function isStandalone(): boolean {
 }
 
 export function usePWAInstall(): PWAInstallState {
-  const [deferredPrompt, setDeferredPrompt] = useState<Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null);
-  const [installed, setInstalled] = useState(false);
-  const [browser, setBrowser] = useState<Browser>("unsupported");
+  const [deferredPrompt, setDeferredPrompt] = useState<DeferredPrompt | null>(null);
+  const [mode, setMode] = useState<InstallMode>("unsupported");
 
   useEffect(() => {
-    setBrowser(detectBrowser());
-    setInstalled(isStandalone());
+    if (isStandalone()) return;
+
+    if (isIOS()) {
+      setMode("ios");
+      return;
+    }
 
     const handler = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> });
+      setDeferredPrompt(e as DeferredPrompt);
+      setMode("prompt");
     };
 
     window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => setInstalled(true));
+    window.addEventListener("appinstalled", () => setMode("unsupported"));
 
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-    };
+    return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
-  const canInstall =
-    !installed &&
-    (browser === "ios-safari" || (browser === "chrome-android" && !!deferredPrompt));
+  const canInstall = mode === "ios" || (mode === "prompt" && !!deferredPrompt);
 
   async function promptInstall() {
-    if (browser === "chrome-android" && deferredPrompt) {
-      await deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") setInstalled(true);
-      setDeferredPrompt(null);
-    }
+    if (mode !== "prompt" || !deferredPrompt) return;
+    await deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") setMode("unsupported");
+    setDeferredPrompt(null);
   }
 
-  return { browser, canInstall, isInstalled: installed, promptInstall };
+  return { mode, canInstall, promptInstall };
 }
