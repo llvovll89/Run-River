@@ -7,124 +7,186 @@ export const revalidate = 0;
 
 export default async function HistoryPage() {
   let records: RunningRecord[] = [];
-  let error = "";
+  let fetchError = "";
 
   try {
     records = await getRunningHistory();
-  } catch {
-    error = "기록을 불러올 수 없습니다. Supabase 설정을 확인하세요.";
+  } catch (e) {
+    fetchError = e instanceof Error ? e.message : "기록을 불러올 수 없습니다.";
   }
 
-  const totalRuns = records.length;
-  const totalDistance = records.reduce((sum, r) => sum + r.distance_km, 0);
-  const runDays = new Set(records.map((r) => r.created_at.slice(0, 10))).size;
+  const totalDist = records.reduce((s, r) => s + r.distance_km, 0);
+  const totalDays = new Set(records.map((r) => r.created_at.slice(0, 10))).size;
+  const avgPace   = records.length > 0
+    ? records.reduce((s, r) => s + r.pace, 0) / records.length : 0;
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-dvh" style={{ background: "var(--c-bg)" }}>
       {/* 헤더 */}
-      <header className="bg-blue-600 text-white px-4 py-4 flex items-center gap-3">
-        <Link href="/" className="text-white/80 text-sm">
-          ← 홈
-        </Link>
-        <h1 className="text-lg font-bold">기록</h1>
-      </header>
+      <div
+        className="px-5"
+        style={{
+          paddingTop: "calc(var(--sat) + 10px)",
+          paddingBottom: "16px",
+          background: "var(--c-surface)",
+          borderBottom: "1px solid var(--c-border)",
+        }}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Link
+            href="/"
+            className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+            style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
+          >
+            <svg width="16" height="16" style={{ color: "var(--c-text-1)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </Link>
+        </div>
 
-      {/* 요약 */}
-      {totalRuns > 0 && (
-        <div className="bg-white mx-4 mt-4 rounded-2xl shadow p-4 grid grid-cols-3 gap-3 text-center">
-          <SummaryStat label="총 활동" value={String(totalRuns)} unit="회" />
-          <SummaryStat label="총 거리" value={totalDistance.toFixed(1)} unit="km" />
-          <SummaryStat label="활동 일수" value={String(runDays)} unit="일" />
+        <h1
+          className="mb-0.5"
+          style={{ fontSize: 34, fontWeight: 800, color: "var(--c-text-1)", letterSpacing: "-0.02em", lineHeight: 1.1 }}
+        >
+          활동 기록
+        </h1>
+        <p style={{ fontSize: 15, color: "var(--c-text-2)" }}>총 {records.length}회</p>
+      </div>
+
+      {/* 요약 카드 */}
+      {records.length > 0 && (
+        <div className="px-4 pt-4">
+          <div className="card rounded-2xl p-4">
+            <p
+              className="mb-3"
+              style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+            >
+              전체 요약
+            </p>
+            <div className="grid grid-cols-3 gap-0">
+              <SummaryNum value={totalDist.toFixed(1)} unit="km" label="총 거리" />
+              <SummaryNum value={String(records.length)} unit="회" label="활동" />
+              <SummaryNum value={String(totalDays)} unit="일" label="활동일" />
+            </div>
+            {avgPace > 0 && (
+              <div
+                className="flex justify-between items-center mt-3 pt-3"
+                style={{ borderTop: "1px solid var(--c-border)" }}
+              >
+                <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>평균 페이스</span>
+                <span className="num" style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>
+                  {formatPace(avgPace)} <span style={{ fontSize: 12, fontWeight: 500, color: "var(--c-text-2)" }}>/km</span>
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* 리스트 */}
-      <div className="px-4 py-4 space-y-3">
-        {error && (
-          <p className="text-center text-red-500 text-sm mt-8">{error}</p>
+      <div className="px-4 pt-3 pb-8 space-y-2">
+        {fetchError && (
+          <div
+            className="mt-4 rounded-2xl p-4 text-sm"
+            style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-danger)" }}
+          >
+            {fetchError}
+          </div>
         )}
-        {!error && records.length === 0 && (
-          <p className="text-center text-gray-400 text-sm mt-12">
-            아직 기록이 없습니다.
-          </p>
+
+        {!fetchError && records.length === 0 && (
+          <div className="flex flex-col items-center justify-center mt-20 gap-4">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center"
+              style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}
+            >
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: "var(--c-text-3)" }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="font-semibold mb-1" style={{ color: "var(--c-text-1)" }}>아직 기록이 없습니다</p>
+              <p style={{ fontSize: 14, color: "var(--c-text-2)" }}>첫 활동을 시작해보세요</p>
+            </div>
+            <Link
+              href="/"
+              className="mt-2 px-6 py-3 rounded-2xl text-sm font-bold text-white"
+              style={{ background: "var(--c-toss-blue)", boxShadow: "0 4px 16px var(--c-toss-blue)44" }}
+            >
+              활동 시작하기
+            </Link>
+          </div>
         )}
-        {records.map((record) => (
-          <RecordCard key={record.id} record={record} />
-        ))}
+
+        {records.map((r, i) => <RecordCard key={r.id} record={r} rank={i + 1} />)}
       </div>
     </main>
   );
 }
 
-function RecordCard({ record }: { record: RunningRecord }) {
-  const isRunning = record.activity_type === "running";
-  const date = new Date(record.created_at);
-  const dateStr = date.toLocaleDateString("ko-KR", {
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-  });
-  const timeStr = date.toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
+function SummaryNum({ value, unit, label }: { value: string; unit: string; label: string }) {
   return (
-    <div className="bg-white rounded-2xl shadow p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">{isRunning ? "🏃" : "🚶"}</span>
-          <span className="text-sm font-semibold text-gray-700">
-            {isRunning ? "러닝" : "워킹"}
-          </span>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-400">{dateStr}</p>
-          <p className="text-xs text-gray-400">{timeStr}</p>
-        </div>
+    <div className="text-center">
+      <div className="flex items-baseline justify-center gap-0.5">
+        <span className="num" style={{ fontSize: 26, fontWeight: 800, color: "var(--c-text-1)", letterSpacing: "-0.03em" }}>{value}</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--c-text-2)" }}>{unit}</span>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <p className="text-xs text-gray-400">거리</p>
-          <p className="text-base font-bold text-gray-900">
-            {record.distance_km.toFixed(2)}
-            <span className="text-xs font-normal text-gray-400 ml-0.5">km</span>
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-400">시간</p>
-          <p className="text-base font-bold text-gray-900">
-            {formatDuration(record.duration_seconds)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-400">페이스</p>
-          <p className="text-base font-bold text-gray-900">
-            {formatPace(record.pace)}
-            <span className="text-xs font-normal text-gray-400 ml-0.5">/km</span>
-          </p>
-        </div>
-      </div>
+      <p style={{ fontSize: 11, color: "var(--c-text-3)", marginTop: 2 }}>{label}</p>
     </div>
   );
 }
 
-function SummaryStat({
-  label,
-  value,
-  unit,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-}) {
+function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
+  const isRun  = record.activity_type === "running";
+  const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
+  const date   = new Date(record.created_at);
+
+  const dateStr = date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
+  const timeStr = date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+
   return (
-    <div>
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className="text-lg font-bold text-gray-900">
-        {value}
-        <span className="text-xs font-normal text-gray-400 ml-0.5">{unit}</span>
-      </p>
+    <div className="card rounded-2xl transition-all active:scale-[0.99]">
+      {/* 헤더 행 */}
+      <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
+        <div className="flex items-center gap-3">
+          <span
+            className="num"
+            style={{ fontSize: 13, fontWeight: 600, color: "var(--c-text-3)", minWidth: 20 }}
+          >
+            {rank}
+          </span>
+          <div>
+            <p style={{ fontSize: 15, fontWeight: 600, color: "var(--c-text-1)", lineHeight: 1.2 }}>{dateStr}</p>
+            <p style={{ fontSize: 12, color: "var(--c-text-3)", marginTop: 1 }}>{timeStr}</p>
+          </div>
+        </div>
+        <span
+          className="text-xs font-bold px-2.5 py-1 rounded-full"
+          style={{ background: `${accent}18`, color: accent }}
+        >
+          {isRun ? "러닝" : "워킹"}
+        </span>
+      </div>
+
+      {/* 스탯 행 */}
+      <div
+        className="grid grid-cols-3 px-4 pb-3.5 pt-2"
+        style={{ borderTop: "1px solid var(--c-border)" }}
+      >
+        {[
+          { label: "거리",    value: record.distance_km.toFixed(2), unit: "km"  },
+          { label: "시간",    value: formatDuration(record.duration_seconds), unit: "" },
+          { label: "페이스",  value: formatPace(record.pace),        unit: "/km" },
+        ].map(({ label, value, unit }) => (
+          <div key={label} className="text-center">
+            <p style={{ fontSize: 11, color: "var(--c-text-3)", marginBottom: 2 }}>{label}</p>
+            <div className="flex items-baseline justify-center gap-0.5">
+              <span className="num" style={{ fontSize: 17, fontWeight: 700, color: accent }}>{value}</span>
+              {unit && <span style={{ fontSize: 11, color: "var(--c-text-3)" }}>{unit}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
