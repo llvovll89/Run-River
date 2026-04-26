@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useTheme } from "@/hooks/useTheme";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import Image from "next/image";
 import type { LatLng, ActivityType } from "@/types";
 
@@ -41,6 +42,8 @@ export default function Home() {
   }
 
   const { theme, toggle } = useTheme();
+  const { browser, canInstall, promptInstall } = usePWAInstall();
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
   const canStart  = !!(startPoint && endPoint);
   const isRun     = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
@@ -74,6 +77,15 @@ export default function Home() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {canInstall && (
+            <button
+              onClick={browser === "ios-safari" ? () => setShowIOSGuide(true) : promptInstall}
+              className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
+              aria-label="앱 설치"
+            >
+              <InstallIcon />
+            </button>
+          )}
           <button
             onClick={toggle}
             className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
@@ -108,6 +120,38 @@ export default function Home() {
           {guide.text}
         </span>
       </div>
+
+      {/* iOS 설치 안내 모달 */}
+      {showIOSGuide && (
+        <div
+          className="absolute inset-0 z-50 flex items-end"
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+          onClick={() => setShowIOSGuide(false)}
+        >
+          <div
+            className="w-full rounded-t-3xl p-6 space-y-4"
+            style={{ background: "var(--c-bg)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-8 h-1 rounded-full mx-auto" style={{ background: "var(--c-border)" }} />
+            <h3 className="text-base font-bold text-center" style={{ color: "var(--c-text-1)" }}>
+              홈 화면에 추가
+            </h3>
+            <div className="space-y-3">
+              <Step num={1} text="하단의 공유 버튼을 탭하세요" icon={<ShareIcon />} />
+              <Step num={2} text="'홈 화면에 추가'를 선택하세요" icon={<AddBoxIcon />} />
+              <Step num={3} text="오른쪽 상단 '추가'를 탭하세요" icon={<CheckIcon />} />
+            </div>
+            <button
+              onClick={() => setShowIOSGuide(false)}
+              className="w-full py-3.5 rounded-2xl font-semibold text-sm"
+              style={{ background: "var(--c-elevated)", color: "var(--c-text-2)" }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Sheet */}
       <div
@@ -251,6 +295,55 @@ function PointCard({
         {point ? `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}` : "미설정"}
       </p>
     </div>
+  );
+}
+
+function Step({ num, text, icon }: { num: number; text: string; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+        style={{ background: "var(--c-toss-blue)", color: "#fff" }}
+      >
+        {num}
+      </span>
+      <span className="flex-1 text-sm" style={{ color: "var(--c-text-1)" }}>{text}</span>
+      <span style={{ color: "var(--c-text-2)" }}>{icon}</span>
+    </div>
+  );
+}
+
+function InstallIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--c-text-1)" }}>
+      <path d="M12 2v13M8 11l4 4 4-4"/>
+      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98M21 5a3 3 0 11-6 0 3 3 0 016 0zM9 12a3 3 0 11-6 0 3 3 0 016 0zM21 19a3 3 0 11-6 0 3 3 0 016 0z"/>
+    </svg>
+  );
+}
+
+function AddBoxIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <path d="M12 8v8M8 12h8"/>
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6L9 17l-5-5"/>
+    </svg>
   );
 }
 
