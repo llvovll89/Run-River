@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
-import type { LatLng } from "@/types";
+import type { LatLng, ActivityType } from "@/types";
 
 const _startSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter></defs><g filter="url(#sh)"><circle cx="26" cy="24" r="20" fill="#30d158" stroke="white" stroke-width="3"/><text x="26" y="29" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="-apple-system,sans-serif">출발</text><polygon points="19,42 26,54 33,42" fill="#30d158"/></g></svg>';
 const START_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_startSvg)}`;
@@ -32,6 +32,7 @@ interface KakaoMapProps {
   routePath?: LatLng[];
   showArrivalRadius?: boolean;
   previewLine?: boolean;
+  activityType?: ActivityType;
   className?: string;
 }
 
@@ -47,6 +48,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   routePath = [],
   showArrivalRadius = false,
   previewLine = false,
+  activityType = "running",
   className = "",
 }: KakaoMapProps, ref) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -236,26 +238,27 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     routeLineRef.current = routeLine;
   }, [routePath]);
 
-  // 이동 경로 폴리라인
+  // activityType 변경 시 기존 폴리라인 색상 업데이트 + 이동 경로 폴리라인
   useEffect(() => {
     if (!mapInstanceRef.current || pathPoints.length < 2) return;
 
     const path = pathPoints.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
+    const color = activityType === "walking" ? "#34c759" : "#007aff";
 
+    // 색상이 바뀌었거나 폴리라인이 없으면 재생성
     if (polylineRef.current) {
-      polylineRef.current.setPath(path);
-    } else {
-      const polyline = new kakao.maps.Polyline({
-        path,
-        strokeWeight: 4,
-        strokeColor: "#3b82f6",
-        strokeOpacity: 0.9,
-        strokeStyle: "solid",
-        map: mapInstanceRef.current,
-      });
-      polylineRef.current = polyline;
+      polylineRef.current.setMap(null);
+      polylineRef.current = null;
     }
-  }, [pathPoints]);
+    polylineRef.current = new kakao.maps.Polyline({
+      path,
+      strokeWeight: 5,
+      strokeColor: color,
+      strokeOpacity: 0.92,
+      strokeStyle: "solid",
+      map: mapInstanceRef.current,
+    });
+  }, [pathPoints, activityType]);
 
   return <div ref={mapRef} className={`w-full ${className}`} />;
 });

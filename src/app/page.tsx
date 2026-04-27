@@ -517,7 +517,16 @@ export default function Home() {
           {pageMode === "map" && (
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
-                <PointCard label="출발" point={startPoint} address={startAddress} active={mode === "start"} color="var(--c-toss-blue)" />
+                <PointCard
+                  label="출발" point={startPoint} address={startAddress} active={mode === "start"} color="var(--c-toss-blue)"
+                  onUseLocation={userLocation ? () => {
+                    startAddrOverride.current = "내 위치";
+                    setStartAddress("내 위치");
+                    setStartPoint(userLocation);
+                    mapRef.current?.panTo(userLocation);
+                    setMode("end");
+                  } : undefined}
+                />
                 <PointCard label="도착" point={endPoint}   address={endAddress}   active={mode === "end"}   color="#f59e0b" />
               </div>
               {(routeDistLabel || routeLoading) && (
@@ -642,9 +651,9 @@ export default function Home() {
 }
 
 function PointCard({
-  label, point, address, active, color,
+  label, point, address, active, color, onUseLocation,
 }: {
-  label: string; point: LatLng | null; address?: string; active: boolean; color: string;
+  label: string; point: LatLng | null; address?: string; active: boolean; color: string; onUseLocation?: () => void;
 }) {
   const isStart = label === "출발";
   return (
@@ -662,7 +671,20 @@ function PointCard({
         />
         <span className="text-xs font-semibold" style={{ color: "var(--c-text-2)" }}>{label}</span>
         {active && (
-          <span className="ml-auto w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: color }} />
+          <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: color }} />
+        )}
+        {onUseLocation && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onUseLocation(); }}
+            className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-[10px] font-bold active:scale-95 transition-transform"
+            style={{ background: `${color}22`, color }}
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            </svg>
+            내 위치
+          </button>
         )}
       </div>
       {point ? (

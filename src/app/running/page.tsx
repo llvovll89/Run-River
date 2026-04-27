@@ -122,6 +122,7 @@ export default function RunningPage() {
         currentPosition={position}
         pathPoints={pathPoints}
         showArrivalRadius
+        activityType={config.activityType}
         className="absolute inset-0 h-full"
       />
 
@@ -131,10 +132,15 @@ export default function RunningPage() {
         style={{
           paddingTop: "calc(var(--sat) + 14px)",
           paddingBottom: "16px",
-          background: "rgba(10,11,12,0.82)",
+          background: isPaused
+            ? "rgba(10,11,12,0.88)"
+            : isRun
+            ? "rgba(0,20,50,0.88)"
+            : "rgba(0,28,15,0.88)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          borderBottom: `1px solid ${accent}33`,
+          transition: "background 0.5s ease, border-color 0.5s ease",
         }}
       >
         <div className="px-5">
@@ -144,7 +150,7 @@ export default function RunningPage() {
                 className="text-xs font-bold px-2.5 py-1 rounded-full"
                 style={{ background: `${accent}22`, color: accent, letterSpacing: "-0.01em" }}
               >
-                {isPaused ? "일시정지" : (isRun ? "러닝" : "워킹") + " 중"}
+                {isPaused ? "⏸ 일시정지" : (isRun ? "🏃 러닝" : "🚶 워킹") + " 중"}
               </span>
               {/* 페이스존 밽지 */}
               {!isPaused && pace > 0 && (
@@ -287,7 +293,12 @@ function RunStat({ label, value, unit, accent, large = false }: {
   return (
     <div
       className="rounded-2xl px-3 py-3 text-center"
-      style={{ background: "rgba(26,28,31,0.9)", border: "1px solid rgba(255,255,255,0.08)" }}
+      style={{
+        background: `${accent}0d`,
+        border: `1px solid ${accent}33`,
+        boxShadow: `0 0 12px ${accent}18`,
+        transition: "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
+      }}
     >
       <p style={{ fontSize: 11, color: "#5e636a", marginBottom: 4 }}>{label}</p>
       <p
