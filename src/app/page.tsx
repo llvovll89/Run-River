@@ -8,6 +8,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import Image from "next/image";
 import type { LatLng, ActivityType } from "@/types";
+import { calcDistance } from "@/hooks/useGeolocation";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -31,6 +32,12 @@ export default function Home() {
   const [searchResults, setSearchResults]     = useState<kakao.maps.services.PlaceResult[]>([]);
   const [searchPointMode, setSearchPointMode] = useState<"start" | "end">("start");
   const [isSearching, setIsSearching]         = useState(false);
+  const [routeInfo, setRouteInfo]             = useState<{ path: LatLng[]; distanceM: number; durationS: number } | null>(null);
+  const [routeLoading, setRouteLoading]       = useState(false);
+  const [startAddress, setStartAddress]       = useState("");
+  const [endAddress, setEndAddress]           = useState("");
+  const startAddrOverride = useRef<string | null>(null);
+  const endAddrOverride   = useRef<string | null>(null);
   const dragY   = useRef(0);
   const didDrag = useRef(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -42,13 +49,66 @@ export default function Home() {
     );
   }, []);
 
+  // 역지오코딩 헬퍼
+  function reverseGeocode(latlng: LatLng, setter: (s: string) => void) {
+    if (!window.kakao?.maps?.services) return;
+    const geocoder = new kakao.maps.services.Geocoder();
+    geocoder.coord2Address(latlng.lng, latlng.lat, (result, status) => {
+      if (status === kakao.maps.services.Status.OK && result[0]) {
+        setter(result[0].address.address_name);
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!startPoint) { setStartAddress(""); return; }
+    if (startAddrOverride.current) { startAddrOverride.current = null; return; }
+    reverseGeocode(startPoint, setStartAddress);
+  }, [startPoint]);
+
+  useEffect(() => {
+    if (!endPoint) { setEndAddress(""); return; }
+    if (endAddrOverride.current) { endAddrOverride.current = null; return; }
+    reverseGeocode(endPoint, setEndAddress);
+  }, [endPoint]);
+
+  // OSRM 도보 경로 페치
+  useEffect(() => {
+    if (!startPoint || !endPoint || pageMode !== "map") {
+      setRouteInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setRouteLoading(true);
+    fetch(`https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.code === "Ok" && data.routes?.[0]) {
+          const coords = data.routes[0].geometry.coordinates as [number, number][];
+          setRouteInfo({
+            path: coords.map(([lng, lat]) => ({ lat, lng })),
+            distanceM: data.routes[0].distance,
+            durationS: data.routes[0].duration,
+          });
+        } else {
+          setRouteInfo(null);
+        }
+        setRouteLoading(false);
+      })
+      .catch(() => { if (!cancelled) { setRouteInfo(null); setRouteLoading(false); } });
+    return () => { cancelled = true; };
+  }, [startPoint, endPoint, pageMode]);
+
   function handleMapClick(latlng: LatLng) {
     if (mode === "start") { setStartPoint(latlng); setMode("end"); }
     else if (mode === "end") { setEndPoint(latlng); setMode(null); }
   }
 
+  function handleStartPointChange(latlng: LatLng) { setStartPoint(latlng); }
+  function handleEndPointChange(latlng: LatLng) { setEndPoint(latlng); }
+
   function handleSearch() {
-    if (!searchQuery.trim() || !window.kakao?.maps?.services) return;
     setIsSearching(true);
     const ps = new kakao.maps.services.Places();
     ps.keywordSearch(searchQuery, (results, status) => {
@@ -64,9 +124,13 @@ export default function Home() {
   function handleSelectPlace(place: kakao.maps.services.PlaceResult) {
     const latlng: LatLng = { lat: parseFloat(place.y), lng: parseFloat(place.x) };
     if (searchPointMode === "start") {
+      startAddrOverride.current = place.place_name;
+      setStartAddress(place.place_name);
       setStartPoint(latlng);
       setMode("end");
     } else {
+      endAddrOverride.current = place.place_name;
+      setEndAddress(place.place_name);
       setEndPoint(latlng);
       setMode(null);
     }
@@ -102,6 +166,22 @@ export default function Home() {
   const isRun     = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
 
+  const routeDistKm = startPoint && endPoint ? calcDistance(startPoint, endPoint) : null;
+  const routeDistLabel = routeInfo
+    ? routeInfo.distanceM < 1000
+      ? `${Math.round(routeInfo.distanceM)} m`
+      : `${(routeInfo.distanceM / 1000).toFixed(2)} km`
+    : routeDistKm !== null
+    ? routeDistKm < 1
+      ? `${Math.round(routeDistKm * 1000)} m`
+      : `${routeDistKm.toFixed(2)} km`
+    : null;
+  const routeTimeLabel = routeInfo
+    ? routeInfo.durationS < 60
+      ? `${Math.round(routeInfo.durationS)}초`
+      : `${Math.round(routeInfo.durationS / 60)}분`
+    : null;
+
   const guide = pageMode === "goal"
     ? { text: `목표: ${goalDistance} km · 위치 자동 설정`, color: accentVar }
     : !startPoint
@@ -116,9 +196,13 @@ export default function Home() {
         ref={mapRef}
         center={userLocation ?? { lat: 37.5665, lng: 126.978 }}
         onMapClick={pageMode === "map" ? handleMapClick : undefined}
+        onStartPointChange={pageMode === "map" ? handleStartPointChange : undefined}
+        onEndPointChange={pageMode === "map" ? handleEndPointChange : undefined}
         startPoint={pageMode === "map" ? startPoint : null}
         endPoint={pageMode === "map" ? endPoint : null}
         currentPosition={userLocation}
+        routePath={pageMode === "map" ? (routeInfo?.path ?? []) : []}
+        previewLine={pageMode === "map"}
         className="absolute inset-0 h-full"
       />
 
@@ -431,9 +515,39 @@ export default function Home() {
 
           {/* 지도 모드: 포인트 카드 */}
           {pageMode === "map" && (
-            <div className="grid grid-cols-2 gap-2">
-              <PointCard label="출발" point={startPoint} active={mode === "start"} color="var(--c-toss-blue)" />
-              <PointCard label="도착" point={endPoint}   active={mode === "end"}   color="#f59e0b" />
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <PointCard label="출발" point={startPoint} address={startAddress} active={mode === "start"} color="var(--c-toss-blue)" />
+                <PointCard label="도착" point={endPoint}   address={endAddress}   active={mode === "end"}   color="#f59e0b" />
+              </div>
+              {(routeDistLabel || routeLoading) && (
+                <div
+                  className="flex items-center justify-center gap-2 py-2 rounded-2xl"
+                  style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
+                >
+                  {routeLoading ? (
+                    <span className="text-xs" style={{ color: "var(--c-text-3)" }}>경로 계산 중...</span>
+                  ) : routeInfo ? (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "#007aff", flexShrink: 0 }}>
+                        <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+                        <path d="M9 20l1.5-6L9 11l3-3 2 2h3M12 8l-2 3 2 3M15 20l-1.5-6" />
+                      </svg>
+                      <span className="text-xs font-bold" style={{ color: "#007aff" }}>도보</span>
+                      <span className="text-sm font-extrabold num" style={{ color: "var(--c-text-1)", letterSpacing: "-0.03em" }}>{routeDistLabel}</span>
+                      {routeTimeLabel && <span className="text-xs" style={{ color: "var(--c-text-3)" }}>약 {routeTimeLabel}</span>}
+                    </>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ color: accentVar }}>
+                        <path d="M3 12h18M12 5l7 7-7 7" />
+                      </svg>
+                      <span className="text-xs font-bold num" style={{ color: accentVar }}>직선 거리</span>
+                      <span className="text-sm font-extrabold num" style={{ color: "var(--c-text-1)", letterSpacing: "-0.03em" }}>{routeDistLabel}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -528,9 +642,9 @@ export default function Home() {
 }
 
 function PointCard({
-  label, point, active, color,
+  label, point, address, active, color,
 }: {
-  label: string; point: LatLng | null; active: boolean; color: string;
+  label: string; point: LatLng | null; address?: string; active: boolean; color: string;
 }) {
   const isStart = label === "출발";
   return (
@@ -541,7 +655,7 @@ function PointCard({
         border: `1px solid ${color}55`,
       } : undefined}
     >
-      <div className="flex items-center gap-1.5 mb-1.5">
+      <div className="flex items-center gap-1.5 mb-1">
         <span
           className="w-1.5 h-1.5 rounded-full"
           style={{ background: isStart ? "var(--c-toss-blue)" : "#f59e0b" }}
@@ -551,9 +665,18 @@ function PointCard({
           <span className="ml-auto w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: color }} />
         )}
       </div>
-      <p className="text-xs num truncate" style={{ color: point ? "var(--c-text-1)" : "var(--c-text-3)", fontWeight: point ? 600 : 400 }}>
-        {point ? `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}` : "미설정"}
-      </p>
+      {point ? (
+        <>
+          <p className="text-xs font-semibold truncate leading-tight" style={{ color: "var(--c-text-1)" }}>
+            {address || `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`}
+          </p>
+          <p className="text-[10px] num truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>
+            {point.lat.toFixed(5)}, {point.lng.toFixed(5)}
+          </p>
+        </>
+      ) : (
+        <p className="text-xs" style={{ color: "var(--c-text-3)" }}>미설정</p>
+      )}
     </div>
   );
 }

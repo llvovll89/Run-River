@@ -95,6 +95,7 @@ declare namespace kakao {
       position: LatLng;
       map?: Map;
       image?: MarkerImage;
+      draggable?: boolean;
     }
 
     interface MarkerImage {
@@ -111,8 +112,12 @@ declare namespace kakao {
       constructor(width: number, height: number);
     }
 
+    class Point {
+      constructor(x: number, y: number);
+    }
+
     class MarkerImage {
-      constructor(src: string, size: Size);
+      constructor(src: string, size: Size, options?: { offset?: Point });
     }
 
     interface CustomOverlayOptions {
