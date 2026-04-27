@@ -439,7 +439,7 @@ export default function Home() {
         className="absolute bottom-0 left-0 right-0 z-10 sheet"
         style={{
           paddingBottom: "calc(var(--sab) + 16px)",
-          transform: sheetOpen ? "translateY(0)" : "translateY(calc(100% - 36px))",
+          transform: sheetOpen ? "translateY(0)" : "translateY(calc(100% - 28px))",
           transition: "transform 0.32s cubic-bezier(0.22,1,0.36,1)",
         }}
       >
@@ -469,7 +469,7 @@ export default function Home() {
             const dy = e.changedTouches[0].clientY - dragY.current;
             if (dy > 60) setSheetOpen(false);
             else if (dy < -40) setSheetOpen(true);
-            else el.style.transform = sheetOpen ? "translateY(0)" : "translateY(calc(100% - 36px))";
+            else el.style.transform = sheetOpen ? "translateY(0)" : "translateY(calc(100% - 28px))";
           }}
         >
           <div className="w-8 h-1 rounded-full" style={{ background: "var(--c-border)" }} />
