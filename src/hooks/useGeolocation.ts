@@ -126,6 +126,16 @@ export function useGeolocation(): UseGeolocationReturn {
   }, [])
 
   useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && watchIdRef.current !== null) {
+        lastPositionRef.current = null;
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);

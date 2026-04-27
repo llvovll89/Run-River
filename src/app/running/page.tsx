@@ -36,6 +36,15 @@ export default function RunningPage() {
 
   const [isPaused, setIsPaused] = useState(false);
   const [followUser, setFollowUser] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+  const hiddenAtRef = useRef<number | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+  }, []);
 
   const acquireWakeLock = useCallback(async () => {
     if (!("wakeLock" in navigator)) return;
@@ -64,24 +73,37 @@ export default function RunningPage() {
       setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
     }, 500);
 
+    // iOS는 Wake Lock 미지원 → 화면 꺼지면 GPS 중단됨 안내
+    if (!("wakeLock" in navigator)) {
+      setTimeout(() => showToast("화면이 꺼지면 GPS 추적이 중단돼요. 화면을 켜두세요."), 1500);
+    }
+
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       stopTracking();
       wakeLockRef.current?.release();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득
+  // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득 + 중단 시간 안내
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && !isPausedRef.current) {
-        acquireWakeLock();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+      } else if (document.visibilityState === "visible") {
+        if (!isPausedRef.current) acquireWakeLock();
+        if (hiddenAtRef.current) {
+          const secs = Math.round((Date.now() - hiddenAtRef.current) / 1000);
+          hiddenAtRef.current = null;
+          if (secs >= 3) showToast(`화면이 ${secs}초 꺼져 있었어요. 이 구간은 추적되지 않았어요.`);
+        }
       }
     };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [acquireWakeLock]);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [acquireWakeLock, showToast]);
 
   // 도착지 도착 감지 (지도 모드)
   useEffect(() => {
@@ -201,6 +223,29 @@ export default function RunningPage() {
         </button>
       )}
 
+      {/* GPS 중단 토스트 */}
+      {toast && (
+        <div
+          className="absolute z-30 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-2xl"
+          style={{
+            top: "calc(var(--sat) + 80px)",
+            background: "rgba(30,30,32,0.95)",
+            border: "1px solid rgba(255,159,10,0.4)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            color: "#ff9f0a",
+            fontSize: 13,
+            fontWeight: 600,
+            maxWidth: "calc(100vw - 32px)",
+            textAlign: "center",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {toast}
+        </div>
+      )}
+
       {/* 나침반 권한 요청 버튼 (iOS 13+만 필요) */}
       {needsPermission && (
         <button
@@ -268,17 +313,6 @@ export default function RunningPage() {
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              {heading !== null && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
-                  <svg
-                    width="11" height="11" viewBox="0 0 24 24" fill="none"
-                    style={{ transform: `rotate(${heading}deg)`, transition: "transform 0.3s ease" }}
-                  >
-                    <path d="M12 2L8 20l4-4 4 4L12 2Z" fill="rgba(255,255,255,0.8)"/>
-                  </svg>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{toCardinal(heading)}</span>
-                </div>
-              )}
               {isPaused ? (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(255,159,10,0.15)" }}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#ff9f0a" }} />
@@ -293,10 +327,36 @@ export default function RunningPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <RunStat label="거리"  value={totalDistance.toFixed(2)} unit="km"  accent={accent} large />
             <RunStat label="시간"  value={formatDuration(elapsed)}  unit=""    accent={accent} large />
             <RunStat label="페이스" value={formatPace(pace)}        unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
+            <div
+              className="rounded-2xl px-3 py-3 text-center"
+              style={{
+                background: `${accent}0d`,
+                border: `1px solid ${accent}33`,
+                boxShadow: `0 0 12px ${accent}18`,
+                transition: "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
+              }}
+            >
+              <p style={{ fontSize: 11, color: "#5e636a", marginBottom: 4 }}>방위</p>
+              <p className="num" style={{ fontSize: 22, fontWeight: 800, color: accent, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+                {heading !== null ? toCardinal(heading) : "--"}
+              </p>
+              <svg
+                width="16" height="16" viewBox="0 0 24 24" fill="none"
+                style={{
+                  marginTop: 4,
+                  transform: `rotate(${heading ?? 0}deg)`,
+                  transition: "transform 0.3s ease",
+                  opacity: heading !== null ? 1 : 0.25,
+                  display: "inline-block",
+                }}
+              >
+                <path d="M12 2L8 20l4-4 4 4L12 2Z" fill={accent}/>
+              </svg>
+            </div>
           </div>
         </div>
 
