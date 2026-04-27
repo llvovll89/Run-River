@@ -33,6 +33,7 @@ interface KakaoMapProps {
   showArrivalRadius?: boolean;
   previewLine?: boolean;
   activityType?: ActivityType;
+  followUser?: boolean;
   className?: string;
 }
 
@@ -49,6 +50,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   showArrivalRadius = false,
   previewLine = false,
   activityType = "running",
+  followUser = false,
   className = "",
 }: KakaoMapProps, ref) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -194,8 +196,10 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       });
       currentOverlayRef.current = overlay;
     }
-    mapInstanceRef.current.panTo(latlng);
-  }, [currentPosition]);
+    if (followUser) {
+      mapInstanceRef.current.panTo(latlng);
+    }
+  }, [currentPosition, followUser]);
 
   // 미리보기 파선 (경로 데이터 없을 때만 표시)
   useEffect(() => {

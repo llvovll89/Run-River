@@ -44,9 +44,13 @@ export default function Home() {
   const mapRef   = useRef<KakaoMapHandle>(null);
 
   useEffect(() => {
-    navigator.geolocation?.getCurrentPosition((p) =>
-      setUserLocation({ lat: p.coords.latitude, lng: p.coords.longitude })
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (p) => setUserLocation({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      undefined,
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
     );
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   // 역지오코딩 헬퍼

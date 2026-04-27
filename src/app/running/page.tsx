@@ -123,6 +123,7 @@ export default function RunningPage() {
         pathPoints={pathPoints}
         showArrivalRadius
         activityType={config.activityType}
+        followUser
         className="absolute inset-0 h-full"
       />
 
