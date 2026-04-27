@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="flex justify-center" style={{ background: "#000" }}>
         <div
-          className="relative w-full max-w-[430px] min-h-dvh overflow-hidden"
+          className="relative w-full max-w-[430px] min-h-dvh overflow-x-hidden"
           style={{ background: "var(--c-bg)" }}
         >
           <ThemeProvider>

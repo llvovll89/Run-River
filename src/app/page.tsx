@@ -9,6 +9,7 @@ import { usePWAInstall } from "@/hooks/usePWAInstall";
 import Image from "next/image";
 import type { LatLng, ActivityType } from "@/types";
 import { calcDistance } from "@/hooks/useGeolocation";
+import PCLanding from "@/components/PCLanding";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -18,6 +19,7 @@ const GOAL_PRESETS = [3, 5, 10, 21];
 
 export default function Home() {
   const router = useRouter();
+  const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
   const [startPoint, setStartPoint] = useState<LatLng | null>(null);
   const [endPoint, setEndPoint]     = useState<LatLng | null>(null);
   const [mode, setMode]             = useState<PointMode>("start");
@@ -43,6 +45,14 @@ export default function Home() {
   const didDrag = useRef(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const mapRef   = useRef<KakaoMapHandle>(null);
+  const hasCenteredRef = useRef(false);
+
+  // PC 감지: 터치 없는 마우스 환경
+  useEffect(() => {
+    const isPC = window.matchMedia("(pointer: fine) and (hover: hover)").matches
+      && window.innerWidth >= 768;
+    setIsDesktop(isPC);
+  }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -53,6 +63,14 @@ export default function Home() {
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  // 초기 접속 시 내 위치로 지도 이동
+  useEffect(() => {
+    if (userLocation && !hasCenteredRef.current) {
+      hasCenteredRef.current = true;
+      mapRef.current?.panTo(userLocation);
+    }
+  }, [userLocation]);
 
   // 역지오코딩 헬퍼
   function reverseGeocode(latlng: LatLng, setter: (s: string) => void) {
@@ -77,7 +95,7 @@ export default function Home() {
     reverseGeocode(endPoint, setEndAddress);
   }, [endPoint]);
 
-  // OSRM 도보 경로 페치
+  // 도보 경로 페치 (T-Map 우선, 없으면 OSRM fallback)
   useEffect(() => {
     if (!startPoint || !endPoint || pageMode !== "map") {
       setRouteInfo(null);
@@ -85,23 +103,62 @@ export default function Home() {
     }
     let cancelled = false;
     setRouteLoading(true);
-    fetch(`https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (data.code === "Ok" && data.routes?.[0]) {
-          const coords = data.routes[0].geometry.coordinates as [number, number][];
-          setRouteInfo({
-            path: coords.map(([lng, lat]) => ({ lat, lng })),
-            distanceM: data.routes[0].distance,
-            durationS: data.routes[0].duration,
+
+    const tmapKey = process.env.NEXT_PUBLIC_TMAP_KEY;
+
+    const fetchRoute = tmapKey
+      ? fetch("https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", appKey: tmapKey },
+          body: JSON.stringify({
+            startX: String(startPoint.lng),
+            startY: String(startPoint.lat),
+            endX: String(endPoint.lng),
+            endY: String(endPoint.lat),
+            reqCoordType: "WGS84GEO",
+            resCoordType: "WGS84GEO",
+            startName: "출발",
+            endName: "도착",
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (!data.features?.length) throw new Error("no route");
+            const path: LatLng[] = [];
+            let distanceM = 0;
+            let durationS = 0;
+            for (const feature of data.features) {
+              if (feature.geometry?.type === "LineString") {
+                for (const [lng, lat] of feature.geometry.coordinates as [number, number][]) {
+                  path.push({ lat, lng });
+                }
+              }
+              if (!distanceM && feature.properties?.totalDistance) {
+                distanceM = feature.properties.totalDistance;
+                durationS = feature.properties.totalTime;
+              }
+            }
+            return { path, distanceM, durationS };
+          })
+      : fetch(
+          `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`
+        )
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.code !== "Ok" || !data.routes?.[0]) throw new Error("no route");
+            const coords = data.routes[0].geometry.coordinates as [number, number][];
+            return {
+              path: coords.map(([lng, lat]) => ({ lat, lng })),
+              distanceM: data.routes[0].distance,
+              durationS: data.routes[0].duration,
+            };
           });
-        } else {
-          setRouteInfo(null);
-        }
-        setRouteLoading(false);
-      })
-      .catch(() => { if (!cancelled) { setRouteInfo(null); setRouteLoading(false); } });
+
+    fetchRoute
+      .then((info) => { if (!cancelled) setRouteInfo(info); })
+      .catch(() => { if (!cancelled) setRouteInfo(null); })
+      .finally(() => { if (!cancelled) setRouteLoading(false); });
+
     return () => { cancelled = true; };
   }, [startPoint, endPoint, pageMode]);
 
@@ -209,6 +266,9 @@ export default function Home() {
     : !endPoint
     ? { text: "도착 지점을 탭하세요", color: "#f59e0b" }
     : { text: "준비 완료 · 출발하세요", color: "var(--c-walk)" };
+
+  if (isDesktop === null) return null;
+  if (isDesktop) return <PCLanding />;
 
   return (
     <main className="relative w-full h-dvh overflow-hidden">

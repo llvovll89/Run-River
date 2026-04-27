@@ -9,12 +9,12 @@ const START_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
 const _endSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter></defs><g filter="url(#sh)"><circle cx="26" cy="24" r="20" fill="#ff9f0a" stroke="white" stroke-width="3"/><text x="26" y="29" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="-apple-system,sans-serif">도착</text><polygon points="19,42 26,54 33,42" fill="#ff9f0a"/></g></svg>';
 const END_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_endSvg)}`;
 
-const CURRENT_MARKER_HTML = `
-  <div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center">
-    <div style="position:absolute;width:22px;height:22px;border-radius:50%;background:rgba(0,122,255,0.18)"></div>
-    <div style="position:absolute;width:15px;height:15px;border-radius:50%;background:rgba(0,122,255,0.25)"></div>
-    <div style="width:10px;height:10px;border-radius:50%;background:#007aff;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,122,255,0.6)"></div>
-  </div>`;
+function buildCurrentMarkerHTML(heading: number | null): string {
+  const cone = heading !== null
+    ? `<svg style="position:absolute;top:0;left:0;width:44px;height:44px;transform:rotate(${heading}deg);transform-origin:50% 50%" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><path d="M22,22 L17,10 Q22,4 27,10 Z" fill="#007aff" opacity="0.82"/></svg>`
+    : "";
+  return `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center">${cone}<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(0,122,255,0.15)"></div><div style="position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(0,122,255,0.22)"></div><div style="width:11px;height:11px;border-radius:50%;background:#007aff;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,122,255,0.7);position:relative;z-index:1"></div></div>`;
+}
 
 const _previewSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50"><defs><filter id="psh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.35"/></filter></defs><g filter="url(#psh)" opacity="0.92"><circle cx="20" cy="18" r="15" fill="#636366" stroke="white" stroke-width="3"/><circle cx="20" cy="18" r="5" fill="white" opacity="0.9"/><polygon points="14,31 20,46 26,31" fill="#636366"/></g></svg>';
 const PREVIEW_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_previewSvg)}`;
@@ -31,6 +31,7 @@ interface KakaoMapProps {
   startPoint?: LatLng | null;
   endPoint?: LatLng | null;
   currentPosition?: LatLng | null;
+  heading?: number | null;
   pathPoints?: LatLng[];
   routePath?: LatLng[];
   showArrivalRadius?: boolean;
@@ -49,6 +50,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   startPoint,
   endPoint,
   currentPosition,
+  heading = null,
   pathPoints = [],
   routePath = [],
   showArrivalRadius = false,
@@ -191,12 +193,14 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     if (!mapInstanceRef.current) return;
     if (!currentPosition) return;
     const latlng = new kakao.maps.LatLng(currentPosition.lat, currentPosition.lng);
+    const html = buildCurrentMarkerHTML(heading);
     if (currentOverlayRef.current) {
       currentOverlayRef.current.setPosition(latlng);
+      currentOverlayRef.current.setContent(html);
     } else {
       const overlay = new kakao.maps.CustomOverlay({
         position: latlng,
-        content: CURRENT_MARKER_HTML,
+        content: html,
         yAnchor: 0.5,
         map: mapInstanceRef.current,
       });
@@ -205,7 +209,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     if (followUser) {
       mapInstanceRef.current.panTo(latlng);
     }
-  }, [currentPosition, followUser]);
+  }, [currentPosition, heading, followUser]);
 
   // 미리보기 파선 (경로 데이터 없을 때만 표시)
   useEffect(() => {

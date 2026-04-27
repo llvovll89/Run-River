@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useGeolocation, calcDistance } from "@/hooks/useGeolocation";
+import { useCompass } from "@/hooks/useCompass";
 import { useNotification } from "@/hooks/useNotification";
 import { formatDuration, formatPace, calcPace, getPaceZone } from "@/lib/utils";
 import type { LatLng, ActivityType } from "@/types";
@@ -30,6 +31,7 @@ export default function RunningPage() {
     useGeolocation();
 
   const [isPaused, setIsPaused] = useState(false);
+  const { heading, needsPermission, requestPermission: requestCompassPermission } = useCompass();
 
   void permission;
 
@@ -120,12 +122,38 @@ export default function RunningPage() {
         startPoint={config.startPoint}
         endPoint={config.endPoint}
         currentPosition={position}
+        heading={heading}
         pathPoints={pathPoints}
         showArrivalRadius
         activityType={config.activityType}
         followUser
         className="absolute inset-0 h-full"
       />
+
+      {/* 나침반 권한 요청 버튼 (iOS 13+만 필요 — Android는 자동 시작) */}
+      {needsPermission && (
+        <button
+          onClick={requestCompassPermission}
+          className="absolute z-10 flex items-center gap-1.5 px-3 py-2 rounded-full active:scale-95 transition-transform"
+          style={{
+            right: 16,
+            top: "calc(var(--sat) + 14px)",
+            background: "rgba(20,22,26,0.85)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+          </svg>
+          나침반 켜기
+        </button>
+      )}
 
       {/* 상단 스탯 */}
       <div
