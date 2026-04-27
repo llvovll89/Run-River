@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { saveRunningRecord } from "@/lib/supabase";
+import dynamic from "next/dynamic";
+import { saveRunningRecord, deleteRunningRecord } from "@/lib/supabase";
 import { formatDuration, formatPace } from "@/lib/utils";
 import type { LatLng, ActivityType } from "@/types";
+
+const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
 interface RunResult {
   startPoint: LatLng;
@@ -13,41 +16,53 @@ interface RunResult {
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;
+  pathPoints?: LatLng[];
 }
 
 export default function ResultPage() {
   const router = useRouter();
   const [result, setResult] = useState<RunResult | null>(null);
-  const [saved, setSaved]   = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saving, setSaving]   = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("runResult");
     if (!raw) { router.replace("/"); return; }
-    setResult(JSON.parse(raw));
-  }, [router]);
-
-  async function handleSave() {
-    if (!result || saved) return;
+    const parsed: RunResult = JSON.parse(raw);
+    setResult(parsed);
+    // 자동 저장
     setSaving(true);
+    saveRunningRecord({
+      start_point: parsed.startPoint,
+      end_point:   parsed.endPoint,
+      distance_km: parsed.distance_km,
+      duration_seconds: parsed.duration_seconds,
+      pace:          parsed.pace,
+      activity_type: parsed.activity_type,
+    })
+      .then((record) => {
+        setSavedId(record.id);
+        sessionStorage.removeItem("runResult");
+        sessionStorage.removeItem("runConfig");
+      })
+      .catch(() => { /* 저장 실패 시 savedId는 null 유지 */ })
+      .finally(() => setSaving(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDiscard = useCallback(async () => {
+    if (!savedId || discarding) return;
+    setDiscarding(true);
     try {
-      await saveRunningRecord({
-        start_point: result.startPoint,
-        end_point:   result.endPoint,
-        distance_km: result.distance_km,
-        duration_seconds: result.duration_seconds,
-        pace:          result.pace,
-        activity_type: result.activity_type,
-      });
-      setSaved(true);
-      sessionStorage.removeItem("runResult");
-      sessionStorage.removeItem("runConfig");
+      await deleteRunningRecord(savedId);
     } catch {
-      alert("저장 실패. Supabase 설정을 확인하세요.");
+      // 삭제 실패해도 메인으로 이동
     } finally {
-      setSaving(false);
+      setDiscarding(false);
+      router.replace("/");
     }
-  }
+  }, [savedId, discarding, router]);
 
   if (!result) return null;
 
@@ -74,12 +89,19 @@ export default function ResultPage() {
           borderBottom: "1px solid var(--c-border)",
         }}
       >
-        <span
-          className="text-xs font-bold px-2.5 py-1 rounded-full inline-block mb-4"
-          style={{ background: `${accent}18`, color: accent, letterSpacing: "-0.01em" }}
-        >
-          {label} 완료
-        </span>
+        <div className="flex items-center justify-between mb-4">
+          <span
+            className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
+            style={{ background: `${accent}18`, color: accent, letterSpacing: "-0.01em" }}
+          >
+            {label} 완료
+          </span>
+          {saving ? (
+            <span className="text-xs" style={{ color: "var(--c-text-3)" }}>저장 중…</span>
+          ) : savedId ? (
+            <span className="text-xs font-semibold" style={{ color: "var(--c-walk)" }}>✓ 자동 저장됨</span>
+          ) : null}
+        </div>
         <h1
           style={{
             fontSize: 40,
@@ -94,6 +116,21 @@ export default function ResultPage() {
         </h1>
         <p className="mt-1" style={{ fontSize: 14, color: "var(--c-text-3)" }}>{dateStr}</p>
       </div>
+
+      {/* 경로 지도 */}
+      {result.pathPoints && result.pathPoints.length > 1 && (
+        <div className="px-4 pt-3">
+          <div className="card rounded-2xl overflow-hidden" style={{ height: 200 }}>
+            <KakaoMap
+              center={result.startPoint}
+              startPoint={result.startPoint}
+              endPoint={result.endPoint}
+              pathPoints={result.pathPoints}
+              className="w-full h-full"
+            />
+          </div>
+        </div>
+      )}
 
       {/* 핵심 스탯 */}
       <div className="px-4 pt-3 slide-up">
@@ -143,7 +180,12 @@ export default function ResultPage() {
               <span className="num" style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>{value}</span>
             </div>
           ))}
-          <div style={{ paddingBottom: 4 }} />
+          <p
+            className="px-4 pb-3 pt-1"
+            style={{ fontSize: 11, color: "var(--c-text-3)" }}
+          >
+            * 칼로리는 체중 70kg 기준 추정치입니다
+          </p>
         </div>
       </div>
 
@@ -152,59 +194,48 @@ export default function ResultPage() {
         className="px-4 mt-auto pt-4 space-y-2"
         style={{ paddingBottom: "calc(var(--sab) + 20px)" }}
       >
-        {!saved ? (
+        <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full py-4 rounded-2xl font-bold text-base transition-all active:scale-[0.98]"
+            onClick={() => router.push("/history")}
+            className="py-4 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
             style={{
-              background: saving ? "var(--c-elevated)" : accent,
-              color: saving ? "var(--c-text-2)" : "#fff",
-              border: saving ? "1px solid var(--c-border)" : "none",
-              boxShadow: saving ? "none" : `0 4px 20px ${accent}44`,
+              background: "var(--c-elevated)",
+              border: "1px solid var(--c-border)",
+              color: "var(--c-text-2)",
               letterSpacing: "-0.01em",
             }}
           >
-            {saving ? "저장 중..." : "기록 저장"}
+            기록 보기
           </button>
-        ) : (
-          <div
-            className="w-full py-4 rounded-2xl text-center font-bold text-base flex items-center justify-center gap-2"
-            style={{ background: "rgba(48,209,88,0.12)", color: "var(--c-walk)", border: "1px solid rgba(48,209,88,0.25)" }}
+          <button
+            onClick={() => router.push("/")}
+            className="py-4 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
+            style={{
+              background: "var(--c-elevated)",
+              border: "1px solid var(--c-border)",
+              color: "var(--c-text-2)",
+              letterSpacing: "-0.01em",
+            }}
           >
-            <CheckIcon />
-            저장 완료
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: "기록 보기", href: "/history" },
-            { label: "다시 시작", href: "/" },
-          ].map(({ label: l, href }) => (
-            <button
-              key={href}
-              onClick={() => router.push(href)}
-              className="py-4 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
-              style={{
-                background: "var(--c-elevated)",
-                border: "1px solid var(--c-border)",
-                color: "var(--c-text-2)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              {l}
-            </button>
-          ))}
+            다시 시작
+          </button>
         </div>
+        <button
+          onClick={handleDiscard}
+          disabled={saving || discarding || !savedId}
+          className="w-full py-3 rounded-2xl text-sm font-medium active:scale-[0.98] transition-transform"
+          style={{
+            background: "transparent",
+            color: saving || !savedId ? "var(--c-text-3)" : "var(--c-danger)",
+            border: "1px solid",
+            borderColor: saving || !savedId ? "var(--c-border)" : "rgba(255,69,58,0.3)",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {discarding ? "삭제 중…" : saving ? "저장 중…" : "저장 안 함"}
+        </button>
       </div>
     </main>
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
-  );
-}

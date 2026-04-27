@@ -17,3 +17,26 @@ export function calcPace(distanceKm: number, seconds: number): number {
   if (distanceKm === 0) return 0;
   return seconds / 60 / distanceKm;
 }
+
+/**
+ * 현재 페이스(min/km)와 활동 유형으로 페이스존을 반환합니다.
+ * 러닝: 빠름 <4:30, 적정 4:30–6:30, 느림 >6:30
+ * 워킹: 빠름 <7:00, 적정 7:00–12:00, 느림 >12:00
+ */
+export function getPaceZone(
+  pace: number,
+  activityType: "running" | "walking"
+): { label: string; color: string } {
+  if (!pace || !isFinite(pace) || pace === 0) {
+    return { label: "대기", color: "#636366" };
+  }
+  if (activityType === "running") {
+    if (pace < 4.5)  return { label: "빠름", color: "#ff453a" };
+    if (pace < 6.5)  return { label: "적정", color: "#30d158" };
+    return            { label: "느림",  color: "#636366" };
+  } else {
+    if (pace < 7.0)  return { label: "빠름", color: "#ff453a" };
+    if (pace < 12.0) return { label: "적정", color: "#30d158" };
+    return            { label: "느림",  color: "#636366" };
+  }
+}

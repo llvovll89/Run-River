@@ -12,6 +12,8 @@ interface GeolocationState {
 interface UseGeolocationReturn extends GeolocationState {
   startTracking: () => void;
   stopTracking: () => void;
+  pauseTracking: () => void;
+  resumeTracking: () => void;
   pathPoints: LatLng[];
   totalDistance: number;
 }
@@ -63,8 +65,8 @@ export function useGeolocation(): UseGeolocationReturn {
 
         if (lastPositionRef.current) {
           const dist = calcDistance(lastPositionRef.current, newPos);
-          // 노이즈 필터: 50m 이상 이동한 경우만 반영
-          if (dist < 0.05) {
+          // 노이즈 필터: 1m~50m 이동만 누적 (GPS 점프 및 미세 지터 제거)
+          if (dist > 0.001 && dist < 0.05) {
             setTotalDistance((prev) => prev + dist);
           }
         }
@@ -89,6 +91,40 @@ export function useGeolocation(): UseGeolocationReturn {
     setState((prev) => ({ ...prev, isTracking: false }));
   }, []);
 
+  const pauseTracking = useCallback(() => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setState((prev) => ({ ...prev, isTracking: false }));
+  }, []);
+
+  const resumeTracking = useCallback(() => {
+    if (!navigator.geolocation) return;
+    setState((prev) => ({ ...prev, isTracking: true, error: null }));
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const newPos: LatLng = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        setState((prev) => ({ ...prev, position: newPos }));
+        setPathPoints((prev) => [...prev, newPos]);
+        if (lastPositionRef.current) {
+          const dist = calcDistance(lastPositionRef.current, newPos);
+          if (dist > 0.001 && dist < 0.05) {
+            setTotalDistance((prev) => prev + dist);
+          }
+        }
+        lastPositionRef.current = newPos;
+      },
+      (err) => {
+        setState((prev) => ({ ...prev, error: err.message }));
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+    );
+  }, [])
+
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
@@ -101,6 +137,8 @@ export function useGeolocation(): UseGeolocationReturn {
     ...state,
     startTracking,
     stopTracking,
+    pauseTracking,
+    resumeTracking,
     pathPoints,
     totalDistance,
   };

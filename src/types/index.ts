@@ -16,6 +16,15 @@ export interface RunningRecord {
   created_at: string;
 }
 
+/** sessionStorage에 저장되는 런 시작 설정 */
+export interface RunConfig {
+  startPoint: LatLng;
+  endPoint: LatLng | null;
+  activityType: ActivityType;
+  /** 목표 거리 모드일 때 설정 (km). null이면 지도 모드 */
+  goalDistance: number | null;
+}
+
 export interface RunningState {
   startPoint: LatLng | null;
   endPoint: LatLng | null;

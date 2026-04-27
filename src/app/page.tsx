@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import type { KakaoMapHandle } from "@/components/KakaoMap";
 import { useTheme } from "@/hooks/useTheme";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import Image from "next/image";
@@ -11,6 +12,8 @@ import type { LatLng, ActivityType } from "@/types";
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
 type PointMode = "start" | "end" | null;
+type PageMode  = "map" | "goal";
+const GOAL_PRESETS = [3, 5, 10, 21];
 
 export default function Home() {
   const router = useRouter();
@@ -20,9 +23,18 @@ export default function Home() {
   const [activityType, setActivityType] = useState<ActivityType>("running");
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [sheetOpen, setSheetOpen]   = useState(true);
+  const [pageMode, setPageMode]     = useState<PageMode>("map");
+  const [goalDistance, setGoalDistance] = useState<number>(5);
+  const [goalInputVal, setGoalInputVal] = useState("");
+  const [searchOpen, setSearchOpen]           = useState(false);
+  const [searchQuery, setSearchQuery]         = useState("");
+  const [searchResults, setSearchResults]     = useState<kakao.maps.services.PlaceResult[]>([]);
+  const [searchPointMode, setSearchPointMode] = useState<"start" | "end">("start");
+  const [isSearching, setIsSearching]         = useState(false);
   const dragY   = useRef(0);
   const didDrag = useRef(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const mapRef   = useRef<KakaoMapHandle>(null);
 
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((p) =>
@@ -35,20 +47,64 @@ export default function Home() {
     else if (mode === "end") { setEndPoint(latlng); setMode(null); }
   }
 
+  function handleSearch() {
+    if (!searchQuery.trim() || !window.kakao?.maps?.services) return;
+    setIsSearching(true);
+    const ps = new kakao.maps.services.Places();
+    ps.keywordSearch(searchQuery, (results, status) => {
+      setIsSearching(false);
+      if (status === kakao.maps.services.Status.OK) {
+        setSearchResults(results);
+      } else {
+        setSearchResults([]);
+      }
+    }, { size: 10 });
+  }
+
+  function handleSelectPlace(place: kakao.maps.services.PlaceResult) {
+    const latlng: LatLng = { lat: parseFloat(place.y), lng: parseFloat(place.x) };
+    if (searchPointMode === "start") {
+      setStartPoint(latlng);
+      setMode("end");
+    } else {
+      setEndPoint(latlng);
+      setMode(null);
+    }
+    mapRef.current?.panTo(latlng);
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setPageMode("map");
+  }
+
   function handleStart() {
-    if (!startPoint || !endPoint) return;
-    sessionStorage.setItem("runConfig", JSON.stringify({ startPoint, endPoint, activityType }));
+    if (pageMode === "goal") {
+      const origin = userLocation ?? startPoint;
+      if (!origin || !goalDistance) return;
+      sessionStorage.setItem("runConfig", JSON.stringify({
+        startPoint: origin, endPoint: null, activityType, goalDistance,
+      }));
+    } else {
+      if (!startPoint || !endPoint) return;
+      sessionStorage.setItem("runConfig", JSON.stringify({
+        startPoint, endPoint, activityType, goalDistance: null,
+      }));
+    }
     router.push("/running");
   }
 
   const { theme, toggle } = useTheme();
   const { mode: installMode, canInstall, promptInstall } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
-  const canStart  = !!(startPoint && endPoint);
+  const canStart  = pageMode === "goal"
+    ? !!(userLocation || startPoint) && goalDistance > 0
+    : !!(startPoint && endPoint);
   const isRun     = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
 
-  const guide = !startPoint
+  const guide = pageMode === "goal"
+    ? { text: `목표: ${goalDistance} km · 위치 자동 설정`, color: accentVar }
+    : !startPoint
     ? { text: "출발 지점을 탭하세요", color: "var(--c-toss-blue)" }
     : !endPoint
     ? { text: "도착 지점을 탭하세요", color: "#f59e0b" }
@@ -57,10 +113,11 @@ export default function Home() {
   return (
     <main className="relative w-full h-dvh overflow-hidden">
       <KakaoMap
+        ref={mapRef}
         center={userLocation ?? { lat: 37.5665, lng: 126.978 }}
-        onMapClick={handleMapClick}
-        startPoint={startPoint}
-        endPoint={endPoint}
+        onMapClick={pageMode === "map" ? handleMapClick : undefined}
+        startPoint={pageMode === "map" ? startPoint : null}
+        endPoint={pageMode === "map" ? endPoint : null}
         currentPosition={userLocation}
         className="absolute inset-0 h-full"
       />
@@ -77,6 +134,22 @@ export default function Home() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+              onClick={() => { setSearchOpen(true); setSearchPointMode(mode === "end" ? "end" : "start"); }}
+              className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
+              aria-label="장소 검색"
+            >
+              <SearchIcon />
+            </button>
+          {userLocation && (
+            <button
+              onClick={() => mapRef.current?.panTo(userLocation)}
+              className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
+              aria-label="내 위치로 이동"
+            >
+              <LocateIcon />
+            </button>
+          )}
           {canInstall && (
             <button
               onClick={installMode === "ios" ? () => setShowIOSGuide(true) : promptInstall}
@@ -111,7 +184,7 @@ export default function Home() {
         <span
           className="text-xs font-semibold px-4 py-1.5 rounded-full whitespace-nowrap"
           style={{
-            background: "rgba(10,11,12,0.72)",
+            background: `${theme === "dark" ? "#F5F7F8" : "rgba(0,0,0,0.07)"}`,
             backdropFilter: "blur(12px)",
             border: `1px solid ${guide.color}50`,
             color: guide.color,
@@ -120,6 +193,125 @@ export default function Home() {
           {guide.text}
         </span>
       </div>
+
+      {/* 장소 검색 패널 */}
+      {searchOpen && (
+        <div className="absolute inset-0 z-50 flex flex-col" style={{ background: "var(--c-bg)" }}>
+          {/* 검색 헤더 */}
+          <div
+            className="flex items-center gap-3 px-4"
+            style={{
+              paddingTop: "calc(var(--sat) + 14px)",
+              paddingBottom: "12px",
+              borderBottom: "1px solid var(--c-border)",
+            }}
+          >
+            <button
+              onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(""); }}
+              className="p-2 rounded-xl active:scale-95 transition-transform"
+              style={{ background: "var(--c-elevated)", color: "var(--c-text-2)" }}
+            >
+              <BackIcon />
+            </button>
+            <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl" style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}>
+              <SearchIcon small />
+              <input
+                autoFocus
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="장소, 주소 검색..."
+                className="flex-1 bg-transparent outline-none text-sm"
+                style={{ color: "var(--c-text-1)" }}
+              />
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(""); setSearchResults([]); }} style={{ color: "var(--c-text-3)" }}>
+                  <ClearIcon />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={handleSearch}
+              disabled={!searchQuery.trim()}
+              className="px-3 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+              style={{
+                background: searchQuery.trim() ? accentVar : "var(--c-elevated)",
+                color: searchQuery.trim() ? "#fff" : "var(--c-text-3)",
+              }}
+            >
+              검색
+            </button>
+          </div>
+
+          {/* 포인트 선택 탭 */}
+          <div className="px-4 py-3 flex gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
+            {(["start", "end"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setSearchPointMode(m)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+                style={{
+                  background: searchPointMode === m ? (m === "start" ? "var(--c-toss-blue)" : "#ff9f0a") : "var(--c-elevated)",
+                  color: searchPointMode === m ? "#fff" : "var(--c-text-2)",
+                }}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ background: searchPointMode === m ? "#fff" : (m === "start" ? "var(--c-toss-blue)" : "#ff9f0a") }} />
+                {m === "start" ? "출발 지점" : "도착 지점"}
+              </button>
+            ))}
+          </div>
+
+          {/* 검색 결과 */}
+          <div className="flex-1 overflow-y-auto">
+            {isSearching && (
+              <div className="flex justify-center items-center py-16" style={{ color: "var(--c-text-3)" }}>
+                검색 중...
+              </div>
+            )}
+            {!isSearching && searchResults.length === 0 && searchQuery && (
+              <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
+                <p className="text-sm">검색 결과가 없습니다</p>
+                <p className="text-xs">다른 검색어를 입력해보세요</p>
+              </div>
+            )}
+            {!isSearching && searchResults.length === 0 && !searchQuery && (
+              <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
+                <p className="text-sm font-semibold">장소 또는 주소를 검색하세요</p>
+                <p className="text-xs">예: 남산타워, 한강공원, 강남역</p>
+              </div>
+            )}
+            {searchResults.map((place) => (
+              <button
+                key={place.id}
+                onClick={() => handleSelectPlace(place)}
+                className="w-full px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
+                style={{ borderBottom: "1px solid var(--c-border)" }}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                    style={{ background: searchPointMode === "start" ? "rgba(0,122,255,0.15)" : "rgba(255,159,10,0.15)" }}
+                  >
+                    <span style={{ fontSize: 14 }}>{searchPointMode === "start" ? "🏃" : "🏁"}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: "var(--c-text-1)" }}>{place.place_name}</p>
+                    <p className="text-xs truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>
+                      {place.road_address_name || place.address_name}
+                    </p>
+                    {place.category_name && (
+                      <p className="text-xs mt-0.5" style={{ color: "var(--c-text-3)", opacity: 0.7 }}>
+                        {place.category_name.split(" > ").slice(-1)[0]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* iOS 설치 안내 모달 */}
       {showIOSGuide && (
@@ -196,6 +388,24 @@ export default function Home() {
         </div>
 
         <div className="px-4 space-y-3">
+          {/* 모드 탭 */}
+          <div className="flex gap-1 p-1 rounded-2xl" style={{ background: "var(--c-elevated)" }}>
+            {([["map", "지도 설정"], ["goal", "거리 목표"]] as [PageMode, string][]).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => setPageMode(m)}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]"
+                style={{
+                  background: pageMode === m ? accentVar : "transparent",
+                  color: pageMode === m ? "#fff" : "var(--c-text-2)",
+                  boxShadow: pageMode === m ? `0 2px 10px ${accentVar}44` : "none",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* 활동 유형 */}
           <div className="card flex gap-2 p-1 rounded-2xl" style={{ background: "var(--c-elevated)" }}>
             {(["running", "walking"] as ActivityType[]).map((t) => {
@@ -219,21 +429,69 @@ export default function Home() {
             })}
           </div>
 
-          {/* 포인트 카드 */}
-          <div className="grid grid-cols-2 gap-2">
-            <PointCard
-              label="출발" point={startPoint}
-              active={mode === "start"} color="var(--c-toss-blue)"
-            />
-            <PointCard
-              label="도착" point={endPoint}
-              active={mode === "end"}   color="#f59e0b"
-            />
-          </div>
+          {/* 지도 모드: 포인트 카드 */}
+          {pageMode === "map" && (
+            <div className="grid grid-cols-2 gap-2">
+              <PointCard label="출발" point={startPoint} active={mode === "start"} color="var(--c-toss-blue)" />
+              <PointCard label="도착" point={endPoint}   active={mode === "end"}   color="#f59e0b" />
+            </div>
+          )}
+
+          {/* 거리 목표 모드: 프리셋 + 직접 입력 */}
+          {pageMode === "goal" && (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                {GOAL_PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setGoalDistance(p)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+                    style={{
+                      background: goalDistance === p ? accentVar : "var(--c-elevated)",
+                      color: goalDistance === p ? "#fff" : "var(--c-text-2)",
+                      border: goalDistance === p ? "none" : "1px solid var(--c-border)",
+                      boxShadow: goalDistance === p ? `0 2px 10px ${accentVar}44` : "none",
+                    }}
+                  >
+                    {p === 21 ? "하프" : `${p}km`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={goalInputVal}
+                  onChange={(e) => setGoalInputVal(e.target.value)}
+                  placeholder="직접 입력 (km)"
+                  className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
+                  style={{
+                    background: "var(--c-elevated)",
+                    border: "1px solid var(--c-border)",
+                    color: "var(--c-text-1)",
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const n = parseFloat(goalInputVal);
+                    if (!isNaN(n) && n > 0) { setGoalDistance(n); setGoalInputVal(""); }
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
+                  style={{ background: accentVar }}
+                >
+                  설정
+                </button>
+              </div>
+              <p className="text-xs text-center" style={{ color: "var(--c-text-3)" }}>
+                현재 위치에서 출발 · 목표 거리 도달 시 자동 완료
+              </p>
+            </div>
+          )}
 
           {/* 액션 버튼 */}
           <div className="flex gap-2">
-            {(startPoint || endPoint) && (
+            {pageMode === "map" && (startPoint || endPoint) && (
               <button
                 onClick={() => { setStartPoint(null); setEndPoint(null); setMode("start"); }}
                 className="px-5 py-4 rounded-2xl text-sm font-semibold active:scale-95 transition-transform"
@@ -249,7 +507,7 @@ export default function Home() {
             <button
               onClick={handleStart}
               disabled={!canStart}
-              className="flex-1 py-4 rounded-2xl font-bold text-base transition-all duration-200 active:scale-[0.98]"
+              className="flex-1 py-3 rounded-2xl font-bold text-base transition-all duration-200 active:scale-[0.98]"
               style={{
                 background: canStart ? accentVar : "var(--c-elevated)",
                 border: canStart ? "none" : "1px solid var(--c-border)",
@@ -258,7 +516,9 @@ export default function Home() {
                 letterSpacing: "-0.01em",
               }}
             >
-              {canStart ? "출발하기" : "포인트를 설정하세요"}
+              {pageMode === "goal"
+                ? canStart ? `${goalDistance}km 달리기 시작` : "위치 확인 중..."
+                : canStart ? "출발하기" : "포인트를 설정하세요"}
             </button>
           </div>
         </div>
@@ -397,6 +657,43 @@ function HistoryIcon() {
   return (
     <svg width="20" height="20" style={{ color: "var(--c-text-1)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+  );
+}
+
+function LocateIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--c-toss-blue)" }}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      <circle cx="12" cy="12" r="8" strokeOpacity={0.25} />
+    </svg>
+  );
+}
+
+function SearchIcon({ small = false }: { small?: boolean }) {
+  const s = small ? 16 : 18;
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--c-text-1)" }}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.35-4.35" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 5l-7 7 7 7" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity={0.15} />
+      <path d="M15 9l-6 6M9 9l6 6" />
     </svg>
   );
 }

@@ -62,11 +62,28 @@ declare namespace kakao {
           callback: (result: Address[], status: string) => void
         ): void;
       }
+      class Places {
+        constructor();
+        keywordSearch(
+          keyword: string,
+          callback: (result: PlaceResult[], status: string) => void,
+          options?: { location?: LatLng; radius?: number; size?: number }
+        ): void;
+      }
       const Status: {
         OK: string;
         ZERO_RESULT: string;
         ERROR: string;
       };
+      interface PlaceResult {
+        id: string;
+        place_name: string;
+        address_name: string;
+        road_address_name: string;
+        x: string; // longitude
+        y: string; // latitude
+        category_name: string;
+      }
     }
 
     interface MapOptions {

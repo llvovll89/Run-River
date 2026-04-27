@@ -2,6 +2,8 @@ import { getRunningHistory } from "@/lib/supabase";
 import { formatDuration, formatPace } from "@/lib/utils";
 import Link from "next/link";
 import type { RunningRecord } from "@/types";
+import WeeklyChart from "@/components/WeeklyChart";
+import DeleteRecordButton from "@/components/DeleteRecordButton";
 
 export const revalidate = 0;
 
@@ -82,6 +84,9 @@ export default async function HistoryPage() {
           </div>
         </div>
       )}
+
+      {/* 주간 차트 */}
+      {records.length > 0 && <WeeklyChart records={records} />}
 
       {/* 리스트 */}
       <div className="px-4 pt-3 pb-8 space-y-2">
@@ -166,6 +171,7 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
         >
           {isRun ? "러닝" : "워킹"}
         </span>
+        <DeleteRecordButton id={record.id} />
       </div>
 
       {/* 스탯 행 */}
