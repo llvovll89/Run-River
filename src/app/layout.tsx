@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
+import PWAUpdateBanner from "@/components/PWAUpdateBanner";
 
 export const metadata: Metadata = {
   title: "Run River",
@@ -48,7 +49,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           className="relative w-full max-w-[430px] min-h-dvh overflow-hidden"
           style={{ background: "var(--c-bg)" }}
         >
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <PWAUpdateBanner />
+            {children}
+          </ThemeProvider>
         </div>
       </body>
     </html>

@@ -5,7 +5,8 @@
       "Bash(python3 *)",
       "Bash(dir \"C:\\\\Users\\\\svvvs\\\\.claude\\\\projects\\\\D--workspace-Run-River\\\\6de92af0-5201-42de-a7c9-0b0789afb86f\\\\tool-results\")",
       "Bash(cd /tmp)",
-      "Bash(tar xf *)"
+      "Bash(tar xf *)",
+      "Bash(npx tsc *)"
     ]
   }
 }
