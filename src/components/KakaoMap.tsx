@@ -16,6 +16,9 @@ const CURRENT_MARKER_HTML = `
     <div style="width:10px;height:10px;border-radius:50%;background:#007aff;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,122,255,0.6)"></div>
   </div>`;
 
+const _previewSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50"><defs><filter id="psh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.35"/></filter></defs><g filter="url(#psh)" opacity="0.92"><circle cx="20" cy="18" r="15" fill="#636366" stroke="white" stroke-width="3"/><circle cx="20" cy="18" r="5" fill="white" opacity="0.9"/><polygon points="14,31 20,46 26,31" fill="#636366"/></g></svg>';
+const PREVIEW_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_previewSvg)}`;
+
 export interface KakaoMapHandle {
   panTo: (latlng: LatLng) => void;
 }
@@ -32,6 +35,7 @@ interface KakaoMapProps {
   routePath?: LatLng[];
   showArrivalRadius?: boolean;
   previewLine?: boolean;
+  previewPoint?: LatLng | null;
   activityType?: ActivityType;
   followUser?: boolean;
   className?: string;
@@ -49,6 +53,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   routePath = [],
   showArrivalRadius = false,
   previewLine = false,
+  previewPoint = null,
   activityType = "running",
   followUser = false,
   className = "",
@@ -62,8 +67,9 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       mapInstanceRef.current.panTo(new kakao.maps.LatLng(latlng.lat, latlng.lng));
     },
   }));
-  const startMarkerRef = useRef<kakao.maps.Marker | null>(null);
-  const endMarkerRef = useRef<kakao.maps.Marker | null>(null);
+  const startMarkerRef   = useRef<kakao.maps.Marker | null>(null);
+  const endMarkerRef     = useRef<kakao.maps.Marker | null>(null);
+  const previewMarkerRef = useRef<kakao.maps.Marker | null>(null);
   const currentOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const polylineRef = useRef<kakao.maps.Polyline | null>(null);
   const previewLineRef = useRef<kakao.maps.Polyline | null>(null);
@@ -241,6 +247,27 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     });
     routeLineRef.current = routeLine;
   }, [routePath]);
+
+  // 검색 미리보기 핀 마커
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    if (previewMarkerRef.current) {
+      previewMarkerRef.current.setMap(null);
+      previewMarkerRef.current = null;
+    }
+    if (!previewPoint) return;
+    const latlng = new kakao.maps.LatLng(previewPoint.lat, previewPoint.lng);
+    const img = new kakao.maps.MarkerImage(
+      PREVIEW_MARKER_SRC,
+      new kakao.maps.Size(40, 50),
+      { offset: new kakao.maps.Point(20, 48) }
+    );
+    previewMarkerRef.current = new kakao.maps.Marker({
+      position: latlng,
+      image: img,
+      map: mapInstanceRef.current,
+    });
+  }, [previewPoint]);
 
   // activityType 변경 시 기존 폴리라인 색상 업데이트 + 이동 경로 폴리라인
   useEffect(() => {

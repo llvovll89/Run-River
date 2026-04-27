@@ -32,6 +32,7 @@ export default function Home() {
   const [searchResults, setSearchResults]     = useState<kakao.maps.services.PlaceResult[]>([]);
   const [searchPointMode, setSearchPointMode] = useState<"start" | "end">("start");
   const [isSearching, setIsSearching]         = useState(false);
+  const [previewPlace, setPreviewPlace]       = useState<kakao.maps.services.PlaceResult | null>(null);
   const [routeInfo, setRouteInfo]             = useState<{ path: LatLng[]; distanceM: number; durationS: number } | null>(null);
   const [routeLoading, setRouteLoading]       = useState(false);
   const [startAddress, setStartAddress]       = useState("");
@@ -142,7 +143,22 @@ export default function Home() {
     setSearchOpen(false);
     setSearchQuery("");
     setSearchResults([]);
+    setPreviewPlace(null);
     setPageMode("map");
+  }
+
+  function handlePreviewPlace(place: kakao.maps.services.PlaceResult) {
+    setPreviewPlace(place);
+    mapRef.current?.panTo({ lat: parseFloat(place.y), lng: parseFloat(place.x) });
+  }
+
+  function handlePreviewEnd() {
+    setPreviewPlace(null);
+  }
+
+  function openSearchFor(pointMode: "start" | "end") {
+    setSearchPointMode(pointMode);
+    setSearchOpen(true);
   }
 
   function handleStart() {
@@ -207,7 +223,8 @@ export default function Home() {
         currentPosition={userLocation}
         routePath={pageMode === "map" ? (routeInfo?.path ?? []) : []}
         previewLine={pageMode === "map"}
-        className="absolute inset-0 h-full"
+        previewPoint={previewPlace ? { lat: parseFloat(previewPlace.y), lng: parseFloat(previewPlace.x) } : null}
+        className={`absolute inset-0 ${searchOpen ? "h-[55vh] bottom-0" : "h-full"}`}
       />
 
       {/* 헤더 */}
@@ -223,7 +240,7 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-2">
           <button
-              onClick={() => { setSearchOpen(true); setSearchPointMode(mode === "end" ? "end" : "start"); }}
+              onClick={() => openSearchFor(mode === "end" ? "end" : "start")}
               className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
               aria-label="장소 검색"
             >
@@ -282,123 +299,186 @@ export default function Home() {
         </span>
       </div>
 
-      {/* 장소 검색 패널 */}
+      {/* 장소 검색 패널 - 바텀시트 */}
       {searchOpen && (
-        <div className="absolute inset-0 z-50 flex flex-col" style={{ background: "var(--c-bg)" }}>
-          {/* 검색 헤더 */}
+        <>
+          {/* 딤드 백드롭 - 탭하면 닫힘 */}
           <div
-            className="flex items-center gap-3 px-4"
-            style={{
-              paddingTop: "calc(var(--sat) + 14px)",
-              paddingBottom: "12px",
-              borderBottom: "1px solid var(--c-border)",
-            }}
-          >
-            <button
-              onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(""); }}
-              className="p-2 rounded-xl active:scale-95 transition-transform"
-              style={{ background: "var(--c-elevated)", color: "var(--c-text-2)" }}
-            >
-              <BackIcon />
-            </button>
-            <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl" style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}>
-              <SearchIcon small />
-              <input
-                autoFocus
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="장소, 주소 검색..."
-                className="flex-1 bg-transparent outline-none text-sm"
-                style={{ color: "var(--c-text-1)" }}
-              />
-              {searchQuery && (
-                <button onClick={() => { setSearchQuery(""); setSearchResults([]); }} style={{ color: "var(--c-text-3)" }}>
-                  <ClearIcon />
-                </button>
-              )}
-            </div>
-            <button
-              onClick={handleSearch}
-              disabled={!searchQuery.trim()}
-              className="px-3 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+            className="absolute inset-0 z-40"
+            style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(1px)" }}
+            onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(""); }}
+          />
+
+          {/* 미리보기 플로팅 카드 - 지도 위 상단에 고정 */}
+          {previewPlace && (
+            <div
+              className="absolute left-4 right-4 z-50 px-4 py-3 rounded-2xl pointer-events-none"
               style={{
-                background: searchQuery.trim() ? accentVar : "var(--c-elevated)",
-                color: searchQuery.trim() ? "#fff" : "var(--c-text-3)",
+                bottom: "85vh",
+                background: "var(--c-bg)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.28)",
+                border: "1px solid var(--c-border)",
               }}
             >
-              검색
-            </button>
-          </div>
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: 16 }}>{searchPointMode === "start" ? "🏃" : "🏁"}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate" style={{ color: "var(--c-text-1)" }}>
+                    {previewPlace.place_name}
+                  </p>
+                  <p className="text-xs truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>
+                    {previewPlace.road_address_name || previewPlace.address_name}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
-          {/* 포인트 선택 탭 */}
-          <div className="px-4 py-3 flex gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
-            {(["start", "end"] as const).map((m) => (
+          {/* 패널 */}
+          <div
+            className="absolute bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-3xl overflow-hidden"
+            style={{
+              height: "50vh",
+              background: "var(--c-bg)",
+            }}
+          >
+            {/* 드래그 핸들 */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-8 h-1 rounded-full" style={{ background: "var(--c-border)" }} />
+            </div>
+
+            {/* 검색 헤더 */}
+            <div
+              className="flex items-center gap-3 px-4 pb-3 shrink-0"
+              style={{ borderBottom: "1px solid var(--c-border)" }}
+            >
               <button
-                key={m}
-                onClick={() => setSearchPointMode(m)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+                onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(""); }}
+                className="p-2 rounded-xl active:scale-95 transition-transform"
+                style={{ background: "var(--c-elevated)", color: "var(--c-text-2)" }}
+              >
+                <BackIcon />
+              </button>
+              <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-2xl" style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}>
+                <SearchIcon small />
+                <input
+                  autoFocus
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  placeholder="장소, 주소 검색..."
+                  className="flex-1 bg-transparent outline-none text-sm"
+                  style={{ color: "var(--c-text-1)" }}
+                />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(""); setSearchResults([]); }} style={{ color: "var(--c-text-3)" }}>
+                    <ClearIcon />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={handleSearch}
+                disabled={!searchQuery.trim()}
+                className="px-3 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
                 style={{
-                  background: searchPointMode === m ? (m === "start" ? "var(--c-toss-blue)" : "#ff9f0a") : "var(--c-elevated)",
-                  color: searchPointMode === m ? "#fff" : "var(--c-text-2)",
+                  background: searchQuery.trim() ? accentVar : "var(--c-elevated)",
+                  color: searchQuery.trim() ? "#fff" : "var(--c-text-3)",
                 }}
               >
-                <span className="w-2 h-2 rounded-full" style={{ background: searchPointMode === m ? "#fff" : (m === "start" ? "var(--c-toss-blue)" : "#ff9f0a") }} />
-                {m === "start" ? "출발 지점" : "도착 지점"}
+                검색
               </button>
-            ))}
-          </div>
+            </div>
 
-          {/* 검색 결과 */}
-          <div className="flex-1 overflow-y-auto">
-            {isSearching && (
-              <div className="flex justify-center items-center py-16" style={{ color: "var(--c-text-3)" }}>
-                검색 중...
-              </div>
-            )}
-            {!isSearching && searchResults.length === 0 && searchQuery && (
-              <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
-                <p className="text-sm">검색 결과가 없습니다</p>
-                <p className="text-xs">다른 검색어를 입력해보세요</p>
-              </div>
-            )}
-            {!isSearching && searchResults.length === 0 && !searchQuery && (
-              <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
-                <p className="text-sm font-semibold">장소 또는 주소를 검색하세요</p>
-                <p className="text-xs">예: 남산타워, 한강공원, 강남역</p>
-              </div>
-            )}
-            {searchResults.map((place) => (
-              <button
-                key={place.id}
-                onClick={() => handleSelectPlace(place)}
-                className="w-full px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
-                style={{ borderBottom: "1px solid var(--c-border)" }}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                    style={{ background: searchPointMode === "start" ? "rgba(0,122,255,0.15)" : "rgba(255,159,10,0.15)" }}
+            {/* 포인트 선택 탭 */}
+            <div className="px-4 py-2.5 flex items-center gap-2 shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+              {(["start", "end"] as const).map((m) => {
+                const currentAddr = m === "start" ? startAddress : endAddress;
+                const hasPoint    = m === "start" ? !!startPoint : !!endPoint;
+                const tabColor    = m === "start" ? "var(--c-toss-blue)" : "#ff9f0a";
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setSearchPointMode(m)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+                    style={{
+                      background: searchPointMode === m ? tabColor : "var(--c-elevated)",
+                      color: searchPointMode === m ? "#fff" : "var(--c-text-2)",
+                      border: hasPoint && searchPointMode !== m ? `1.5px solid ${tabColor}60` : "none",
+                    }}
                   >
-                    <span style={{ fontSize: 14 }}>{searchPointMode === "start" ? "🏃" : "🏁"}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: "var(--c-text-1)" }}>{place.place_name}</p>
-                    <p className="text-xs truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>
-                      {place.road_address_name || place.address_name}
-                    </p>
-                    {place.category_name && (
-                      <p className="text-xs mt-0.5" style={{ color: "var(--c-text-3)", opacity: 0.7 }}>
-                        {place.category_name.split(" > ").slice(-1)[0]}
-                      </p>
+                    <span className="w-2 h-2 rounded-full" style={{ background: searchPointMode === m ? "#fff" : tabColor }} />
+                    {m === "start" ? "출발" : "도착"}
+                    {hasPoint && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
                     )}
-                  </div>
+                  </button>
+                );
+              })}
+              {/* 현재 선택된 주소 미리보기 */}
+              {(searchPointMode === "start" ? startAddress : endAddress) && (
+                <span className="ml-1 text-[11px] truncate flex-1 text-right" style={{ color: "var(--c-text-3)" }}>
+                  {searchPointMode === "start" ? startAddress : endAddress}
+                </span>
+              )}
+            </div>
+
+            {/* 검색 결과 */}
+            <div className="flex-1 overflow-y-auto">
+              {isSearching && (
+                <div className="flex justify-center items-center py-16" style={{ color: "var(--c-text-3)" }}>
+                  검색 중...
                 </div>
-              </button>
-            ))}
+              )}
+              {!isSearching && searchResults.length === 0 && searchQuery && (
+                <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
+                  <p className="text-sm">검색 결과가 없습니다</p>
+                  <p className="text-xs">다른 검색어를 입력해보세요</p>
+                </div>
+              )}
+              {!isSearching && searchResults.length === 0 && !searchQuery && (
+                <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
+                  <p className="text-sm font-semibold">장소 또는 주소를 검색하세요</p>
+                  <p className="text-xs">예: 남산타워, 한강공원, 강남역</p>
+                </div>
+              )}
+              {searchResults.map((place) => (
+                <button
+                  key={place.id}
+                  onClick={() => handleSelectPlace(place)}
+                  onTouchStart={() => handlePreviewPlace(place)}
+                  onTouchEnd={handlePreviewEnd}
+                  onMouseEnter={() => handlePreviewPlace(place)}
+                  onMouseLeave={handlePreviewEnd}
+                  className="w-full px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
+                  style={{ borderBottom: "1px solid var(--c-border)" }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                      style={{ background: searchPointMode === "start" ? "rgba(0,122,255,0.15)" : "rgba(255,159,10,0.15)" }}
+                    >
+                      <span style={{ fontSize: 14 }}>{searchPointMode === "start" ? "🏃" : "🏁"}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: "var(--c-text-1)" }}>{place.place_name}</p>
+                      <p className="text-xs truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>
+                        {place.road_address_name || place.address_name}
+                      </p>
+                      {place.category_name && (
+                        <p className="text-xs mt-0.5" style={{ color: "var(--c-text-3)", opacity: 0.7 }}>
+                          {place.category_name.split(" > ").slice(-1)[0]}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* iOS 설치 안내 모달 */}
@@ -523,6 +603,7 @@ export default function Home() {
               <div className="grid grid-cols-2 gap-2">
                 <PointCard
                   label="출발" point={startPoint} address={startAddress} active={mode === "start"} color="var(--c-toss-blue)"
+                  onClick={() => openSearchFor("start")}
                   onUseLocation={userLocation ? () => {
                     startAddrOverride.current = "내 위치";
                     setStartAddress("내 위치");
@@ -531,7 +612,10 @@ export default function Home() {
                     setMode("end");
                   } : undefined}
                 />
-                <PointCard label="도착" point={endPoint}   address={endAddress}   active={mode === "end"}   color="#f59e0b" />
+                <PointCard
+                  label="도착" point={endPoint} address={endAddress} active={mode === "end"} color="#f59e0b"
+                  onClick={() => openSearchFor("end")}
+                />
               </div>
               {(routeDistLabel || routeLoading) && (
                 <div
@@ -655,17 +739,20 @@ export default function Home() {
 }
 
 function PointCard({
-  label, point, address, active, color, onUseLocation,
+  label, point, address, active, color, onUseLocation, onClick,
 }: {
-  label: string; point: LatLng | null; address?: string; active: boolean; color: string; onUseLocation?: () => void;
+  label: string; point: LatLng | null; address?: string; active: boolean; color: string; onUseLocation?: () => void; onClick?: () => void;
 }) {
   const isStart = label === "출발";
   return (
     <div
-      className={`rounded-2xl px-3 py-2.5 transition-all${active ? "" : " card"}`}
+      onClick={onClick}
+      className={`rounded-2xl px-3 py-2.5 transition-all cursor-pointer active:scale-[0.97]${active ? "" : " card"}`}
       style={active ? {
         background: `${color}12`,
         border: `1px solid ${color}55`,
+      } : point ? {
+        border: `1px solid ${color}40`,
       } : undefined}
     >
       <div className="flex items-center gap-1.5 mb-1">
@@ -676,6 +763,11 @@ function PointCard({
         <span className="text-xs font-semibold" style={{ color: "var(--c-text-2)" }}>{label}</span>
         {active && (
           <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: color }} />
+        )}
+        {point && !active && (
+          <svg className="ml-0.5" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ color }}>
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
         )}
         {onUseLocation && (
           <button
@@ -701,7 +793,7 @@ function PointCard({
           </p>
         </>
       ) : (
-        <p className="text-xs" style={{ color: "var(--c-text-3)" }}>미설정</p>
+        <p className="text-xs" style={{ color: "var(--c-text-3)" }}>탭하여 검색</p>
       )}
     </div>
   );
