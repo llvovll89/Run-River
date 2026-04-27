@@ -9,6 +9,8 @@ create table if not exists running_records (
   duration_seconds int not null default 0,
   pace float not null default 0, -- 분/km
   activity_type text not null default 'running' check (activity_type in ('running', 'walking')),
+  memo text,
+  constraint running_records_memo_len_check check (memo is null or char_length(memo) <= 300),
   created_at timestamptz default now() not null
 );
 

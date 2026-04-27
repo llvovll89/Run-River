@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { saveRunningRecord, deleteRunningRecord } from "@/lib/supabase";
+import { saveRunningRecord, deleteRunningRecord, updateRunningMemo } from "@/lib/supabase";
 import { formatDuration, formatPace } from "@/lib/utils";
 import type { LatLng, ActivityType } from "@/types";
 
@@ -20,11 +20,16 @@ interface RunResult {
 }
 
 export default function ResultPage() {
+  const MEMO_MAX_LENGTH = 300;
   const router = useRouter();
   const [result, setResult] = useState<RunResult | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving]   = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [memo, setMemo] = useState("");
+  const [lastSavedMemo, setLastSavedMemo] = useState("");
+  const [memoSaving, setMemoSaving] = useState(false);
+  const [memoStatus, setMemoStatus] = useState<"idle" | "success" | "error">("idle");
 
   useEffect(() => {
     const raw = sessionStorage.getItem("runResult");
@@ -63,6 +68,24 @@ export default function ResultPage() {
       router.replace("/");
     }
   }, [savedId, discarding, router]);
+
+  const handleSaveMemo = useCallback(async () => {
+    if (!savedId || memoSaving) return;
+    setMemoSaving(true);
+    setMemoStatus("idle");
+    try {
+      const normalized = memo.trim();
+      const saved = await updateRunningMemo(savedId, normalized.length > 0 ? normalized : null);
+      const persistedMemo = saved.memo ?? "";
+      setMemo(persistedMemo);
+      setLastSavedMemo(persistedMemo);
+      setMemoStatus("success");
+    } catch {
+      setMemoStatus("error");
+    } finally {
+      setMemoSaving(false);
+    }
+  }, [savedId, memoSaving, memo]);
 
   if (!result) return null;
 
@@ -186,6 +209,64 @@ export default function ResultPage() {
           >
             * 칼로리는 체중 70kg 기준 추정치입니다
           </p>
+        </div>
+      </div>
+
+      {/* 메모 */}
+      <div className="px-4 mt-3">
+        <div className="card rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--c-text-3)",
+              }}
+            >
+              러닝 메모
+            </p>
+            <span className="num" style={{ fontSize: 11, color: "var(--c-text-3)" }}>
+              {memo.length}/{MEMO_MAX_LENGTH}
+            </span>
+          </div>
+          <textarea
+            value={memo}
+            onChange={(e) => {
+              setMemo(e.target.value.slice(0, MEMO_MAX_LENGTH));
+              if (memoStatus !== "idle") setMemoStatus("idle");
+            }}
+            placeholder="오늘 어떤 생각으로 달렸는지 남겨보세요."
+            className="w-full rounded-2xl p-3 text-sm resize-none"
+            rows={4}
+            style={{
+              background: "var(--c-elevated)",
+              border: "1px solid var(--c-border)",
+              color: "var(--c-text-1)",
+            }}
+          />
+          <div className="flex items-center justify-between mt-2">
+            <span style={{ fontSize: 12, color: "var(--c-text-3)" }}>
+              {memoStatus === "success"
+                ? "메모가 저장되었습니다."
+                : memoStatus === "error"
+                  ? "저장에 실패했습니다. 다시 시도해주세요."
+                  : ""}
+            </span>
+            <button
+              onClick={handleSaveMemo}
+              disabled={!savedId || saving || memoSaving || memo === lastSavedMemo}
+              className="px-4 py-2 rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform"
+              style={{
+                background: "var(--c-toss-blue)",
+                color: "white",
+                opacity: !savedId || saving || memoSaving || memo === lastSavedMemo ? 0.5 : 1,
+              }}
+            >
+              {memoSaving ? "메모 저장 중…" : "메모 저장"}
+            </button>
+          </div>
         </div>
       </div>
 

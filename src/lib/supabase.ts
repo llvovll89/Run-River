@@ -40,6 +40,22 @@ export async function deleteRunningRecord(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function updateRunningMemo(
+  id: string,
+  memo: string | null,
+): Promise<RunningRecord> {
+  assertEnv();
+  const { data, error } = await supabase
+    .from("running_records")
+    .update({ memo })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as RunningRecord;
+}
+
 export async function getRunningHistory(): Promise<RunningRecord[]> {
   assertEnv();
   const { data, error } = await supabase

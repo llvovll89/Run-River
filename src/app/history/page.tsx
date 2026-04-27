@@ -47,8 +47,8 @@ export default async function HistoryPage() {
         </div>
 
         <h1
-          className="mb-0.5"
-          style={{ fontSize: 34, fontWeight: 800, color: "var(--c-text-1)", letterSpacing: "-0.02em", lineHeight: 1.1 }}
+          className="mb-2"
+          style={{ fontSize: 26, fontWeight: 800, color: "var(--c-text-1)", letterSpacing: "-0.02em", lineHeight: 1.1 }}
         >
           활동 기록
         </h1>
@@ -148,6 +148,8 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
 
   const dateStr = date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
   const timeStr = date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  const memo = (record.memo ?? "").trim();
+  const hasMemo = memo.length > 0;
 
   return (
     <div className="card rounded-2xl transition-all active:scale-[0.99]">
@@ -193,6 +195,44 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
           </div>
         ))}
       </div>
+
+      {hasMemo && (
+        <div className="px-4 pb-3.5" style={{ borderTop: "1px solid var(--c-border)" }}>
+          <p
+            className="pt-2"
+            style={{
+              fontSize: 13,
+              color: "var(--c-text-2)",
+              lineHeight: 1.45,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {memo}
+          </p>
+          <details>
+            <summary
+              className="pt-2 cursor-pointer"
+              style={{ fontSize: 12, fontWeight: 600, color: "var(--c-text-3)", listStyle: "none" }}
+            >
+              전체보기
+            </summary>
+            <p
+              style={{
+                marginTop: 8,
+                fontSize: 13,
+                color: "var(--c-text-2)",
+                lineHeight: 1.45,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {memo}
+            </p>
+          </details>
+        </div>
+      )}
     </div>
   );
 }

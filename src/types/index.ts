@@ -13,6 +13,7 @@ export interface RunningRecord {
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;
+  memo?: string | null;
   created_at: string;
 }
 
