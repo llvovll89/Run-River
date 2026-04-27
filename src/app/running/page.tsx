@@ -23,14 +23,28 @@ export default function RunningPage() {
   const [config, setConfig]   = useState<RunConfig | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [arrived, setArrived] = useState(false);
-  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const arrivedRef = useRef(false);
+  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const arrivedRef    = useRef(false);
+  const wakeLockRef   = useRef<WakeLockSentinel | null>(null);
+  const startTimeRef  = useRef<number>(0);
+  const baseElapsedRef = useRef<number>(0);
+  const isPausedRef   = useRef(false);
 
   const { permission, requestPermission } = useNotification();
   const { position, startTracking, stopTracking, pauseTracking, resumeTracking, pathPoints, totalDistance, isTracking } =
     useGeolocation();
 
   const [isPaused, setIsPaused] = useState(false);
+  const [followUser, setFollowUser] = useState(true);
+
+  const acquireWakeLock = useCallback(async () => {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+    } catch {
+      // 배터리 부족 등 — 무시
+    }
+  }, []);
   const { heading, needsPermission, requestPermission: requestCompassPermission } = useCompass();
 
   void permission;
@@ -42,23 +56,42 @@ export default function RunningPage() {
     setConfig(parsed);
     requestPermission();
     startTracking();
-    timerRef.current = setInterval(() => setElapsed((p) => p + 1), 1000);
+    acquireWakeLock();
+
+    startTimeRef.current = Date.now();
+    baseElapsedRef.current = 0;
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
+    }, 500);
+
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       stopTracking();
+      wakeLockRef.current?.release();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !isPausedRef.current) {
+        acquireWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [acquireWakeLock]);
+
   // 도착지 도착 감지 (지도 모드)
   useEffect(() => {
     if (!position || !config?.endPoint || arrivedRef.current) return;
-    if (calcDistance(position, config.endPoint) <= 0.05) {
+    if (calcDistance(position, config.endPoint) <= 0.005) {
       arrivedRef.current = true;
       setArrived(true);
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("목적지 도착!", {
-          body: "50m 이내 진입",
+          body: "5m 이내 진입",
           icon: "/icons/icon-192x192.png",
         });
       }
@@ -83,28 +116,38 @@ export default function RunningPage() {
   const handleFinish = useCallback(() => {
     if (!config) return;
     stopTracking();
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    wakeLockRef.current?.release();
+    const finalElapsed = Math.floor(
+      baseElapsedRef.current + (isPausedRef.current ? 0 : (Date.now() - startTimeRef.current) / 1000)
+    );
     sessionStorage.setItem("runResult", JSON.stringify({
       startPoint: config.startPoint,
       endPoint: config.endPoint,
       distance_km: totalDistance,
-      duration_seconds: elapsed,
-      pace: calcPace(totalDistance, elapsed),
+      duration_seconds: finalElapsed,
+      pace: calcPace(totalDistance, finalElapsed),
       activity_type: config.activityType,
       pathPoints,
     }));
     router.push("/result");
-  }, [config, totalDistance, elapsed, pathPoints, stopTracking, router]);
+  }, [config, totalDistance, pathPoints, stopTracking, router]);
 
   const handlePause = useCallback(() => {
     pauseTracking();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    baseElapsedRef.current += (Date.now() - startTimeRef.current) / 1000;
+    isPausedRef.current = true;
     setIsPaused(true);
   }, [pauseTracking]);
 
   const handleResume = useCallback(() => {
     resumeTracking();
-    timerRef.current = setInterval(() => setElapsed((p) => p + 1), 1000);
+    startTimeRef.current = Date.now();
+    isPausedRef.current = false;
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
+    }, 500);
     setIsPaused(false);
   }, [resumeTracking]);
 
@@ -126,25 +169,54 @@ export default function RunningPage() {
         pathPoints={pathPoints}
         showArrivalRadius
         activityType={config.activityType}
-        followUser
+        followUser={followUser}
+        onUserDrag={() => setFollowUser(false)}
         className="absolute inset-0 h-full"
       />
 
-      {/* 나침반 권한 요청 버튼 (iOS 13+만 필요 — Android는 자동 시작) */}
-      {needsPermission && (
+      {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
+      {!followUser && (
         <button
-          onClick={requestCompassPermission}
+          onClick={() => setFollowUser(true)}
           className="absolute z-10 flex items-center gap-1.5 px-3 py-2 rounded-full active:scale-95 transition-transform"
           style={{
             right: 16,
-            top: "calc(var(--sat) + 14px)",
-            background: "rgba(20,22,26,0.85)",
-            border: "1px solid rgba(255,255,255,0.12)",
+            bottom: "calc(var(--sab) + 100px)",
+            background: "rgba(20,22,26,0.9)",
+            border: `1px solid ${accent}55`,
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            color: accent,
+            fontSize: 12,
+            fontWeight: 700,
+            boxShadow: `0 2px 12px ${accent}33`,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+            <circle cx="12" cy="12" r="8"/>
+          </svg>
+          내 위치
+        </button>
+      )}
+
+      {/* 나침반 권한 요청 버튼 (iOS 13+만 필요) */}
+      {needsPermission && (
+        <button
+          onClick={requestCompassPermission}
+          className="absolute z-20 flex items-center gap-1.5 px-3 py-2 rounded-full active:scale-95 transition-transform"
+          style={{
+            right: 16,
+            bottom: "calc(var(--sab) + 160px)",
+            background: "rgba(20,22,26,0.9)",
+            border: "1px solid rgba(255,255,255,0.18)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
             color: "#fff",
             fontSize: 12,
             fontWeight: 600,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -195,17 +267,30 @@ export default function RunningPage() {
                 </span>
               )}
             </div>
-            {isPaused ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(255,159,10,0.15)" }}>
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#ff9f0a" }} />
-                <span className="text-xs font-semibold" style={{ color: "#ff9f0a" }}>일시정지</span>
-              </div>
-            ) : isTracking ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(52,199,89,0.15)" }}>
-                <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: "#34c759" }} />
-                <span className="text-xs font-semibold" style={{ color: "#34c759" }}>GPS</span>
-              </div>
-            ) : null}
+            <div className="flex items-center gap-1.5">
+              {heading !== null && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <svg
+                    width="11" height="11" viewBox="0 0 24 24" fill="none"
+                    style={{ transform: `rotate(${heading}deg)`, transition: "transform 0.3s ease" }}
+                  >
+                    <path d="M12 2L8 20l4-4 4 4L12 2Z" fill="rgba(255,255,255,0.8)"/>
+                  </svg>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{toCardinal(heading)}</span>
+                </div>
+              )}
+              {isPaused ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(255,159,10,0.15)" }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#ff9f0a" }} />
+                  <span className="text-xs font-semibold" style={{ color: "#ff9f0a" }}>일시정지</span>
+                </div>
+              ) : isTracking ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(52,199,89,0.15)" }}>
+                  <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: "#34c759" }} />
+                  <span className="text-xs font-semibold" style={{ color: "#34c759" }}>GPS</span>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -259,7 +344,7 @@ export default function RunningPage() {
               {config.goalDistance ? "목표 달성! 🎉" : "도착!"}
             </h2>
             <p className="text-center mb-6" style={{ fontSize: 14, color: "#9da1a6" }}>
-              {config.goalDistance ? `${config.goalDistance}km 완주` : "목적지 50m 이내 진입"}
+              {config.goalDistance ? `${config.goalDistance}km 완주` : "목적지 5m 이내 진입"}
             </p>
             <div className="grid grid-cols-2 gap-2 mb-5">
               <MiniStat label="거리" value={`${totalDistance.toFixed(2)}`} unit="km" accent={accent} />
@@ -314,6 +399,11 @@ export default function RunningPage() {
       </div>
     </main>
   );
+}
+
+function toCardinal(deg: number): string {
+  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  return dirs[Math.round(deg / 45) % 8];
 }
 
 function RunStat({ label, value, unit, accent, large = false }: {

@@ -3,10 +3,12 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import type { LatLng, ActivityType } from "@/types";
 
-const _startSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter></defs><g filter="url(#sh)"><circle cx="26" cy="24" r="20" fill="#30d158" stroke="white" stroke-width="3"/><text x="26" y="29" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="-apple-system,sans-serif">출발</text><polygon points="19,42 26,54 33,42" fill="#30d158"/></g></svg>';
+// 출발 마커 — 에메랄드 그라디언트 핀, 플레이 아이콘
+const _startSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><linearGradient id="sg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#059669"/></linearGradient><radialGradient id="shl" cx="38%" cy="30%" r="60%"><stop offset="0%" stop-color="white" stop-opacity="0.38"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient><filter id="ssf" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#064e3b" flood-opacity="0.5"/></filter></defs><g filter="url(#ssf)"><circle cx="26" cy="22" r="20" fill="url(#sg)"/><circle cx="26" cy="22" r="20" fill="url(#shl)"/><polygon points="20,41 26,54 32,41" fill="url(#sg)"/><circle cx="26" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2"/></g><polygon points="22,15 22,23 30,19" fill="white" opacity="0.92"/><text x="26" y="32.5" text-anchor="middle" fill="white" font-size="9.5" font-weight="800" font-family="-apple-system,BlinkMacSystemFont,sans-serif">출발</text></svg>';
 const START_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_startSvg)}`;
 
-const _endSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter></defs><g filter="url(#sh)"><circle cx="26" cy="24" r="20" fill="#ff9f0a" stroke="white" stroke-width="3"/><text x="26" y="29" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="-apple-system,sans-serif">도착</text><polygon points="19,42 26,54 33,42" fill="#ff9f0a"/></g></svg>';
+// 도착 마커 — 앰버→오렌지 그라디언트 핀, 체크 아이콘
+const _endSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><linearGradient id="eg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#fcd34d"/><stop offset="100%" stop-color="#f97316"/></linearGradient><radialGradient id="ehl" cx="38%" cy="30%" r="60%"><stop offset="0%" stop-color="white" stop-opacity="0.38"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient><filter id="esf" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#7c2d12" flood-opacity="0.5"/></filter></defs><g filter="url(#esf)"><circle cx="26" cy="22" r="20" fill="url(#eg)"/><circle cx="26" cy="22" r="20" fill="url(#ehl)"/><polygon points="20,41 26,54 32,41" fill="url(#eg)"/><circle cx="26" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2"/></g><path d="M19,21 L23.5,26.5 L33,15" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/><text x="26" y="35" text-anchor="middle" fill="white" font-size="9.5" font-weight="800" font-family="-apple-system,BlinkMacSystemFont,sans-serif">도착</text></svg>';
 const END_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_endSvg)}`;
 
 function buildCurrentMarkerHTML(heading: number | null): string {
@@ -16,7 +18,8 @@ function buildCurrentMarkerHTML(heading: number | null): string {
   return `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center">${cone}<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(0,122,255,0.15)"></div><div style="position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(0,122,255,0.22)"></div><div style="width:11px;height:11px;border-radius:50%;background:#007aff;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,122,255,0.7);position:relative;z-index:1"></div></div>`;
 }
 
-const _previewSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50"><defs><filter id="psh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.35"/></filter></defs><g filter="url(#psh)" opacity="0.92"><circle cx="20" cy="18" r="15" fill="#636366" stroke="white" stroke-width="3"/><circle cx="20" cy="18" r="5" fill="white" opacity="0.9"/><polygon points="14,31 20,46 26,31" fill="#636366"/></g></svg>';
+// 미리보기 핀 마커 — 슬레이트 그라디언트
+const _previewSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="54"><defs><linearGradient id="pg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#475569"/></linearGradient><radialGradient id="phl" cx="38%" cy="30%" r="60%"><stop offset="0%" stop-color="white" stop-opacity="0.35"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient><filter id="psf" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.4"/></filter></defs><g filter="url(#psf)"><circle cx="22" cy="19" r="16" fill="url(#pg)"/><circle cx="22" cy="19" r="16" fill="url(#phl)"/><polygon points="17,33 22,44 27,33" fill="url(#pg)"/><circle cx="22" cy="19" r="16" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/></g><circle cx="22" cy="19" r="5" fill="white" opacity="0.9"/></svg>';
 const PREVIEW_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_previewSvg)}`;
 
 export interface KakaoMapHandle {
@@ -39,6 +42,7 @@ interface KakaoMapProps {
   previewPoint?: LatLng | null;
   activityType?: ActivityType;
   followUser?: boolean;
+  onUserDrag?: () => void;
   className?: string;
 }
 
@@ -58,6 +62,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   previewPoint = null,
   activityType = "running",
   followUser = false,
+  onUserDrag,
   className = "",
 }: KakaoMapProps, ref) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -85,6 +90,8 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   useEffect(() => { onStartPointChangeRef.current = onStartPointChange; }, [onStartPointChange]);
   const onEndPointChangeRef = useRef(onEndPointChange);
   useEffect(() => { onEndPointChangeRef.current = onEndPointChange; }, [onEndPointChange]);
+  const onUserDragRef = useRef(onUserDrag);
+  useEffect(() => { onUserDragRef.current = onUserDrag; }, [onUserDrag]);
 
   const initMap = useCallback(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -99,6 +106,9 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     // 항상 클릭 리스너 등록 (ref로 최신 핸들러 참조)
     kakao.maps.event.addListener(mapInstance, "click", (e: kakao.maps.MouseEvent) => {
       onMapClickRef.current?.({ lat: e.latLng.getLat(), lng: e.latLng.getLng() });
+    });
+    kakao.maps.event.addListener(mapInstance, "dragstart", () => {
+      onUserDragRef.current?.();
     });
   }, [center]); // onMapClick 의존성 제거
 
@@ -180,7 +190,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     }
     if (showArrivalRadius) {
       const circle = new kakao.maps.Circle({
-        center: latlng, radius: 50,
+        center: latlng, radius: 5,
         strokeWeight: 2, strokeColor: "#ff9f0a", strokeOpacity: 0.8,
         fillColor: "#ff9f0a", fillOpacity: 0.12, map: mapInstanceRef.current,
       });
@@ -263,8 +273,8 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     const latlng = new kakao.maps.LatLng(previewPoint.lat, previewPoint.lng);
     const img = new kakao.maps.MarkerImage(
       PREVIEW_MARKER_SRC,
-      new kakao.maps.Size(40, 50),
-      { offset: new kakao.maps.Point(20, 48) }
+      new kakao.maps.Size(44, 54),
+      { offset: new kakao.maps.Point(22, 52) }
     );
     previewMarkerRef.current = new kakao.maps.Marker({
       position: latlng,

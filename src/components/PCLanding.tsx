@@ -224,7 +224,7 @@ export default function PCLanding() {
       >
         {/* 상단 네비 */}
         <div
-          className="flex items-center justify-between px-8 py-5"
+          className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5 shrink-0"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
           <div className="flex items-center gap-2.5">
@@ -252,9 +252,9 @@ export default function PCLanding() {
         </div>
 
         {/* 메인 콘텐츠 */}
-        <div className="flex-1 flex items-center justify-center px-8 py-12">
+        <div className="flex-1 flex items-center justify-center px-4 sm:px-6 md:px-8 py-8 md:py-12">
           <div className="w-full max-w-5xl">
-            <div className="grid grid-cols-2 gap-16 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
               {/* 왼쪽 */}
               <div>
@@ -266,11 +266,11 @@ export default function PCLanding() {
                 </span>
                 <h1
                   className="mb-3"
-                  style={{ fontSize: 52, fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1.05 }}
+                  style={{ fontSize: "clamp(28px, 4.5vw, 52px)", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1.05 }}
                 >
                   Run River
                 </h1>
-                <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.6, marginBottom: 28 }}>
+                <p style={{ fontSize: "clamp(14px, 1.4vw, 17px)", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, marginBottom: 28 }}>
                   스마트폰으로 달리고, 걷고, 기록하세요.
                   <br />실시간 GPS로 경로와 페이스를 추적합니다.
                 </p>
@@ -332,7 +332,7 @@ export default function PCLanding() {
               </div>
 
               {/* 오른쪽: QR */}
-              <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center lg:items-center">
                 <div
                   className="rounded-3xl p-6 mb-5 w-full max-w-xs"
                   style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -385,7 +385,7 @@ export default function PCLanding() {
 
         {/* 하단 */}
         <div
-          className="px-8 py-4 flex items-center justify-between"
+          className="px-4 sm:px-8 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-0 justify-between"
           style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
         >
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.18)" }}>
