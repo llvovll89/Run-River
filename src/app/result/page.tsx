@@ -106,24 +106,36 @@ export default function ResultPage() {
       <div
         className="px-5"
         style={{
-          paddingTop: "calc(var(--sat) + 52px)",
+          paddingTop: "calc(var(--sat) + 10px)",
           paddingBottom: "28px",
           background: "var(--c-surface)",
           borderBottom: "1px solid var(--c-border)",
         }}
       >
         <div className="flex items-center justify-between mb-4">
-          <span
-            className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
-            style={{ background: `${accent}18`, color: accent, letterSpacing: "-0.01em" }}
+          <button
+            onClick={() => router.push("/")}
+            className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+            style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
+            aria-label="홈으로 가기"
           >
-            {label} 완료
-          </span>
-          {saving ? (
-            <span className="text-xs" style={{ color: "var(--c-text-3)" }}>저장 중…</span>
-          ) : savedId ? (
-            <span className="text-xs font-semibold" style={{ color: "var(--c-walk)" }}>✓ 자동 저장됨</span>
-          ) : null}
+            <svg width="16" height="16" style={{ color: "var(--c-text-1)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
+              style={{ background: `${accent}18`, color: accent, letterSpacing: "-0.01em" }}
+            >
+              {label} 완료
+            </span>
+            {saving ? (
+              <span className="text-xs" style={{ color: "var(--c-text-3)" }}>저장 중…</span>
+            ) : savedId ? (
+              <span className="text-xs font-semibold" style={{ color: "var(--c-walk)" }}>✓ 자동 저장됨</span>
+            ) : null}
+          </div>
         </div>
         <h1
           style={{

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { RunningRecord } from "@/types";
 import WeeklyChart from "@/components/WeeklyChart";
 import DeleteRecordButton from "@/components/DeleteRecordButton";
+import EditableMemo from "@/components/EditableMemo";
 
 export const revalidate = 0;
 
@@ -149,7 +150,6 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
   const dateStr = date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
   const timeStr = date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
   const memo = (record.memo ?? "").trim();
-  const hasMemo = memo.length > 0;
 
   return (
     <div className="card rounded-2xl transition-all active:scale-[0.99]">
@@ -196,43 +196,7 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
         ))}
       </div>
 
-      {hasMemo && (
-        <div className="px-4 pb-3.5" style={{ borderTop: "1px solid var(--c-border)" }}>
-          <p
-            className="pt-2"
-            style={{
-              fontSize: 13,
-              color: "var(--c-text-2)",
-              lineHeight: 1.45,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-            }}
-          >
-            {memo}
-          </p>
-          <details>
-            <summary
-              className="pt-2 cursor-pointer"
-              style={{ fontSize: 12, fontWeight: 600, color: "var(--c-text-3)", listStyle: "none" }}
-            >
-              전체보기
-            </summary>
-            <p
-              style={{
-                marginTop: 8,
-                fontSize: 13,
-                color: "var(--c-text-2)",
-                lineHeight: 1.45,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {memo}
-            </p>
-          </details>
-        </div>
-      )}
+      <EditableMemo id={record.id} initialMemo={memo} />
     </div>
   );
 }
