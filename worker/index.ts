@@ -1,3 +1,5 @@
+export {};
+
 declare const self: ServiceWorkerGlobalScope;
 
 self.addEventListener("message", (event) => {
