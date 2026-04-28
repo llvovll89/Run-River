@@ -22,8 +22,10 @@ export interface RunConfig {
   startPoint: LatLng;
   endPoint: LatLng | null;
   activityType: ActivityType;
-  /** 목표 거리 모드일 때 설정 (km). null이면 지도 모드 */
+  /** 목표 거리 모드일 때 설정 (km). null이면 지도/시간 모드 */
   goalDistance: number | null;
+  /** 목표 시간 모드일 때 설정 (분). null이면 지도/거리 모드 */
+  goalTime: number | null;
 }
 
 export interface RunningState {

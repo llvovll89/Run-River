@@ -16,6 +16,7 @@ interface RunConfig {
   endPoint: LatLng | null;
   activityType: ActivityType;
   goalDistance: number | null;
+  goalTime: number | null;
 }
 
 export default function RunningPage() {
@@ -134,6 +135,21 @@ export default function RunningPage() {
       }
     }
   }, [totalDistance, config]);
+
+  // 목표 시간 달성 감지 (시간 목표 모드)
+  useEffect(() => {
+    if (!config?.goalTime || arrivedRef.current) return;
+    if (elapsed >= config.goalTime * 60) {
+      arrivedRef.current = true;
+      setArrived(true);
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("시간 목표 달성!", {
+          body: `${config.goalTime}분 완료 · ${totalDistance.toFixed(2)}km 달림`,
+          icon: "/icons/icon-192x192.png",
+        });
+      }
+    }
+  }, [elapsed, config, totalDistance]);
 
   const handleFinish = useCallback(() => {
     if (!config) return;
@@ -380,6 +396,27 @@ export default function RunningPage() {
             </div>
           </div>
         )}
+
+        {/* 목표 시간 진행 바 */}
+        {config.goalTime && (
+          <div className="px-5 pt-3">
+            <div className="flex justify-between items-center mb-1.5">
+              <span style={{ fontSize: 11, color: "#5e636a" }}>남은 시간</span>
+              <span className="num" style={{ fontSize: 11, fontWeight: 700, color: accent }}>
+                {formatDuration(Math.max(0, config.goalTime * 60 - elapsed))}
+              </span>
+            </div>
+            <div className="rounded-full overflow-hidden" style={{ height: 5, background: "rgba(255,255,255,0.1)" }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(100, (elapsed / (config.goalTime * 60)) * 100)}%`,
+                  background: accent,
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
       {arrived && (
         <div
@@ -401,10 +438,14 @@ export default function RunningPage() {
               className="mb-1 text-center"
               style={{ fontSize: 30, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}
             >
-              {config.goalDistance ? "목표 달성! 🎉" : "도착!"}
+              {config.goalDistance ? "목표 달성! 🎉" : config.goalTime ? "시간 목표 달성! 🎉" : "도착!"}
             </h2>
             <p className="text-center mb-6" style={{ fontSize: 14, color: "#9da1a6" }}>
-              {config.goalDistance ? `${config.goalDistance}km 완주` : "목적지 5m 이내 진입"}
+              {config.goalDistance
+                ? `${config.goalDistance}km 완주`
+                : config.goalTime
+                ? `${config.goalTime}분 완료 · ${totalDistance.toFixed(2)}km 달림`
+                : "목적지 5m 이내 진입"}
             </p>
             <div className="grid grid-cols-2 gap-2 mb-5">
               <MiniStat label="거리" value={`${totalDistance.toFixed(2)}`} unit="km" accent={accent} />

@@ -14,8 +14,9 @@ import PCLanding from "@/components/PCLanding";
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
 type PointMode = "start" | "end" | null;
-type PageMode  = "map" | "goal";
+type PageMode  = "map" | "goal" | "time";
 const GOAL_PRESETS = [3, 5, 10, 21];
+const TIME_PRESETS = [15, 20, 30, 45, 60];
 
 export default function Home() {
   const router = useRouter();
@@ -29,6 +30,8 @@ export default function Home() {
   const [pageMode, setPageMode]     = useState<PageMode>("map");
   const [goalDistance, setGoalDistance] = useState<number>(5);
   const [goalInputVal, setGoalInputVal] = useState("");
+  const [goalTime, setGoalTime] = useState<number>(30);
+  const [goalTimeInputVal, setGoalTimeInputVal] = useState("");
   const [searchOpen, setSearchOpen]           = useState(false);
   const [searchQuery, setSearchQuery]         = useState("");
   const [searchResults, setSearchResults]     = useState<kakao.maps.services.PlaceResult[]>([]);
@@ -223,12 +226,18 @@ export default function Home() {
       const origin = userLocation ?? startPoint;
       if (!origin || !goalDistance) return;
       sessionStorage.setItem("runConfig", JSON.stringify({
-        startPoint: origin, endPoint: null, activityType, goalDistance,
+        startPoint: origin, endPoint: null, activityType, goalDistance, goalTime: null,
+      }));
+    } else if (pageMode === "time") {
+      const origin = userLocation ?? startPoint;
+      if (!origin || !goalTime) return;
+      sessionStorage.setItem("runConfig", JSON.stringify({
+        startPoint: origin, endPoint: null, activityType, goalDistance: null, goalTime,
       }));
     } else {
       if (!startPoint || !endPoint) return;
       sessionStorage.setItem("runConfig", JSON.stringify({
-        startPoint, endPoint, activityType, goalDistance: null,
+        startPoint, endPoint, activityType, goalDistance: null, goalTime: null,
       }));
     }
     router.push("/running");
@@ -239,6 +248,8 @@ export default function Home() {
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const canStart  = pageMode === "goal"
     ? !!(userLocation || startPoint) && goalDistance > 0
+    : pageMode === "time"
+    ? !!(userLocation || startPoint) && goalTime > 0
     : !!(startPoint && endPoint);
   const isRun     = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
@@ -618,7 +629,7 @@ export default function Home() {
         <div className="px-4 space-y-3">
           {/* 모드 탭 */}
           <div className="flex gap-1 p-1 rounded-2xl" style={{ background: "var(--c-elevated)" }}>
-            {([["map", "지도 설정"], ["goal", "거리 목표"]] as [PageMode, string][]).map(([m, label]) => (
+            {([["map", "지도 설정"], ["goal", "거리 목표"], ["time", "시간 목표"]] as [PageMode, string][]).map(([m, label]) => (
               <button
                 key={m}
                 onClick={() => setPageMode(m)}
@@ -760,6 +771,58 @@ export default function Home() {
             </div>
           )}
 
+          {/* 시간 목표 모드: 프리셋 + 직접 입력 */}
+          {pageMode === "time" && (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                {TIME_PRESETS.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setGoalTime(t)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+                    style={{
+                      background: goalTime === t ? accentVar : "var(--c-elevated)",
+                      color: goalTime === t ? "#fff" : "var(--c-text-2)",
+                      border: goalTime === t ? "none" : "1px solid var(--c-border)",
+                      boxShadow: goalTime === t ? `0 2px 10px ${accentVar}44` : "none",
+                    }}
+                  >
+                    {t === 60 ? "1시간" : `${t}분`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min={1}
+                  max={300}
+                  value={goalTimeInputVal}
+                  onChange={(e) => setGoalTimeInputVal(e.target.value)}
+                  placeholder="직접 입력 (분)"
+                  className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
+                  style={{
+                    background: "var(--c-elevated)",
+                    border: "1px solid var(--c-border)",
+                    color: "var(--c-text-1)",
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const n = parseInt(goalTimeInputVal, 10);
+                    if (!isNaN(n) && n > 0) { setGoalTime(n); setGoalTimeInputVal(""); }
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
+                  style={{ background: accentVar }}
+                >
+                  설정
+                </button>
+              </div>
+              <p className="text-xs text-center" style={{ color: "var(--c-text-3)" }}>
+                현재 위치에서 출발 · 설정한 시간 동안 자유롭게 달립니다
+              </p>
+            </div>
+          )}
+
           {/* 액션 버튼 */}
           <div className="flex gap-2">
             {pageMode === "map" && (startPoint || endPoint) && (
@@ -789,6 +852,8 @@ export default function Home() {
             >
               {pageMode === "goal"
                 ? canStart ? `${goalDistance}km 달리기 시작` : "위치 확인 중..."
+                : pageMode === "time"
+                ? canStart ? `${goalTime >= 60 ? "1시간" : `${goalTime}분`} 달리기 시작` : "위치 확인 중..."
                 : canStart ? "출발하기" : "포인트를 설정하세요"}
             </button>
           </div>
