@@ -25,19 +25,16 @@ export default function ResultPage() {
   const [result, setResult] = useState<RunResult | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving]   = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [memo, setMemo] = useState("");
   const [lastSavedMemo, setLastSavedMemo] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
   const [memoStatus, setMemoStatus] = useState<"idle" | "success" | "error">("idle");
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem("runResult");
-    if (!raw) { router.replace("/"); return; }
-    const parsed: RunResult = JSON.parse(raw);
-    setResult(parsed);
-    // 자동 저장
+  const doSave = useCallback((parsed: RunResult) => {
     setSaving(true);
+    setSaveError(false);
     saveRunningRecord({
       start_point: parsed.startPoint,
       end_point:   parsed.endPoint,
@@ -51,8 +48,16 @@ export default function ResultPage() {
         sessionStorage.removeItem("runResult");
         sessionStorage.removeItem("runConfig");
       })
-      .catch(() => { /* 저장 실패 시 savedId는 null 유지 */ })
+      .catch(() => setSaveError(true))
       .finally(() => setSaving(false));
+  }, []);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("runResult");
+    if (!raw) { router.replace("/"); return; }
+    const parsed: RunResult = JSON.parse(raw);
+    setResult(parsed);
+    doSave(parsed);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -134,6 +139,17 @@ export default function ResultPage() {
               <span className="text-xs" style={{ color: "var(--c-text-3)" }}>저장 중…</span>
             ) : savedId ? (
               <span className="text-xs font-semibold" style={{ color: "var(--c-walk)" }}>✓ 자동 저장됨</span>
+            ) : saveError ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold" style={{ color: "var(--c-danger)" }}>저장 실패</span>
+                <button
+                  onClick={() => result && doSave(result)}
+                  className="text-xs font-semibold px-2.5 py-1 rounded-full active:scale-95 transition-transform"
+                  style={{ background: "rgba(255,69,58,0.12)", color: "var(--c-danger)", border: "1px solid rgba(255,69,58,0.3)" }}
+                >
+                  재시도
+                </button>
+              </div>
             ) : null}
           </div>
         </div>

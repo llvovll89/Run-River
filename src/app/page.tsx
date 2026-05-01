@@ -98,7 +98,7 @@ export default function Home() {
     reverseGeocode(endPoint, setEndAddress);
   }, [endPoint]);
 
-  // 도보 경로 페치 (T-Map 우선, 없으면 OSRM fallback)
+  // 도보 경로 페치 (OSRM)
   useEffect(() => {
     if (!startPoint || !endPoint || pageMode !== "map") {
       setRouteInfo(null);
@@ -107,57 +107,19 @@ export default function Home() {
     let cancelled = false;
     setRouteLoading(true);
 
-    const tmapKey = process.env.NEXT_PUBLIC_TMAP_KEY;
-
-    const fetchRoute = tmapKey
-      ? fetch("https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", appKey: tmapKey },
-          body: JSON.stringify({
-            startX: String(startPoint.lng),
-            startY: String(startPoint.lat),
-            endX: String(endPoint.lng),
-            endY: String(endPoint.lat),
-            reqCoordType: "WGS84GEO",
-            resCoordType: "WGS84GEO",
-            startName: "출발",
-            endName: "도착",
-          }),
-        })
-          .then((r) => r.json())
-          .then((data) => {
-            if (!data.features?.length) throw new Error("no route");
-            const path: LatLng[] = [];
-            let distanceM = 0;
-            let durationS = 0;
-            for (const feature of data.features) {
-              if (feature.geometry?.type === "LineString") {
-                for (const [lng, lat] of feature.geometry.coordinates as [number, number][]) {
-                  path.push({ lat, lng });
-                }
-              }
-              if (!distanceM && feature.properties?.totalDistance) {
-                distanceM = feature.properties.totalDistance;
-                durationS = feature.properties.totalTime;
-              }
-            }
-            return { path, distanceM, durationS };
-          })
-      : fetch(
-          `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`
-        )
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.code !== "Ok" || !data.routes?.[0]) throw new Error("no route");
-            const coords = data.routes[0].geometry.coordinates as [number, number][];
-            return {
-              path: coords.map(([lng, lat]) => ({ lat, lng })),
-              distanceM: data.routes[0].distance,
-              durationS: data.routes[0].duration,
-            };
-          });
-
-    fetchRoute
+    fetch(
+      `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.code !== "Ok" || !data.routes?.[0]) throw new Error("no route");
+        const coords = data.routes[0].geometry.coordinates as [number, number][];
+        return {
+          path: coords.map(([lng, lat]) => ({ lat, lng })),
+          distanceM: data.routes[0].distance as number,
+          durationS: data.routes[0].duration as number,
+        };
+      })
       .then((info) => { if (!cancelled) setRouteInfo(info); })
       .catch(() => { if (!cancelled) setRouteInfo(null); })
       .finally(() => { if (!cancelled) setRouteLoading(false); });

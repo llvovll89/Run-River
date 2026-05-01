@@ -22,6 +22,7 @@ interface RunConfig {
 export default function RunningPage() {
   const router = useRouter();
   const [config, setConfig]   = useState<RunConfig | null>(null);
+  const [configError, setConfigError] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [arrived, setArrived] = useState(false);
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -32,7 +33,7 @@ export default function RunningPage() {
   const isPausedRef   = useRef(false);
 
   const { permission, requestPermission } = useNotification();
-  const { position, startTracking, stopTracking, pauseTracking, resumeTracking, pathPoints, totalDistance, isTracking } =
+  const { position, error: gpsError, startTracking, stopTracking, pauseTracking, resumeTracking, pathPoints, totalDistance, isTracking } =
     useGeolocation();
 
   const [isPaused, setIsPaused] = useState(false);
@@ -59,9 +60,18 @@ export default function RunningPage() {
 
   void permission;
 
+  // GPS 오류 토스트
+  useEffect(() => {
+    if (gpsError) showToast(`GPS 오류: ${gpsError}`);
+  }, [gpsError, showToast]);
+
   useEffect(() => {
     const raw = sessionStorage.getItem("runConfig");
-    if (!raw) { router.replace("/"); return; }
+    if (!raw) {
+      setConfigError(true);
+      setTimeout(() => router.replace("/"), 2000);
+      return;
+    }
     const parsed: RunConfig = JSON.parse(raw);
     setConfig(parsed);
     requestPermission();
@@ -189,7 +199,19 @@ export default function RunningPage() {
     setIsPaused(false);
   }, [resumeTracking]);
 
-  if (!config) return null;
+  if (!config) {
+    if (configError) {
+      return (
+        <main className="min-h-dvh flex items-center justify-center" style={{ background: "#0a0b0c" }}>
+          <div className="text-center px-6">
+            <p style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 8 }}>설정 정보가 없어요</p>
+            <p style={{ fontSize: 13, color: "#5e636a" }}>홈으로 돌아갑니다…</p>
+          </div>
+        </main>
+      );
+    }
+    return null;
+  }
 
   const isRun    = config.activityType === "running";
   const accent   = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
