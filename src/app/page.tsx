@@ -28,20 +28,15 @@ export default function Home() {
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [sheetOpen, setSheetOpen]   = useState(true);
   const [pageMode, setPageMode]     = useState<PageMode>("map");
-  const [goalDistance, setGoalDistance] = useState<number>(5);
-  const [goalInputVal, setGoalInputVal] = useState("");
-  const [goalTime, setGoalTime] = useState<number>(30);
-  const [goalTimeInputVal, setGoalTimeInputVal] = useState("");
-  const [searchOpen, setSearchOpen]           = useState(false);
-  const [searchQuery, setSearchQuery]         = useState("");
-  const [searchResults, setSearchResults]     = useState<kakao.maps.services.PlaceResult[]>([]);
-  const [searchPointMode, setSearchPointMode] = useState<"start" | "end">("start");
-  const [isSearching, setIsSearching]         = useState(false);
-  const [previewPlace, setPreviewPlace]       = useState<kakao.maps.services.PlaceResult | null>(null);
-  const [routeInfo, setRouteInfo]             = useState<{ path: LatLng[]; distanceM: number; durationS: number } | null>(null);
-  const [routeLoading, setRouteLoading]       = useState(false);
-  const [startAddress, setStartAddress]       = useState("");
-  const [endAddress, setEndAddress]           = useState("");
+  const [goal, setGoal] = useState({ distance: 5, distanceInput: "", time: 30, timeInput: "" });
+  const [search, setSearch] = useState<{
+    open: boolean; query: string; results: kakao.maps.services.PlaceResult[];
+    pointMode: "start" | "end"; loading: boolean; preview: kakao.maps.services.PlaceResult | null;
+  }>({ open: false, query: "", results: [], pointMode: "start", loading: false, preview: null });
+  const [route, setRoute] = useState<{
+    info: { path: LatLng[]; distanceM: number; durationS: number } | null; loading: boolean;
+  }>({ info: null, loading: false });
+  const [addresses, setAddresses] = useState({ start: "", end: "" });
   const startAddrOverride = useRef<string | null>(null);
   const endAddrOverride   = useRef<string | null>(null);
   const dragY   = useRef(0);
@@ -87,25 +82,25 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!startPoint) { setStartAddress(""); return; }
+    if (!startPoint) { setAddresses(prev => ({ ...prev, start: "" })); return; }
     if (startAddrOverride.current) { startAddrOverride.current = null; return; }
-    reverseGeocode(startPoint, setStartAddress);
+    reverseGeocode(startPoint, (v) => setAddresses(prev => ({ ...prev, start: v })));
   }, [startPoint]);
 
   useEffect(() => {
-    if (!endPoint) { setEndAddress(""); return; }
+    if (!endPoint) { setAddresses(prev => ({ ...prev, end: "" })); return; }
     if (endAddrOverride.current) { endAddrOverride.current = null; return; }
-    reverseGeocode(endPoint, setEndAddress);
+    reverseGeocode(endPoint, (v) => setAddresses(prev => ({ ...prev, end: v })));
   }, [endPoint]);
 
   // 도보 경로 페치 (OSRM)
   useEffect(() => {
     if (!startPoint || !endPoint || pageMode !== "map") {
-      setRouteInfo(null);
+      setRoute(prev => ({ ...prev, info: null }));
       return;
     }
     let cancelled = false;
-    setRouteLoading(true);
+    setRoute(prev => ({ ...prev, loading: true }));
 
     fetch(
       `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`
@@ -120,9 +115,9 @@ export default function Home() {
           durationS: data.routes[0].duration as number,
         };
       })
-      .then((info) => { if (!cancelled) setRouteInfo(info); })
-      .catch(() => { if (!cancelled) setRouteInfo(null); })
-      .finally(() => { if (!cancelled) setRouteLoading(false); });
+      .then((info) => { if (!cancelled) setRoute(prev => ({ ...prev, info })); })
+      .catch(() => { if (!cancelled) setRoute(prev => ({ ...prev, info: null })); })
+      .finally(() => { if (!cancelled) setRoute(prev => ({ ...prev, loading: false })); });
 
     return () => { cancelled = true; };
   }, [startPoint, endPoint, pageMode]);
@@ -136,65 +131,60 @@ export default function Home() {
   function handleEndPointChange(latlng: LatLng) { setEndPoint(latlng); }
 
   function handleSearch() {
-    setIsSearching(true);
+    setSearch(prev => ({ ...prev, loading: true }));
     const ps = new kakao.maps.services.Places();
-    ps.keywordSearch(searchQuery, (results, status) => {
-      setIsSearching(false);
-      if (status === kakao.maps.services.Status.OK) {
-        setSearchResults(results);
-      } else {
-        setSearchResults([]);
-      }
+    ps.keywordSearch(search.query, (results, status) => {
+      setSearch(prev => ({
+        ...prev,
+        loading: false,
+        results: status === kakao.maps.services.Status.OK ? results : [],
+      }));
     }, { size: 10 });
   }
 
   function handleSelectPlace(place: kakao.maps.services.PlaceResult) {
     const latlng: LatLng = { lat: parseFloat(place.y), lng: parseFloat(place.x) };
-    if (searchPointMode === "start") {
+    if (search.pointMode === "start") {
       startAddrOverride.current = place.place_name;
-      setStartAddress(place.place_name);
+      setAddresses(prev => ({ ...prev, start: place.place_name }));
       setStartPoint(latlng);
       setMode("end");
     } else {
       endAddrOverride.current = place.place_name;
-      setEndAddress(place.place_name);
+      setAddresses(prev => ({ ...prev, end: place.place_name }));
       setEndPoint(latlng);
       setMode(null);
     }
     mapRef.current?.panTo(latlng);
-    setSearchOpen(false);
-    setSearchQuery("");
-    setSearchResults([]);
-    setPreviewPlace(null);
+    setSearch(prev => ({ ...prev, open: false, query: "", results: [], preview: null }));
     setPageMode("map");
   }
 
   function handlePreviewPlace(place: kakao.maps.services.PlaceResult) {
-    setPreviewPlace(place);
+    setSearch(prev => ({ ...prev, preview: place }));
     mapRef.current?.panTo({ lat: parseFloat(place.y), lng: parseFloat(place.x) });
   }
 
   function handlePreviewEnd() {
-    setPreviewPlace(null);
+    setSearch(prev => ({ ...prev, preview: null }));
   }
 
   function openSearchFor(pointMode: "start" | "end") {
-    setSearchPointMode(pointMode);
-    setSearchOpen(true);
+    setSearch(prev => ({ ...prev, pointMode, open: true }));
   }
 
   function handleStart() {
     if (pageMode === "goal") {
       const origin = userLocation ?? startPoint;
-      if (!origin || !goalDistance) return;
+      if (!origin || !goal.distance) return;
       sessionStorage.setItem("runConfig", JSON.stringify({
-        startPoint: origin, endPoint: null, activityType, goalDistance, goalTime: null,
+        startPoint: origin, endPoint: null, activityType, goalDistance: goal.distance, goalTime: null,
       }));
     } else if (pageMode === "time") {
       const origin = userLocation ?? startPoint;
-      if (!origin || !goalTime) return;
+      if (!origin || !goal.time) return;
       sessionStorage.setItem("runConfig", JSON.stringify({
-        startPoint: origin, endPoint: null, activityType, goalDistance: null, goalTime,
+        startPoint: origin, endPoint: null, activityType, goalDistance: null, goalTime: goal.time,
       }));
     } else {
       if (!startPoint || !endPoint) return;
@@ -209,31 +199,31 @@ export default function Home() {
   const { mode: installMode, canInstall, promptInstall } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const canStart  = pageMode === "goal"
-    ? !!(userLocation || startPoint) && goalDistance > 0
+    ? !!(userLocation || startPoint) && goal.distance > 0
     : pageMode === "time"
-    ? !!(userLocation || startPoint) && goalTime > 0
+    ? !!(userLocation || startPoint) && goal.time > 0
     : !!(startPoint && endPoint);
   const isRun     = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
 
   const routeDistKm = startPoint && endPoint ? calcDistance(startPoint, endPoint) : null;
-  const routeDistLabel = routeInfo
-    ? routeInfo.distanceM < 1000
-      ? `${Math.round(routeInfo.distanceM)} m`
-      : `${(routeInfo.distanceM / 1000).toFixed(2)} km`
+  const routeDistLabel = route.info
+    ? route.info.distanceM < 1000
+      ? `${Math.round(route.info.distanceM)} m`
+      : `${(route.info.distanceM / 1000).toFixed(2)} km`
     : routeDistKm !== null
     ? routeDistKm < 1
       ? `${Math.round(routeDistKm * 1000)} m`
       : `${routeDistKm.toFixed(2)} km`
     : null;
-  const routeTimeLabel = routeInfo
-    ? routeInfo.durationS < 60
-      ? `${Math.round(routeInfo.durationS)}초`
-      : `${Math.round(routeInfo.durationS / 60)}분`
+  const routeTimeLabel = route.info
+    ? route.info.durationS < 60
+      ? `${Math.round(route.info.durationS)}초`
+      : `${Math.round(route.info.durationS / 60)}분`
     : null;
 
   const guide = pageMode === "goal"
-    ? { text: `목표: ${goalDistance} km · 위치 자동 설정`, color: accentVar }
+    ? { text: `목표: ${goal.distance} km · 위치 자동 설정`, color: accentVar }
     : !startPoint
     ? { text: "출발 지점을 탭하세요", color: "var(--c-toss-blue)" }
     : !endPoint
@@ -254,10 +244,10 @@ export default function Home() {
         startPoint={pageMode === "map" ? startPoint : null}
         endPoint={pageMode === "map" ? endPoint : null}
         currentPosition={userLocation}
-        routePath={pageMode === "map" ? (routeInfo?.path ?? []) : []}
+        routePath={pageMode === "map" ? (route.info?.path ?? []) : []}
         previewLine={pageMode === "map"}
-        previewPoint={previewPlace ? { lat: parseFloat(previewPlace.y), lng: parseFloat(previewPlace.x) } : null}
-        className={`absolute inset-0 ${searchOpen ? "h-[55vh] bottom-0" : "h-full"}`}
+        previewPoint={search.preview ? { lat: parseFloat(search.preview.y), lng: parseFloat(search.preview.x) } : null}
+        className={`absolute inset-0 ${search.open ? "h-[55vh] bottom-0" : "h-full"}`}
       />
 
       {/* 헤더 */}
@@ -333,17 +323,17 @@ export default function Home() {
       </div>
 
       {/* 장소 검색 패널 - 바텀시트 */}
-      {searchOpen && (
+      {search.open && (
         <>
           {/* 딤드 백드롭 - 탭하면 닫힘 */}
           <div
             className="absolute inset-0 z-40"
             style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(1px)" }}
-            onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(""); }}
+            onClick={() => setSearch(prev => ({ ...prev, open: false, results: [], query: "" }))}
           />
 
           {/* 미리보기 플로팅 카드 - 지도 위 상단에 고정 */}
-          {previewPlace && (
+          {search.preview && (
             <div
               className="absolute left-4 right-4 z-50 px-4 py-3 rounded-2xl pointer-events-none"
               style={{
@@ -354,13 +344,13 @@ export default function Home() {
               }}
             >
               <div className="flex items-center gap-2">
-                <span style={{ fontSize: 16 }}>{searchPointMode === "start" ? "🏃" : "🏁"}</span>
+                <span style={{ fontSize: 16 }}>{search.pointMode === "start" ? "🏃" : "🏁"}</span>
                 <div className="min-w-0">
                   <p className="text-sm font-bold truncate" style={{ color: "var(--c-text-1)" }}>
-                    {previewPlace.place_name}
+                    {search.preview.place_name}
                   </p>
                   <p className="text-xs truncate mt-0.5" style={{ color: "var(--c-text-3)" }}>
-                    {previewPlace.road_address_name || previewPlace.address_name}
+                    {search.preview.road_address_name || search.preview.address_name}
                   </p>
                 </div>
               </div>
@@ -386,7 +376,7 @@ export default function Home() {
               style={{ borderBottom: "1px solid var(--c-border)" }}
             >
               <button
-                onClick={() => { setSearchOpen(false); setSearchResults([]); setSearchQuery(""); }}
+                onClick={() => setSearch(prev => ({ ...prev, open: false, results: [], query: "" }))}
                 className="p-2 rounded-xl active:scale-95 transition-transform"
                 style={{ background: "var(--c-elevated)", color: "var(--c-text-2)" }}
               >
@@ -397,26 +387,26 @@ export default function Home() {
                 <input
                   autoFocus
                   type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={search.query}
+                  onChange={(e) => setSearch(prev => ({ ...prev, query: e.target.value }))}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   placeholder="장소, 주소 검색..."
                   className="flex-1 bg-transparent outline-none text-sm"
                   style={{ color: "var(--c-text-1)" }}
                 />
-                {searchQuery && (
-                  <button onClick={() => { setSearchQuery(""); setSearchResults([]); }} style={{ color: "var(--c-text-3)" }}>
+                {search.query && (
+                  <button onClick={() => setSearch(prev => ({ ...prev, query: "", results: [] }))} style={{ color: "var(--c-text-3)" }}>
                     <ClearIcon />
                   </button>
                 )}
               </div>
               <button
                 onClick={handleSearch}
-                disabled={!searchQuery.trim()}
+                disabled={!search.query.trim()}
                 className="px-3 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
                 style={{
-                  background: searchQuery.trim() ? accentVar : "var(--c-elevated)",
-                  color: searchQuery.trim() ? "#fff" : "var(--c-text-3)",
+                  background: search.query.trim() ? accentVar : "var(--c-elevated)",
+                  color: search.query.trim() ? "#fff" : "var(--c-text-3)",
                 }}
               >
                 검색
@@ -426,21 +416,20 @@ export default function Home() {
             {/* 포인트 선택 탭 */}
             <div className="px-4 py-2.5 flex items-center gap-2 shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
               {(["start", "end"] as const).map((m) => {
-                const currentAddr = m === "start" ? startAddress : endAddress;
-                const hasPoint    = m === "start" ? !!startPoint : !!endPoint;
-                const tabColor    = m === "start" ? "var(--c-toss-blue)" : "#ff9f0a";
+                const hasPoint = m === "start" ? !!startPoint : !!endPoint;
+                const tabColor = m === "start" ? "var(--c-toss-blue)" : "#ff9f0a";
                 return (
                   <button
                     key={m}
-                    onClick={() => setSearchPointMode(m)}
+                    onClick={() => setSearch(prev => ({ ...prev, pointMode: m }))}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
                     style={{
-                      background: searchPointMode === m ? tabColor : "var(--c-elevated)",
-                      color: searchPointMode === m ? "#fff" : "var(--c-text-2)",
-                      border: hasPoint && searchPointMode !== m ? `1.5px solid ${tabColor}60` : "none",
+                      background: search.pointMode === m ? tabColor : "var(--c-elevated)",
+                      color: search.pointMode === m ? "#fff" : "var(--c-text-2)",
+                      border: hasPoint && search.pointMode !== m ? `1.5px solid ${tabColor}60` : "none",
                     }}
                   >
-                    <span className="w-2 h-2 rounded-full" style={{ background: searchPointMode === m ? "#fff" : tabColor }} />
+                    <span className="w-2 h-2 rounded-full" style={{ background: search.pointMode === m ? "#fff" : tabColor }} />
                     {m === "start" ? "출발" : "도착"}
                     {hasPoint && (
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
@@ -451,33 +440,33 @@ export default function Home() {
                 );
               })}
               {/* 현재 선택된 주소 미리보기 */}
-              {(searchPointMode === "start" ? startAddress : endAddress) && (
+              {(search.pointMode === "start" ? addresses.start : addresses.end) && (
                 <span className="ml-1 text-[11px] truncate flex-1 text-right" style={{ color: "var(--c-text-3)" }}>
-                  {searchPointMode === "start" ? startAddress : endAddress}
+                  {search.pointMode === "start" ? addresses.start : addresses.end}
                 </span>
               )}
             </div>
 
             {/* 검색 결과 */}
             <div className="flex-1 overflow-y-auto">
-              {isSearching && (
+              {search.loading && (
                 <div className="flex justify-center items-center py-16" style={{ color: "var(--c-text-3)" }}>
                   검색 중...
                 </div>
               )}
-              {!isSearching && searchResults.length === 0 && searchQuery && (
+              {!search.loading && search.results.length === 0 && search.query && (
                 <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
                   <p className="text-sm">검색 결과가 없습니다</p>
                   <p className="text-xs">다른 검색어를 입력해보세요</p>
                 </div>
               )}
-              {!isSearching && searchResults.length === 0 && !searchQuery && (
+              {!search.loading && search.results.length === 0 && !search.query && (
                 <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "var(--c-text-3)" }}>
                   <p className="text-sm font-semibold">장소 또는 주소를 검색하세요</p>
                   <p className="text-xs">예: 남산타워, 한강공원, 강남역</p>
                 </div>
               )}
-              {searchResults.map((place) => (
+              {search.results.map((place) => (
                 <button
                   key={place.id}
                   onClick={() => handleSelectPlace(place)}
@@ -491,9 +480,9 @@ export default function Home() {
                   <div className="flex items-start gap-3">
                     <div
                       className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                      style={{ background: searchPointMode === "start" ? "rgba(0,122,255,0.15)" : "rgba(255,159,10,0.15)" }}
+                      style={{ background: search.pointMode === "start" ? "rgba(0,122,255,0.15)" : "rgba(255,159,10,0.15)" }}
                     >
-                      <span style={{ fontSize: 14 }}>{searchPointMode === "start" ? "🏃" : "🏁"}</span>
+                      <span style={{ fontSize: 14 }}>{search.pointMode === "start" ? "🏃" : "🏁"}</span>
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate" style={{ color: "var(--c-text-1)" }}>{place.place_name}</p>
@@ -635,29 +624,29 @@ export default function Home() {
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 <PointCard
-                  label="출발" point={startPoint} address={startAddress} active={mode === "start"} color="var(--c-toss-blue)"
+                  label="출발" point={startPoint} address={addresses.start} active={mode === "start"} color="var(--c-toss-blue)"
                   onClick={() => openSearchFor("start")}
                   onUseLocation={userLocation ? () => {
                     startAddrOverride.current = "내 위치";
-                    setStartAddress("내 위치");
+                    setAddresses(prev => ({ ...prev, start: "내 위치" }));
                     setStartPoint(userLocation);
                     mapRef.current?.panTo(userLocation);
                     setMode("end");
                   } : undefined}
                 />
                 <PointCard
-                  label="도착" point={endPoint} address={endAddress} active={mode === "end"} color="#f59e0b"
+                  label="도착" point={endPoint} address={addresses.end} active={mode === "end"} color="#f59e0b"
                   onClick={() => openSearchFor("end")}
                 />
               </div>
-              {(routeDistLabel || routeLoading) && (
+              {(routeDistLabel || route.loading) && (
                 <div
                   className="flex items-center justify-center gap-2 py-2 rounded-2xl"
                   style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
                 >
-                  {routeLoading ? (
+                  {route.loading ? (
                     <span className="text-xs" style={{ color: "var(--c-text-3)" }}>경로 계산 중...</span>
-                  ) : routeInfo ? (
+                  ) : route.info ? (
                     <>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "#007aff", flexShrink: 0 }}>
                         <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
@@ -688,13 +677,13 @@ export default function Home() {
                 {GOAL_PRESETS.map((p) => (
                   <button
                     key={p}
-                    onClick={() => setGoalDistance(p)}
+                    onClick={() => setGoal(prev => ({ ...prev, distance: p }))}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
                     style={{
-                      background: goalDistance === p ? accentVar : "var(--c-elevated)",
-                      color: goalDistance === p ? "#fff" : "var(--c-text-2)",
-                      border: goalDistance === p ? "none" : "1px solid var(--c-border)",
-                      boxShadow: goalDistance === p ? `0 2px 10px ${accentVar}44` : "none",
+                      background: goal.distance === p ? accentVar : "var(--c-elevated)",
+                      color: goal.distance === p ? "#fff" : "var(--c-text-2)",
+                      border: goal.distance === p ? "none" : "1px solid var(--c-border)",
+                      boxShadow: goal.distance === p ? `0 2px 10px ${accentVar}44` : "none",
                     }}
                   >
                     {p === 21 ? "하프" : `${p}km`}
@@ -706,8 +695,8 @@ export default function Home() {
                   type="number"
                   min={1}
                   max={100}
-                  value={goalInputVal}
-                  onChange={(e) => setGoalInputVal(e.target.value)}
+                  value={goal.distanceInput}
+                  onChange={(e) => setGoal(prev => ({ ...prev, distanceInput: e.target.value }))}
                   placeholder="직접 입력 (km)"
                   className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
                   style={{
@@ -718,8 +707,8 @@ export default function Home() {
                 />
                 <button
                   onClick={() => {
-                    const n = parseFloat(goalInputVal);
-                    if (!isNaN(n) && n > 0) { setGoalDistance(n); setGoalInputVal(""); }
+                    const n = parseFloat(goal.distanceInput);
+                    if (!isNaN(n) && n > 0) { setGoal(prev => ({ ...prev, distance: n, distanceInput: "" })); }
                   }}
                   className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
                   style={{ background: accentVar }}
@@ -740,13 +729,13 @@ export default function Home() {
                 {TIME_PRESETS.map((t) => (
                   <button
                     key={t}
-                    onClick={() => setGoalTime(t)}
+                    onClick={() => setGoal(prev => ({ ...prev, time: t }))}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
                     style={{
-                      background: goalTime === t ? accentVar : "var(--c-elevated)",
-                      color: goalTime === t ? "#fff" : "var(--c-text-2)",
-                      border: goalTime === t ? "none" : "1px solid var(--c-border)",
-                      boxShadow: goalTime === t ? `0 2px 10px ${accentVar}44` : "none",
+                      background: goal.time === t ? accentVar : "var(--c-elevated)",
+                      color: goal.time === t ? "#fff" : "var(--c-text-2)",
+                      border: goal.time === t ? "none" : "1px solid var(--c-border)",
+                      boxShadow: goal.time === t ? `0 2px 10px ${accentVar}44` : "none",
                     }}
                   >
                     {t === 60 ? "1시간" : `${t}분`}
@@ -758,8 +747,8 @@ export default function Home() {
                   type="number"
                   min={1}
                   max={300}
-                  value={goalTimeInputVal}
-                  onChange={(e) => setGoalTimeInputVal(e.target.value)}
+                  value={goal.timeInput}
+                  onChange={(e) => setGoal(prev => ({ ...prev, timeInput: e.target.value }))}
                   placeholder="직접 입력 (분)"
                   className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
                   style={{
@@ -770,8 +759,8 @@ export default function Home() {
                 />
                 <button
                   onClick={() => {
-                    const n = parseInt(goalTimeInputVal, 10);
-                    if (!isNaN(n) && n > 0) { setGoalTime(n); setGoalTimeInputVal(""); }
+                    const n = parseInt(goal.timeInput, 10);
+                    if (!isNaN(n) && n > 0) { setGoal(prev => ({ ...prev, time: n, timeInput: "" })); }
                   }}
                   className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
                   style={{ background: accentVar }}
@@ -813,9 +802,9 @@ export default function Home() {
               }}
             >
               {pageMode === "goal"
-                ? canStart ? `${goalDistance}km 달리기 시작` : "위치 확인 중..."
+                ? canStart ? `${goal.distance}km 달리기 시작` : "위치 확인 중..."
                 : pageMode === "time"
-                ? canStart ? `${goalTime >= 60 ? "1시간" : `${goalTime}분`} 달리기 시작` : "위치 확인 중..."
+                ? canStart ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} 달리기 시작` : "위치 확인 중..."
                 : canStart ? "출발하기" : "포인트를 설정하세요"}
             </button>
           </div>

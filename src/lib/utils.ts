@@ -1,3 +1,17 @@
+export function formatDateFull(date: Date): string {
+  return date.toLocaleDateString("ko-KR", {
+    year: "numeric", month: "long", day: "numeric", weekday: "short",
+  });
+}
+
+export function formatDateShort(date: Date): string {
+  return date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
+}
+
+export function formatTime(date: Date): string {
+  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);

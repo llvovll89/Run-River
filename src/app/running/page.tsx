@@ -82,7 +82,7 @@ export default function RunningPage() {
     baseElapsedRef.current = 0;
     timerRef.current = setInterval(() => {
       setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
-    }, 500);
+    }, 1000);
 
     // iOS는 Wake Lock 미지원 → 화면 꺼지면 GPS 중단됨 안내
     if (!("wakeLock" in navigator)) {
@@ -195,7 +195,7 @@ export default function RunningPage() {
     isPausedRef.current = false;
     timerRef.current = setInterval(() => {
       setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
-    }, 500);
+    }, 1000);
     setIsPaused(false);
   }, [resumeTracking]);
 

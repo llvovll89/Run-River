@@ -41,18 +41,9 @@ export function useGeolocation(): UseGeolocationReturn {
   const [totalDistance, setTotalDistance] = useState(0);
   const watchIdRef = useRef<number | null>(null);
   const lastPositionRef = useRef<LatLng | null>(null);
+  const lastPathPointRef = useRef<LatLng | null>(null);
 
-  const startTracking = useCallback(() => {
-    if (!navigator.geolocation) {
-      setState((prev) => ({ ...prev, error: "GPS를 지원하지 않는 기기입니다." }));
-      return;
-    }
-
-    setPathPoints([]);
-    setTotalDistance(0);
-    lastPositionRef.current = null;
-    setState((prev) => ({ ...prev, isTracking: true, error: null }));
-
+  const startWatch = useCallback(() => {
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const newPos: LatLng = {
@@ -61,27 +52,44 @@ export function useGeolocation(): UseGeolocationReturn {
         };
 
         setState((prev) => ({ ...prev, position: newPos }));
-        setPathPoints((prev) => [...prev, newPos]);
 
+        // 거리 누적: 1m~50m 이동만 (노이즈·점프 필터)
         if (lastPositionRef.current) {
           const dist = calcDistance(lastPositionRef.current, newPos);
-          // 노이즈 필터: 1m~50m 이동만 누적 (GPS 점프 및 미세 지터 제거)
           if (dist > 0.001 && dist < 0.05) {
             setTotalDistance((prev) => prev + dist);
           }
         }
         lastPositionRef.current = newPos;
+
+        // 경로 표시용: 5m 이상 이동 시만 추가 (메모리 절감)
+        const pathDist = lastPathPointRef.current
+          ? calcDistance(lastPathPointRef.current, newPos)
+          : Infinity;
+        if (pathDist >= 0.005) {
+          setPathPoints((prev) => [...prev, newPos]);
+          lastPathPointRef.current = newPos;
+        }
       },
       (err) => {
         setState((prev) => ({ ...prev, error: err.message }));
       },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 10000,
-      }
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
     );
   }, []);
+
+  const startTracking = useCallback(() => {
+    if (!navigator.geolocation) {
+      setState((prev) => ({ ...prev, error: "GPS를 지원하지 않는 기기입니다." }));
+      return;
+    }
+    setPathPoints([]);
+    setTotalDistance(0);
+    lastPositionRef.current = null;
+    lastPathPointRef.current = null;
+    setState((prev) => ({ ...prev, isTracking: true, error: null }));
+    startWatch();
+  }, [startWatch]);
 
   const stopTracking = useCallback(() => {
     if (watchIdRef.current !== null) {
@@ -102,28 +110,8 @@ export function useGeolocation(): UseGeolocationReturn {
   const resumeTracking = useCallback(() => {
     if (!navigator.geolocation) return;
     setState((prev) => ({ ...prev, isTracking: true, error: null }));
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newPos: LatLng = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-        setState((prev) => ({ ...prev, position: newPos }));
-        setPathPoints((prev) => [...prev, newPos]);
-        if (lastPositionRef.current) {
-          const dist = calcDistance(lastPositionRef.current, newPos);
-          if (dist > 0.001 && dist < 0.05) {
-            setTotalDistance((prev) => prev + dist);
-          }
-        }
-        lastPositionRef.current = newPos;
-      },
-      (err) => {
-        setState((prev) => ({ ...prev, error: err.message }));
-      },
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-    );
-  }, [])
+    startWatch();
+  }, [startWatch]);
 
   useEffect(() => {
     const handleVisibility = () => {

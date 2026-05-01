@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { saveRunningRecord, deleteRunningRecord, updateRunningMemo } from "@/lib/supabase";
-import { formatDuration, formatPace } from "@/lib/utils";
+import { formatDuration, formatPace, formatDateFull } from "@/lib/utils";
 import type { LatLng, ActivityType } from "@/types";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
@@ -98,9 +98,7 @@ export default function ResultPage() {
   const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
   const label  = isRun ? "러닝" : "워킹";
 
-  const dateStr = new Date().toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric", weekday: "short",
-  });
+  const dateStr = formatDateFull(new Date());
 
   const calories = Math.round(result.distance_km * (isRun ? 65 : 45));
   const steps    = Math.round(result.distance_km * (isRun ? 1300 : 1400));

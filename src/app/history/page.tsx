@@ -1,5 +1,5 @@
 import { getRunningHistory } from "@/lib/supabase";
-import { formatDuration, formatPace } from "@/lib/utils";
+import { formatDuration, formatPace, formatDateShort, formatTime } from "@/lib/utils";
 import Link from "next/link";
 import type { RunningRecord } from "@/types";
 import WeeklyChart from "@/components/WeeklyChart";
@@ -147,8 +147,8 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
   const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
   const date   = new Date(record.created_at);
 
-  const dateStr = date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
-  const timeStr = date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = formatDateShort(date);
+  const timeStr = formatTime(date);
   const memo = (record.memo ?? "").trim();
 
   return (
