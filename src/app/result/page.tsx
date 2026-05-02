@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { saveRunningRecord, deleteRunningRecord, updateRunningMemo } from "@/lib/supabase";
+import { saveRunningRecord, deleteRunningRecord, updateRunningMemo, getRunningHistory } from "@/lib/supabase";
 import { formatDuration, formatPace, formatDateFull } from "@/lib/utils";
-import type { LatLng, ActivityType } from "@/types";
+import type { LatLng, ActivityType, RunningRecord } from "@/types";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -19,32 +19,153 @@ interface RunResult {
   pathPoints?: LatLng[];
 }
 
+interface PersonalRecordItem {
+  key: "distance" | "pace" | "duration";
+  title: string;
+  value: string;
+}
+
+interface BadgeItem {
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+}
+
+interface MilestoneBadgeRule {
+  key: string;
+  threshold: number;
+  title: string;
+  description: string;
+  icon: string;
+}
+
+const ACTIVITY_BADGE_RULES: MilestoneBadgeRule[] = [
+  { key: "activity_5", threshold: 5, title: "첫 루틴", description: "누적 5회 활동", icon: "🗓" },
+  { key: "activity_10", threshold: 10, title: "꾸준한 러너", description: "누적 10회 활동", icon: "🔥" },
+  { key: "activity_25", threshold: 25, title: "습관 완성", description: "누적 25회 활동", icon: "🏅" },
+];
+
+const TOTAL_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
+  { key: "total_10", threshold: 10, title: "10km 누적", description: "총 10km 달성", icon: "📍" },
+  { key: "total_42195", threshold: 42.195, title: "첫 마라톤 누적", description: "총 42.195km 달성", icon: "🏁" },
+  { key: "total_100", threshold: 100, title: "100km 클럽", description: "총 100km 달성", icon: "💯" },
+];
+
+const SINGLE_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
+  { key: "single_5", threshold: 5, title: "5km 완주", description: "단일 활동 5km 달성", icon: "🥉" },
+  { key: "single_10", threshold: 10, title: "10km 완주", description: "단일 활동 10km 달성", icon: "🥈" },
+  { key: "single_21", threshold: 21, title: "하프 도전", description: "단일 활동 21km 달성", icon: "🥇" },
+];
+
+function resolveMilestoneBadges(prevValue: number, nextValue: number, rules: MilestoneBadgeRule[]): BadgeItem[] {
+  return rules
+    .filter((rule) => prevValue < rule.threshold && nextValue >= rule.threshold)
+    .map((rule) => ({
+      key: rule.key,
+      title: rule.title,
+      description: rule.description,
+      icon: rule.icon,
+    }));
+}
+
+function derivePerformance(current: RunningRecord, records: RunningRecord[]): { personalRecords: PersonalRecordItem[]; earnedBadges: BadgeItem[] } {
+  const previousRecords = records.filter((r) => r.id !== current.id);
+  const previousSameActivity = previousRecords.filter((r) => r.activity_type === current.activity_type);
+
+  const personalRecords: PersonalRecordItem[] = [];
+
+  const prevMaxDistance = previousSameActivity.length > 0
+    ? Math.max(...previousSameActivity.map((r) => r.distance_km))
+    : 0;
+  if (previousSameActivity.length === 0 || current.distance_km > prevMaxDistance + 0.0001) {
+    personalRecords.push({
+      key: "distance",
+      title: "최장 거리 PR",
+      value: `${current.distance_km.toFixed(2)}km`,
+    });
+  }
+
+  const paceCandidates = previousSameActivity.filter((r) => r.distance_km >= 1 && r.duration_seconds >= 300);
+  const hasCurrentPaceCandidate = current.distance_km >= 1 && current.duration_seconds >= 300;
+  const prevBestPace = paceCandidates.length > 0 ? Math.min(...paceCandidates.map((r) => r.pace)) : Number.POSITIVE_INFINITY;
+  if (hasCurrentPaceCandidate && (paceCandidates.length === 0 || current.pace < prevBestPace - 0.0001)) {
+    personalRecords.push({
+      key: "pace",
+      title: "최고 페이스 PR",
+      value: `${formatPace(current.pace)}/km`,
+    });
+  }
+
+  const prevMaxDuration = previousSameActivity.length > 0
+    ? Math.max(...previousSameActivity.map((r) => r.duration_seconds))
+    : 0;
+  if (previousSameActivity.length === 0 || current.duration_seconds > prevMaxDuration) {
+    personalRecords.push({
+      key: "duration",
+      title: "최장 시간 PR",
+      value: formatDuration(current.duration_seconds),
+    });
+  }
+
+  const prevCount = previousRecords.length;
+  const nextCount = records.length;
+  const prevTotalDistance = previousRecords.reduce((sum, r) => sum + r.distance_km, 0);
+  const nextTotalDistance = records.reduce((sum, r) => sum + r.distance_km, 0);
+
+  const earnedBadges: BadgeItem[] = [];
+  earnedBadges.push(...resolveMilestoneBadges(prevCount, nextCount, ACTIVITY_BADGE_RULES));
+  earnedBadges.push(...resolveMilestoneBadges(prevTotalDistance, nextTotalDistance, TOTAL_DISTANCE_BADGE_RULES));
+  earnedBadges.push(...resolveMilestoneBadges(0, current.distance_km, SINGLE_DISTANCE_BADGE_RULES));
+
+  if (prevCount === 0) {
+    earnedBadges.push({
+      key: "first_activity",
+      title: "첫 발자국",
+      description: "첫 활동 기록 저장 완료",
+      icon: "🌱",
+    });
+  }
+
+  return { personalRecords, earnedBadges };
+}
+
 export default function ResultPage() {
   const MEMO_MAX_LENGTH = 300;
   const router = useRouter();
   const [result, setResult] = useState<RunResult | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
-  const [saving, setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [memo, setMemo] = useState("");
   const [lastSavedMemo, setLastSavedMemo] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
   const [memoStatus, setMemoStatus] = useState<"idle" | "success" | "error">("idle");
+  const [personalRecords, setPersonalRecords] = useState<PersonalRecordItem[]>([]);
+  const [earnedBadges, setEarnedBadges] = useState<BadgeItem[]>([]);
+  const [shareStatus, setShareStatus] = useState<"idle" | "success" | "error">("idle");
 
   const doSave = useCallback((parsed: RunResult) => {
     setSaving(true);
     setSaveError(false);
     saveRunningRecord({
       start_point: parsed.startPoint,
-      end_point:   parsed.endPoint,
+      end_point: parsed.endPoint,
       distance_km: parsed.distance_km,
       duration_seconds: parsed.duration_seconds,
-      pace:          parsed.pace,
+      pace: parsed.pace,
       activity_type: parsed.activity_type,
     })
-      .then((record) => {
+      .then(async (record) => {
         setSavedId(record.id);
+        setLastSavedMemo(record.memo ?? "");
+
+        const records = await getRunningHistory();
+        const { personalRecords: prs, earnedBadges: badges } = derivePerformance(record, records);
+        setPersonalRecords(prs);
+        setEarnedBadges(badges);
+
         sessionStorage.removeItem("runResult");
         sessionStorage.removeItem("runConfig");
       })
@@ -58,7 +179,7 @@ export default function ResultPage() {
     const parsed: RunResult = JSON.parse(raw);
     setResult(parsed);
     doSave(parsed);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDiscard = useCallback(async () => {
@@ -92,16 +213,50 @@ export default function ResultPage() {
     }
   }, [savedId, memoSaving, memo]);
 
+  const handleShare = useCallback(async () => {
+    if (!result) return;
+
+    const activityLabel = result.activity_type === "running" ? "러닝" : "워킹";
+    const prText = personalRecords.length > 0
+      ? `\nPR: ${personalRecords.map((item) => `${item.title} (${item.value})`).join(", ")}`
+      : "";
+    const badgeText = earnedBadges.length > 0
+      ? `\n배지: ${earnedBadges.slice(0, 3).map((badge) => badge.title).join(", ")}`
+      : "";
+
+    const shareText = [
+      `Run River ${activityLabel} 완료`,
+      `거리 ${result.distance_km.toFixed(2)}km`,
+      `시간 ${formatDuration(result.duration_seconds)}`,
+      `페이스 ${formatPace(result.pace)}/km`,
+    ].join(" | ") + prText + badgeText;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Run River 기록 공유",
+          text: shareText,
+          url: `${window.location.origin}/history`,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+      }
+      setShareStatus("success");
+    } catch {
+      setShareStatus("error");
+    }
+  }, [result, personalRecords, earnedBadges]);
+
   if (!result) return null;
 
-  const isRun  = result.activity_type === "running";
+  const isRun = result.activity_type === "running";
   const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-  const label  = isRun ? "러닝" : "워킹";
+  const label = isRun ? "러닝" : "워킹";
 
   const dateStr = formatDateFull(new Date());
 
   const calories = Math.round(result.distance_km * (isRun ? 65 : 45));
-  const steps    = Math.round(result.distance_km * (isRun ? 1300 : 1400));
+  const steps = Math.round(result.distance_km * (isRun ? 1300 : 1400));
 
   return (
     <main className="min-h-dvh flex flex-col" style={{ background: "var(--c-bg)" }}>
@@ -186,9 +341,9 @@ export default function ResultPage() {
         <div className="card rounded-2xl">
           <div className="grid grid-cols-3">
             {[
-              { label: "소요 시간",   value: formatDuration(result.duration_seconds), unit: "" },
-              { label: "평균 페이스", value: formatPace(result.pace),                  unit: "/km" },
-              { label: "거리",        value: result.distance_km.toFixed(2),            unit: "km" },
+              { label: "소요 시간", value: formatDuration(result.duration_seconds), unit: "" },
+              { label: "평균 페이스", value: formatPace(result.pace), unit: "/km" },
+              { label: "거리", value: result.distance_km.toFixed(2), unit: "km" },
             ].map(({ label: l, value, unit }, i) => (
               <div
                 key={l}
@@ -216,7 +371,7 @@ export default function ResultPage() {
             활동 요약
           </p>
           {[
-            { label: "활동 유형",    value: label },
+            { label: "활동 유형", value: label },
             { label: "예상 칼로리", value: `${calories.toLocaleString()} kcal` },
             { label: "예상 걸음 수", value: `${steps.toLocaleString()} 보` },
           ].map(({ label: l, value }, i, arr) => (
@@ -237,6 +392,61 @@ export default function ResultPage() {
           </p>
         </div>
       </div>
+
+      {/* PR 기록 */}
+      {personalRecords.length > 0 && (
+        <div className="px-4 mt-3">
+          <div className="card rounded-2xl p-4">
+            <p
+              className="mb-3"
+              style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+            >
+              개인 최고 기록
+            </p>
+            <div className="space-y-2">
+              {personalRecords.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between rounded-xl px-3 py-2"
+                  style={{ background: `${accent}12`, border: `1px solid ${accent}33` }}
+                >
+                  <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>{item.title}</span>
+                  <span className="num" style={{ fontSize: 14, fontWeight: 700, color: accent }}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 배지 시스템 */}
+      {earnedBadges.length > 0 && (
+        <div className="px-4 mt-3">
+          <div className="card rounded-2xl p-4">
+            <p
+              className="mb-3"
+              style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+            >
+              이번에 획득한 배지
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {earnedBadges.map((badge) => (
+                <div
+                  key={badge.key}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2"
+                  style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
+                >
+                  <span style={{ fontSize: 20 }} aria-hidden>{badge.icon}</span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "var(--c-text-1)" }}>{badge.title}</p>
+                    <p style={{ fontSize: 12, color: "var(--c-text-3)" }}>{badge.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 메모 */}
       <div className="px-4 mt-3">
@@ -301,6 +511,30 @@ export default function ResultPage() {
         className="px-4 mt-auto pt-4 space-y-2"
         style={{ paddingBottom: "calc(var(--sab) + 20px)" }}
       >
+        <button
+          onClick={handleShare}
+          disabled={saving || !savedId}
+          className="w-full py-3.5 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
+          style={{
+            background: accent,
+            color: "#fff",
+            opacity: saving || !savedId ? 0.6 : 1,
+            letterSpacing: "-0.01em",
+            boxShadow: `0 4px 20px ${accent}44`,
+          }}
+        >
+          기록 공유하기
+        </button>
+        {shareStatus === "success" && (
+          <p className="text-center" style={{ fontSize: 12, color: "var(--c-walk)" }}>
+            공유 완료!
+          </p>
+        )}
+        {shareStatus === "error" && (
+          <p className="text-center" style={{ fontSize: 12, color: "var(--c-danger)" }}>
+            공유에 실패했어요. 다시 시도해주세요.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => router.push("/history")}
