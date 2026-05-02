@@ -1,0 +1,1 @@
+(()=>{"use strict";self.addEventListener("message",e=>{var s;(null==(s=e.data)?void 0:s.type)==="SKIP_WAITING"&&self.skipWaiting()})})();

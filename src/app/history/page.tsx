@@ -20,7 +20,7 @@ export default async function HistoryPage() {
 
   const totalDist = records.reduce((s, r) => s + r.distance_km, 0);
   const totalDays = new Set(records.map((r) => r.created_at.slice(0, 10))).size;
-  const avgPace   = records.length > 0
+  const avgPace = records.length > 0
     ? records.reduce((s, r) => s + r.pace, 0) / records.length : 0;
 
   return (
@@ -143,9 +143,9 @@ function SummaryNum({ value, unit, label }: { value: string; unit: string; label
 }
 
 function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
-  const isRun  = record.activity_type === "running";
+  const isRun = record.activity_type === "running";
   const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-  const date   = new Date(record.created_at);
+  const date = new Date(record.created_at);
 
   const dateStr = formatDateShort(date);
   const timeStr = formatTime(date);
@@ -182,9 +182,9 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
         style={{ borderTop: "1px solid var(--c-border)" }}
       >
         {[
-          { label: "거리",    value: record.distance_km.toFixed(2), unit: "km"  },
-          { label: "시간",    value: formatDuration(record.duration_seconds), unit: "" },
-          { label: "페이스",  value: formatPace(record.pace),        unit: "/km" },
+          { label: "거리", value: record.distance_km.toFixed(2), unit: "km" },
+          { label: "시간", value: formatDuration(record.duration_seconds), unit: "" },
+          { label: "페이스", value: formatPace(record.pace), unit: "/km" },
         ].map(({ label, value, unit }) => (
           <div key={label} className="text-center">
             <p style={{ fontSize: 11, color: "var(--c-text-3)", marginBottom: 2 }}>{label}</p>
