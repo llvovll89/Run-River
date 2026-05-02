@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useGeolocation, calcDistance } from "@/hooks/useGeolocation";
 import { useCompass } from "@/hooks/useCompass";
 import { useNotification } from "@/hooks/useNotification";
-import { formatDuration, formatPace, calcPace, getPaceZone } from "@/lib/utils";
+import { formatDuration, formatPace, calcPace, getPaceZone, getPaceGuidance } from "@/lib/utils";
 import type { LatLng, ActivityType } from "@/types";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
@@ -19,18 +19,31 @@ interface RunConfig {
   goalTime: number | null;
 }
 
+interface RunRecoverySnapshot {
+  version: 1;
+  updatedAt: number;
+  config: RunConfig;
+  elapsed: number;
+  isPaused: boolean;
+  totalDistance: number;
+  pathPoints: LatLng[];
+}
+
+const RUN_RECOVERY_KEY = "runInProgress";
+const RUN_RECOVERY_MAX_AGE_MS = 1000 * 60 * 60 * 6;
+
 export default function RunningPage() {
   const router = useRouter();
-  const [config, setConfig]   = useState<RunConfig | null>(null);
+  const [config, setConfig] = useState<RunConfig | null>(null);
   const [configError, setConfigError] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [arrived, setArrived] = useState(false);
-  const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const arrivedRef    = useRef(false);
-  const wakeLockRef   = useRef<WakeLockSentinel | null>(null);
-  const startTimeRef  = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const arrivedRef = useRef(false);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const startTimeRef = useRef<number>(0);
   const baseElapsedRef = useRef<number>(0);
-  const isPausedRef   = useRef(false);
+  const isPausedRef = useRef(false);
 
   const { permission, requestPermission } = useNotification();
   const { position, error: gpsError, startTracking, stopTracking, pauseTracking, resumeTracking, pathPoints, totalDistance, isTracking } =
@@ -39,6 +52,7 @@ export default function RunningPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [followUser, setFollowUser] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [pendingRecovery, setPendingRecovery] = useState<RunRecoverySnapshot | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -46,6 +60,23 @@ export default function RunningPage() {
     setToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const saveRecoverySnapshot = useCallback((payload: Omit<RunRecoverySnapshot, "version" | "updatedAt">) => {
+    try {
+      const snapshot: RunRecoverySnapshot = {
+        version: 1,
+        updatedAt: Date.now(),
+        ...payload,
+      };
+      sessionStorage.setItem(RUN_RECOVERY_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Safari private mode 등 저장 실패는 무시
+    }
+  }, []);
+
+  const clearRecoverySnapshot = useCallback(() => {
+    sessionStorage.removeItem(RUN_RECOVERY_KEY);
   }, []);
 
   const acquireWakeLock = useCallback(async () => {
@@ -56,6 +87,46 @@ export default function RunningPage() {
       // 배터리 부족 등 — 무시
     }
   }, []);
+
+  const beginSession = useCallback((
+    nextConfig: RunConfig,
+    recovery?: Pick<RunRecoverySnapshot, "elapsed" | "isPaused" | "pathPoints" | "totalDistance">
+  ) => {
+    setConfig(nextConfig);
+    requestPermission();
+    startTracking({
+      activityType: nextConfig.activityType,
+      restore: recovery
+        ? {
+          pathPoints: recovery.pathPoints,
+          totalDistance: recovery.totalDistance,
+        }
+        : undefined,
+    });
+    void acquireWakeLock();
+
+    startTimeRef.current = Date.now();
+    baseElapsedRef.current = recovery?.elapsed ?? 0;
+    setElapsed(recovery?.elapsed ?? 0);
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (recovery?.isPaused) {
+      pauseTracking();
+      isPausedRef.current = true;
+      setIsPaused(true);
+    } else {
+      isPausedRef.current = false;
+      setIsPaused(false);
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
+      }, 1000);
+    }
+  }, [requestPermission, startTracking, acquireWakeLock, pauseTracking]);
+
   const { heading, needsPermission, requestPermission: requestCompassPermission } = useCompass();
 
   void permission;
@@ -66,23 +137,34 @@ export default function RunningPage() {
   }, [gpsError, showToast]);
 
   useEffect(() => {
+    let parsedConfig: RunConfig | null = null;
+
     const raw = sessionStorage.getItem("runConfig");
-    if (!raw) {
+    if (raw) {
+      parsedConfig = JSON.parse(raw) as RunConfig;
+      beginSession(parsedConfig);
+    } else {
+      const rawRecovery = sessionStorage.getItem(RUN_RECOVERY_KEY);
+      if (rawRecovery) {
+        try {
+          const parsedRecovery = JSON.parse(rawRecovery) as RunRecoverySnapshot;
+          const isFresh = Date.now() - parsedRecovery.updatedAt <= RUN_RECOVERY_MAX_AGE_MS;
+          if (isFresh && parsedRecovery.version === 1) {
+            setConfig(parsedRecovery.config);
+            setPendingRecovery(parsedRecovery);
+            return;
+          }
+        } catch {
+          clearRecoverySnapshot();
+        }
+      }
+    }
+
+    if (!parsedConfig && !raw) {
       setConfigError(true);
       setTimeout(() => router.replace("/"), 2000);
       return;
     }
-    const parsed: RunConfig = JSON.parse(raw);
-    setConfig(parsed);
-    requestPermission();
-    startTracking();
-    acquireWakeLock();
-
-    startTimeRef.current = Date.now();
-    baseElapsedRef.current = 0;
-    timerRef.current = setInterval(() => {
-      setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
-    }, 1000);
 
     // iOS는 Wake Lock 미지원 → 화면 꺼지면 GPS 중단됨 안내
     if (!("wakeLock" in navigator)) {
@@ -96,7 +178,53 @@ export default function RunningPage() {
       wakeLockRef.current?.release();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [beginSession, clearRecoverySnapshot, router, showToast, stopTracking]);
+
+  const handleResumeRecoveredSession = useCallback(() => {
+    if (!pendingRecovery) return;
+    setPendingRecovery(null);
+    beginSession(pendingRecovery.config, {
+      elapsed: pendingRecovery.elapsed,
+      isPaused: pendingRecovery.isPaused,
+      pathPoints: pendingRecovery.pathPoints,
+      totalDistance: pendingRecovery.totalDistance,
+    });
+    showToast("이전 러닝 세션을 복구했어요.");
+  }, [pendingRecovery, beginSession, showToast]);
+
+  const handleDiscardRecoveredSession = useCallback(() => {
+    clearRecoverySnapshot();
+    sessionStorage.removeItem("runConfig");
+    setPendingRecovery(null);
+    router.replace("/");
+  }, [clearRecoverySnapshot, router]);
+
+  useEffect(() => {
+    if (!config || arrived || pendingRecovery) return;
+
+    const persist = () => {
+      const liveElapsed = Math.floor(
+        baseElapsedRef.current + (isPausedRef.current ? 0 : (Date.now() - startTimeRef.current) / 1000)
+      );
+      saveRecoverySnapshot({
+        config,
+        elapsed: liveElapsed,
+        isPaused: isPausedRef.current,
+        totalDistance,
+        pathPoints,
+      });
+    };
+
+    persist();
+    const saveTimer = setInterval(persist, 3000);
+    const onPageHide = () => persist();
+    window.addEventListener("pagehide", onPageHide);
+
+    return () => {
+      clearInterval(saveTimer);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [config, totalDistance, pathPoints, arrived, pendingRecovery, saveRecoverySnapshot]);
 
   // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득 + 중단 시간 안내
   useEffect(() => {
@@ -178,8 +306,10 @@ export default function RunningPage() {
       activity_type: config.activityType,
       pathPoints,
     }));
+    clearRecoverySnapshot();
+    sessionStorage.removeItem("runConfig");
     router.push("/result");
-  }, [config, totalDistance, pathPoints, stopTracking, router]);
+  }, [config, totalDistance, pathPoints, stopTracking, router, clearRecoverySnapshot]);
 
   const handlePause = useCallback(() => {
     pauseTracking();
@@ -213,10 +343,11 @@ export default function RunningPage() {
     return null;
   }
 
-  const isRun    = config.activityType === "running";
-  const accent   = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-  const pace     = calcPace(totalDistance, elapsed);
+  const isRun = config.activityType === "running";
+  const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
+  const pace = calcPace(totalDistance, elapsed);
   const paceZone = getPaceZone(pace, config.activityType);
+  const paceGuide = getPaceGuidance(pace, config.activityType);
 
   return (
     <main className="relative w-full h-dvh overflow-hidden" style={{ background: "#0a0b0c" }}>
@@ -253,9 +384,9 @@ export default function RunningPage() {
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
-            <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-            <circle cx="12" cy="12" r="8"/>
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            <circle cx="12" cy="12" r="8" />
           </svg>
           내 위치
         </button>
@@ -303,8 +434,8 @@ export default function RunningPage() {
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <circle cx="12" cy="12" r="10"/>
-            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
           </svg>
           나침반 켜기
         </button>
@@ -319,8 +450,8 @@ export default function RunningPage() {
           background: isPaused
             ? "rgba(10,11,12,0.88)"
             : isRun
-            ? "rgba(0,20,50,0.88)"
-            : "rgba(0,28,15,0.88)",
+              ? "rgba(0,20,50,0.88)"
+              : "rgba(0,28,15,0.88)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           borderBottom: `1px solid ${accent}33`,
@@ -364,11 +495,16 @@ export default function RunningPage() {
               ) : null}
             </div>
           </div>
+          {!isPaused && (
+            <p className="mb-3" style={{ fontSize: 12, fontWeight: 600, color: paceZone.color }}>
+              {paceGuide}
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
-            <RunStat label="거리"  value={totalDistance.toFixed(2)} unit="km"  accent={accent} large />
-            <RunStat label="시간"  value={formatDuration(elapsed)}  unit=""    accent={accent} large />
-            <RunStat label="페이스" value={formatPace(pace)}        unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
+            <RunStat label="거리" value={totalDistance.toFixed(2)} unit="km" accent={accent} large />
+            <RunStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} large />
+            <RunStat label="페이스" value={formatPace(pace)} unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
             <div
               className="rounded-2xl px-3 py-3 text-center"
               style={{
@@ -392,7 +528,7 @@ export default function RunningPage() {
                   display: "inline-block",
                 }}
               >
-                <path d="M12 2L8 20l4-4 4 4L12 2Z" fill={accent}/>
+                <path d="M12 2L8 20l4-4 4 4L12 2Z" fill={accent} />
               </svg>
             </div>
           </div>
@@ -466,8 +602,8 @@ export default function RunningPage() {
               {config.goalDistance
                 ? `${config.goalDistance}km 완주`
                 : config.goalTime
-                ? `${config.goalTime}분 완료 · ${totalDistance.toFixed(2)}km 달림`
-                : "목적지 5m 이내 진입"}
+                  ? `${config.goalTime}분 완료 · ${totalDistance.toFixed(2)}km 달림`
+                  : "목적지 5m 이내 진입"}
             </p>
             <div className="grid grid-cols-2 gap-2 mb-5">
               <MiniStat label="거리" value={`${totalDistance.toFixed(2)}`} unit="km" accent={accent} />
@@ -480,6 +616,57 @@ export default function RunningPage() {
             >
               결과 보기
             </button>
+          </div>
+        </div>
+      )}
+
+      {pendingRecovery && (
+        <div
+          className="absolute inset-0 z-40 flex items-end justify-center"
+          style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
+        >
+          <div
+            className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
+            style={{
+              background: "#121315",
+              borderTop: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "24px 24px 0 0",
+            }}
+          >
+            <div className="flex justify-center mb-5">
+              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
+            </div>
+            <h2 className="mb-2 text-center" style={{ fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
+              러닝 기록을 찾았어요
+            </h2>
+            <p className="text-center mb-5" style={{ fontSize: 14, color: "#9da1a6" }}>
+              {formatDuration(pendingRecovery.elapsed)} · {pendingRecovery.totalDistance.toFixed(2)}km
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleDiscardRecoveredSession}
+                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#d1d4d9",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                새로 시작
+              </button>
+              <button
+                onClick={handleResumeRecoveredSession}
+                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                style={{
+                  background: accent,
+                  boxShadow: `0 4px 20px ${accent}44`,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                이어하기
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -525,7 +712,7 @@ export default function RunningPage() {
 }
 
 function toCardinal(deg: number): string {
-  const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   return dirs[Math.round(deg / 45) % 8];
 }
 

@@ -45,12 +45,29 @@ export function getPaceZone(
     return { label: "대기", color: "#636366" };
   }
   if (activityType === "running") {
-    if (pace < 4.5)  return { label: "빠름", color: "#ff453a" };
-    if (pace < 6.5)  return { label: "적정", color: "#30d158" };
-    return            { label: "느림",  color: "#636366" };
+    if (pace < 4.5) return { label: "빠름", color: "#ff453a" };
+    if (pace < 6.5) return { label: "적정", color: "#30d158" };
+    return { label: "느림", color: "#636366" };
   } else {
-    if (pace < 7.0)  return { label: "빠름", color: "#ff453a" };
+    if (pace < 7.0) return { label: "빠름", color: "#ff453a" };
     if (pace < 12.0) return { label: "적정", color: "#30d158" };
-    return            { label: "느림",  color: "#636366" };
+    return { label: "느림", color: "#636366" };
   }
+}
+
+export function getPaceGuidance(
+  pace: number,
+  activityType: "running" | "walking"
+): string {
+  if (!pace || !isFinite(pace) || pace === 0) return "페이스 측정 중";
+
+  if (activityType === "running") {
+    if (pace < 4.5) return "속도가 빨라요. 호흡 안정 유지";
+    if (pace < 6.5) return "좋은 페이스예요. 그대로 유지";
+    return "조금만 속도를 올려보세요";
+  }
+
+  if (pace < 7.0) return "속도가 빨라요. 보폭 조절";
+  if (pace < 12.0) return "좋은 걷기 페이스예요";
+  return "리듬을 올려 목표 페이스로";
 }
