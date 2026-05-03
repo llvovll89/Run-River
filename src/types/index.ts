@@ -5,6 +5,13 @@ export interface LatLng {
 
 export type ActivityType = "running" | "walking";
 
+export interface TrackPoint extends LatLng {
+  timestamp: number;
+  elapsed_seconds: number;
+  distance_km: number;
+  altitude_m: number | null;
+}
+
 export interface RunningRecord {
   id: string;
   start_point: LatLng;
@@ -13,6 +20,10 @@ export interface RunningRecord {
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;
+  altitude_start_m?: number | null;
+  altitude_end_m?: number | null;
+  elevation_gain_m?: number | null;
+  elevation_loss_m?: number | null;
   memo?: string | null;
   created_at: string;
 }

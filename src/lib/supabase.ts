@@ -19,6 +19,10 @@ export async function saveRunningRecord(record: {
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;
+  altitude_start_m?: number | null;
+  altitude_end_m?: number | null;
+  elevation_gain_m?: number | null;
+  elevation_loss_m?: number | null;
 }) {
   assertEnv();
   const { data, error } = await supabase
@@ -27,7 +31,35 @@ export async function saveRunningRecord(record: {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    const message = (error.message ?? "").toLowerCase();
+    const hasMissingAltitudeColumn =
+      message.includes("altitude_start_m") ||
+      message.includes("altitude_end_m") ||
+      message.includes("elevation_gain_m") ||
+      message.includes("elevation_loss_m");
+
+    if (hasMissingAltitudeColumn && message.includes("column")) {
+      const {
+        altitude_start_m: _altStart,
+        altitude_end_m: _altEnd,
+        elevation_gain_m: _gain,
+        elevation_loss_m: _loss,
+        ...legacyRecord
+      } = record;
+
+      const fallback = await supabase
+        .from("running_records")
+        .insert([legacyRecord])
+        .select()
+        .single();
+
+      if (fallback.error) throw fallback.error;
+      return fallback.data as RunningRecord;
+    }
+
+    throw error;
+  }
   return data as RunningRecord;
 }
 

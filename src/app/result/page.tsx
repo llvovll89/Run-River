@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { saveRunningRecord, deleteRunningRecord, updateRunningMemo, getRunningHistory } from "@/lib/supabase";
-import { formatDuration, formatPace, formatDateFull } from "@/lib/utils";
-import type { LatLng, ActivityType, RunningRecord } from "@/types";
+import { formatDuration, formatPace, formatDateFull, calcPace, getPaceZone } from "@/lib/utils";
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
+import type { LatLng, ActivityType, RunningRecord, TrackPoint } from "@/types";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -17,6 +18,46 @@ interface RunResult {
   pace: number;
   activity_type: ActivityType;
   pathPoints?: LatLng[];
+  trackPoints?: TrackPoint[];
+  altitude_start_m?: number | null;
+  altitude_end_m?: number | null;
+  elevation_gain_m?: number | null;
+  elevation_loss_m?: number | null;
+}
+
+interface AltitudePoint {
+  x: number;
+  altitude: number;
+}
+
+interface PaceZoneSummary {
+  label: "빠름" | "적정" | "느림";
+  color: string;
+  seconds: number;
+  ratio: number;
+}
+
+interface SplitRow {
+  key: string;
+  label: string;
+  segmentDistanceKm: number;
+  segmentSeconds: number;
+  cumulativeDistanceKm: number;
+  cumulativeSeconds: number;
+  pace: number;
+}
+
+interface Segment {
+  distanceKm: number;
+  seconds: number;
+}
+
+interface RunAnalysis {
+  altitudeByDistance: AltitudePoint[];
+  altitudeByTime: AltitudePoint[];
+  paceZones: PaceZoneSummary[];
+  distanceSplits: SplitRow[];
+  timeSplits: SplitRow[];
 }
 
 interface PersonalRecordItem {
@@ -57,6 +98,190 @@ const SINGLE_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
   { key: "single_10", threshold: 10, title: "10km 완주", description: "단일 활동 10km 달성", icon: "🥈" },
   { key: "single_21", threshold: 21, title: "하프 도전", description: "단일 활동 21km 달성", icon: "🥇" },
 ];
+
+function compressPoints<T>(points: T[], maxPoints = 120): T[] {
+  if (points.length <= maxPoints) return points;
+  const step = Math.ceil(points.length / maxPoints);
+  return points.filter((_, idx) => idx % step === 0 || idx === points.length - 1);
+}
+
+function buildDistanceSplits(segments: Segment[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  const targetKm = 1;
+  let splitIndex = 1;
+  let leftToBoundary = targetKm;
+  let segmentDistance = 0;
+  let segmentSeconds = 0;
+  let cumulativeDistance = 0;
+  let cumulativeSeconds = 0;
+
+  for (const seg of segments) {
+    let leftDistance = seg.distanceKm;
+    let leftSeconds = seg.seconds;
+
+    while (leftDistance > 0.000001) {
+      const takeDistance = Math.min(leftDistance, leftToBoundary);
+      const ratio = leftDistance > 0 ? takeDistance / leftDistance : 0;
+      const takeSeconds = leftSeconds * ratio;
+
+      segmentDistance += takeDistance;
+      segmentSeconds += takeSeconds;
+      cumulativeDistance += takeDistance;
+      cumulativeSeconds += takeSeconds;
+
+      leftDistance -= takeDistance;
+      leftSeconds -= takeSeconds;
+      leftToBoundary -= takeDistance;
+
+      if (leftToBoundary <= 0.000001) {
+        rows.push({
+          key: `km-${splitIndex}`,
+          label: `${splitIndex}km`,
+          segmentDistanceKm: segmentDistance,
+          segmentSeconds,
+          cumulativeDistanceKm: cumulativeDistance,
+          cumulativeSeconds,
+          pace: calcPace(segmentDistance, segmentSeconds),
+        });
+        splitIndex += 1;
+        leftToBoundary = targetKm;
+        segmentDistance = 0;
+        segmentSeconds = 0;
+      }
+    }
+  }
+
+  if (segmentDistance >= 0.05) {
+    rows.push({
+      key: `km-partial-${splitIndex}`,
+      label: `${splitIndex}km+`,
+      segmentDistanceKm: segmentDistance,
+      segmentSeconds,
+      cumulativeDistanceKm: cumulativeDistance,
+      cumulativeSeconds,
+      pace: calcPace(segmentDistance, segmentSeconds),
+    });
+  }
+
+  return rows;
+}
+
+function buildTimeSplits(segments: Segment[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  const targetSeconds = 300;
+  let splitIndex = 1;
+  let leftToBoundary = targetSeconds;
+  let segmentDistance = 0;
+  let segmentSeconds = 0;
+  let cumulativeDistance = 0;
+  let cumulativeSeconds = 0;
+
+  for (const seg of segments) {
+    let leftDistance = seg.distanceKm;
+    let leftSeconds = seg.seconds;
+
+    while (leftSeconds > 0.000001) {
+      const takeSeconds = Math.min(leftSeconds, leftToBoundary);
+      const ratio = leftSeconds > 0 ? takeSeconds / leftSeconds : 0;
+      const takeDistance = leftDistance * ratio;
+
+      segmentDistance += takeDistance;
+      segmentSeconds += takeSeconds;
+      cumulativeDistance += takeDistance;
+      cumulativeSeconds += takeSeconds;
+
+      leftDistance -= takeDistance;
+      leftSeconds -= takeSeconds;
+      leftToBoundary -= takeSeconds;
+
+      if (leftToBoundary <= 0.000001) {
+        rows.push({
+          key: `time-${splitIndex}`,
+          label: `${splitIndex * 5}분`,
+          segmentDistanceKm: segmentDistance,
+          segmentSeconds,
+          cumulativeDistanceKm: cumulativeDistance,
+          cumulativeSeconds,
+          pace: calcPace(segmentDistance, segmentSeconds),
+        });
+        splitIndex += 1;
+        leftToBoundary = targetSeconds;
+        segmentDistance = 0;
+        segmentSeconds = 0;
+      }
+    }
+  }
+
+  if (segmentSeconds >= 30) {
+    rows.push({
+      key: `time-partial-${splitIndex}`,
+      label: `${splitIndex * 5}분+`,
+      segmentDistanceKm: segmentDistance,
+      segmentSeconds,
+      cumulativeDistanceKm: cumulativeDistance,
+      cumulativeSeconds,
+      pace: calcPace(segmentDistance, segmentSeconds),
+    });
+  }
+
+  return rows;
+}
+
+function deriveRunAnalysis(result: RunResult): RunAnalysis | null {
+  const points = result.trackPoints ?? [];
+  if (points.length < 2) return null;
+
+  const segments: Segment[] = [];
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const distanceKm = curr.distance_km - prev.distance_km;
+    const seconds = curr.elapsed_seconds - prev.elapsed_seconds;
+    if (distanceKm > 0 && seconds > 0) {
+      segments.push({ distanceKm, seconds });
+    }
+  }
+
+  if (segments.length === 0) return null;
+
+  const rawAltitudeByDistance = points
+    .filter((p) => p.altitude_m !== null)
+    .map((p) => ({ x: p.distance_km, altitude: Math.round(p.altitude_m as number) }));
+  const rawAltitudeByTime = points
+    .filter((p) => p.altitude_m !== null)
+    .map((p) => ({ x: p.elapsed_seconds / 60, altitude: Math.round(p.altitude_m as number) }));
+
+  const zoneSeconds: Record<"빠름" | "적정" | "느림", number> = { 빠름: 0, 적정: 0, 느림: 0 };
+  for (const seg of segments) {
+    const pace = calcPace(seg.distanceKm, seg.seconds);
+    const zone = getPaceZone(pace, result.activity_type).label;
+    if (zone === "빠름" || zone === "적정" || zone === "느림") {
+      zoneSeconds[zone] += seg.seconds;
+    }
+  }
+
+  const totalZoneSeconds = zoneSeconds.빠름 + zoneSeconds.적정 + zoneSeconds.느림;
+  const zoneOrder: Array<"빠름" | "적정" | "느림"> = ["빠름", "적정", "느림"];
+  const paceZones: PaceZoneSummary[] = zoneOrder.map((label) => {
+    const samplePace = label === "빠름" ? (result.activity_type === "running" ? 4 : 6) : label === "적정" ? (result.activity_type === "running" ? 5.5 : 9) : (result.activity_type === "running" ? 7.5 : 13);
+    const color = getPaceZone(samplePace, result.activity_type).color;
+    const seconds = zoneSeconds[label];
+    return {
+      label,
+      color,
+      seconds,
+      ratio: totalZoneSeconds > 0 ? seconds / totalZoneSeconds : 0,
+    };
+  });
+
+  return {
+    altitudeByDistance: compressPoints(rawAltitudeByDistance),
+    altitudeByTime: compressPoints(rawAltitudeByTime),
+    paceZones,
+    distanceSplits: buildDistanceSplits(segments),
+    timeSplits: buildTimeSplits(segments),
+  };
+}
 
 function resolveMilestoneBadges(prevValue: number, nextValue: number, rules: MilestoneBadgeRule[]): BadgeItem[] {
   return rules
@@ -145,6 +370,8 @@ export default function ResultPage() {
   const [personalRecords, setPersonalRecords] = useState<PersonalRecordItem[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<BadgeItem[]>([]);
   const [shareStatus, setShareStatus] = useState<"idle" | "success" | "error">("idle");
+  const [altitudeMode, setAltitudeMode] = useState<"distance" | "time">("distance");
+  const [splitMode, setSplitMode] = useState<"distance" | "time">("distance");
 
   const doSave = useCallback((parsed: RunResult) => {
     setSaving(true);
@@ -156,6 +383,10 @@ export default function ResultPage() {
       duration_seconds: parsed.duration_seconds,
       pace: parsed.pace,
       activity_type: parsed.activity_type,
+      altitude_start_m: parsed.altitude_start_m ?? null,
+      altitude_end_m: parsed.altitude_end_m ?? null,
+      elevation_gain_m: parsed.elevation_gain_m ?? null,
+      elevation_loss_m: parsed.elevation_loss_m ?? null,
     })
       .then(async (record) => {
         setSavedId(record.id);
@@ -247,6 +478,8 @@ export default function ResultPage() {
     }
   }, [result, personalRecords, earnedBadges]);
 
+  const analysis = useMemo(() => (result ? deriveRunAnalysis(result) : null), [result]);
+
   if (!result) return null;
 
   const isRun = result.activity_type === "running";
@@ -257,6 +490,9 @@ export default function ResultPage() {
 
   const calories = Math.round(result.distance_km * (isRun ? 65 : 45));
   const steps = Math.round(result.distance_km * (isRun ? 1300 : 1400));
+  const elevationGain = result.elevation_gain_m ?? null;
+  const elevationLoss = result.elevation_loss_m ?? null;
+  const hasElevation = elevationGain !== null || elevationLoss !== null;
 
   return (
     <main className="min-h-dvh flex flex-col" style={{ background: "var(--c-bg)" }}>
@@ -361,6 +597,188 @@ export default function ResultPage() {
         </div>
       </div>
 
+      {/* 고도 프로필 */}
+      {analysis && (analysis.altitudeByDistance.length > 1 || analysis.altitudeByTime.length > 1) && (
+        <div className="px-4 mt-3">
+          <div className="card rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p
+                style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+              >
+                고도 프로필
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setAltitudeMode("distance")}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{
+                    background: altitudeMode === "distance" ? `${accent}22` : "var(--c-elevated)",
+                    color: altitudeMode === "distance" ? accent : "var(--c-text-2)",
+                    border: altitudeMode === "distance" ? `1px solid ${accent}44` : "1px solid var(--c-border)",
+                  }}
+                >
+                  거리
+                </button>
+                <button
+                  onClick={() => setAltitudeMode("time")}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{
+                    background: altitudeMode === "time" ? `${accent}22` : "var(--c-elevated)",
+                    color: altitudeMode === "time" ? accent : "var(--c-text-2)",
+                    border: altitudeMode === "time" ? `1px solid ${accent}44` : "1px solid var(--c-border)",
+                  }}
+                >
+                  시간
+                </button>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={altitudeMode === "distance" ? analysis.altitudeByDistance : analysis.altitudeByTime}>
+                <CartesianGrid stroke="var(--c-border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="x"
+                  tick={{ fontSize: 11, fill: "var(--c-text-3)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(value: number) => altitudeMode === "distance" ? `${value.toFixed(1)}km` : `${Math.round(value)}m`}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--c-text-3)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={36}
+                  tickFormatter={(value: number) => `${Math.round(value)}m`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--c-surface)",
+                    border: "1px solid var(--c-border)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                    color: "var(--c-text-1)",
+                  }}
+                  formatter={(value) => [`${Math.round(Number(value ?? 0))}m`, "고도"]}
+                  labelFormatter={(label) => {
+                    const xValue = Number(label ?? 0);
+                    return altitudeMode === "distance"
+                      ? `거리 ${xValue.toFixed(2)}km`
+                      : `시간 ${formatDuration(Math.round(xValue * 60))}`;
+                  }}
+                />
+                <Line type="monotone" dataKey="altitude" stroke={accent} strokeWidth={2.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* 페이스 존 분석 */}
+      {analysis && (
+        <div className="px-4 mt-3">
+          <div className="card rounded-2xl p-4">
+            <p
+              className="mb-3"
+              style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+            >
+              페이스 존 누적 시간
+            </p>
+            <div className="space-y-2.5">
+              {analysis.paceZones.map((zone) => (
+                <div key={zone.label}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>{zone.label}</span>
+                    <span className="num" style={{ fontSize: 12, fontWeight: 700, color: "var(--c-text-1)" }}>
+                      {formatDuration(Math.round(zone.seconds))} ({Math.round(zone.ratio * 100)}%)
+                    </span>
+                  </div>
+                  <div className="rounded-full overflow-hidden" style={{ height: 6, background: "var(--c-elevated)" }}>
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.min(100, Math.round(zone.ratio * 100))}%`,
+                        background: zone.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 스플릿 분석 */}
+      {analysis && (analysis.distanceSplits.length > 0 || analysis.timeSplits.length > 0) && (
+        <div className="px-4 mt-3">
+          <div className="card rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p
+                style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+              >
+                스플릿 분석
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setSplitMode("distance")}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{
+                    background: splitMode === "distance" ? `${accent}22` : "var(--c-elevated)",
+                    color: splitMode === "distance" ? accent : "var(--c-text-2)",
+                    border: splitMode === "distance" ? `1px solid ${accent}44` : "1px solid var(--c-border)",
+                  }}
+                >
+                  1km
+                </button>
+                <button
+                  onClick={() => setSplitMode("time")}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                  style={{
+                    background: splitMode === "time" ? `${accent}22` : "var(--c-elevated)",
+                    color: splitMode === "time" ? accent : "var(--c-text-2)",
+                    border: splitMode === "time" ? `1px solid ${accent}44` : "1px solid var(--c-border)",
+                  }}
+                >
+                  5분
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ fontSize: 11, color: "var(--c-text-3)", fontWeight: 600, textAlign: "left", paddingBottom: 8 }}>구간</th>
+                    <th style={{ fontSize: 11, color: "var(--c-text-3)", fontWeight: 600, textAlign: "right", paddingBottom: 8 }}>거리</th>
+                    <th style={{ fontSize: 11, color: "var(--c-text-3)", fontWeight: 600, textAlign: "right", paddingBottom: 8 }}>시간</th>
+                    <th style={{ fontSize: 11, color: "var(--c-text-3)", fontWeight: 600, textAlign: "right", paddingBottom: 8 }}>페이스</th>
+                    <th style={{ fontSize: 11, color: "var(--c-text-3)", fontWeight: 600, textAlign: "right", paddingBottom: 8 }}>누적</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(splitMode === "distance" ? analysis.distanceSplits : analysis.timeSplits).map((split) => (
+                    <tr key={split.key} style={{ borderTop: "1px solid var(--c-border)" }}>
+                      <td style={{ fontSize: 13, color: "var(--c-text-2)", padding: "8px 0" }}>{split.label}</td>
+                      <td className="num" style={{ fontSize: 13, color: "var(--c-text-1)", textAlign: "right", padding: "8px 0" }}>
+                        {split.segmentDistanceKm.toFixed(2)}km
+                      </td>
+                      <td className="num" style={{ fontSize: 13, color: "var(--c-text-1)", textAlign: "right", padding: "8px 0" }}>
+                        {formatDuration(Math.round(split.segmentSeconds))}
+                      </td>
+                      <td className="num" style={{ fontSize: 13, color: accent, textAlign: "right", fontWeight: 700, padding: "8px 0" }}>
+                        {formatPace(split.pace)}
+                      </td>
+                      <td className="num" style={{ fontSize: 13, color: "var(--c-text-2)", textAlign: "right", padding: "8px 0" }}>
+                        {split.cumulativeDistanceKm.toFixed(2)}km / {formatDuration(Math.round(split.cumulativeSeconds))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 부가 정보 */}
       <div className="px-4 mt-3">
         <div className="card rounded-2xl">
@@ -374,6 +792,9 @@ export default function ResultPage() {
             { label: "활동 유형", value: label },
             { label: "예상 칼로리", value: `${calories.toLocaleString()} kcal` },
             { label: "예상 걸음 수", value: `${steps.toLocaleString()} 보` },
+            ...(hasElevation
+              ? [{ label: "누적 상승/하강", value: `${Math.round(elevationGain ?? 0)}m / ${Math.round(elevationLoss ?? 0)}m` }]
+              : []),
           ].map(({ label: l, value }, i, arr) => (
             <div
               key={l}

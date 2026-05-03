@@ -7,7 +7,7 @@ import { useGeolocation, calcDistance } from "@/hooks/useGeolocation";
 import { useCompass } from "@/hooks/useCompass";
 import { useNotification } from "@/hooks/useNotification";
 import { formatDuration, formatPace, calcPace, getPaceZone, getPaceGuidance } from "@/lib/utils";
-import type { LatLng, ActivityType } from "@/types";
+import type { LatLng, ActivityType, TrackPoint } from "@/types";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -27,6 +27,12 @@ interface RunRecoverySnapshot {
   isPaused: boolean;
   totalDistance: number;
   pathPoints: LatLng[];
+  trackPoints: TrackPoint[];
+  currentAltitude: number | null;
+  startAltitude: number | null;
+  endAltitude: number | null;
+  elevationGain: number;
+  elevationLoss: number;
 }
 
 const RUN_RECOVERY_KEY = "runInProgress";
@@ -46,7 +52,23 @@ export default function RunningPage() {
   const isPausedRef = useRef(false);
 
   const { permission, requestPermission } = useNotification();
-  const { position, error: gpsError, startTracking, stopTracking, pauseTracking, resumeTracking, pathPoints, totalDistance, isTracking } =
+  const {
+    position,
+    error: gpsError,
+    startTracking,
+    stopTracking,
+    pauseTracking,
+    resumeTracking,
+    pathPoints,
+    trackPoints,
+    totalDistance,
+    isTracking,
+    currentAltitude,
+    startAltitude,
+    endAltitude,
+    elevationGain,
+    elevationLoss,
+  } =
     useGeolocation();
 
   const [isPaused, setIsPaused] = useState(false);
@@ -90,7 +112,7 @@ export default function RunningPage() {
 
   const beginSession = useCallback((
     nextConfig: RunConfig,
-    recovery?: Pick<RunRecoverySnapshot, "elapsed" | "isPaused" | "pathPoints" | "totalDistance">
+    recovery?: Pick<RunRecoverySnapshot, "elapsed" | "isPaused" | "pathPoints" | "trackPoints" | "totalDistance" | "currentAltitude" | "startAltitude" | "endAltitude" | "elevationGain" | "elevationLoss">
   ) => {
     setConfig(nextConfig);
     requestPermission();
@@ -99,7 +121,13 @@ export default function RunningPage() {
       restore: recovery
         ? {
           pathPoints: recovery.pathPoints,
+          trackPoints: recovery.trackPoints,
           totalDistance: recovery.totalDistance,
+          currentAltitude: recovery.currentAltitude,
+          startAltitude: recovery.startAltitude,
+          endAltitude: recovery.endAltitude,
+          elevationGain: recovery.elevationGain,
+          elevationLoss: recovery.elevationLoss,
         }
         : undefined,
     });
@@ -147,11 +175,29 @@ export default function RunningPage() {
       const rawRecovery = sessionStorage.getItem(RUN_RECOVERY_KEY);
       if (rawRecovery) {
         try {
-          const parsedRecovery = JSON.parse(rawRecovery) as RunRecoverySnapshot;
-          const isFresh = Date.now() - parsedRecovery.updatedAt <= RUN_RECOVERY_MAX_AGE_MS;
-          if (isFresh && parsedRecovery.version === 1) {
-            setConfig(parsedRecovery.config);
-            setPendingRecovery(parsedRecovery);
+          const parsedRecovery = JSON.parse(rawRecovery) as Partial<RunRecoverySnapshot>;
+          const hasRequiredFields =
+            parsedRecovery.version === 1 &&
+            typeof parsedRecovery.updatedAt === "number" &&
+            parsedRecovery.config !== undefined &&
+            typeof parsedRecovery.elapsed === "number" &&
+            typeof parsedRecovery.isPaused === "boolean" &&
+            typeof parsedRecovery.totalDistance === "number" &&
+            Array.isArray(parsedRecovery.pathPoints);
+          const updatedAt = typeof parsedRecovery.updatedAt === "number" ? parsedRecovery.updatedAt : null;
+          const isFresh = hasRequiredFields && updatedAt !== null && Date.now() - updatedAt <= RUN_RECOVERY_MAX_AGE_MS;
+          if (isFresh) {
+            const normalizedRecovery: RunRecoverySnapshot = {
+              ...parsedRecovery,
+              currentAltitude: parsedRecovery.currentAltitude ?? null,
+              startAltitude: parsedRecovery.startAltitude ?? null,
+              endAltitude: parsedRecovery.endAltitude ?? null,
+              elevationGain: parsedRecovery.elevationGain ?? 0,
+              elevationLoss: parsedRecovery.elevationLoss ?? 0,
+              trackPoints: parsedRecovery.trackPoints ?? [],
+            } as RunRecoverySnapshot;
+            setConfig(normalizedRecovery.config);
+            setPendingRecovery(normalizedRecovery);
             return;
           }
         } catch {
@@ -187,7 +233,13 @@ export default function RunningPage() {
       elapsed: pendingRecovery.elapsed,
       isPaused: pendingRecovery.isPaused,
       pathPoints: pendingRecovery.pathPoints,
+      trackPoints: pendingRecovery.trackPoints,
       totalDistance: pendingRecovery.totalDistance,
+      currentAltitude: pendingRecovery.currentAltitude,
+      startAltitude: pendingRecovery.startAltitude,
+      endAltitude: pendingRecovery.endAltitude,
+      elevationGain: pendingRecovery.elevationGain,
+      elevationLoss: pendingRecovery.elevationLoss,
     });
     showToast("이전 러닝 세션을 복구했어요.");
   }, [pendingRecovery, beginSession, showToast]);
@@ -212,6 +264,12 @@ export default function RunningPage() {
         isPaused: isPausedRef.current,
         totalDistance,
         pathPoints,
+        trackPoints,
+        currentAltitude,
+        startAltitude,
+        endAltitude,
+        elevationGain,
+        elevationLoss,
       });
     };
 
@@ -224,7 +282,20 @@ export default function RunningPage() {
       clearInterval(saveTimer);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [config, totalDistance, pathPoints, arrived, pendingRecovery, saveRecoverySnapshot]);
+  }, [
+    config,
+    totalDistance,
+    pathPoints,
+    trackPoints,
+    currentAltitude,
+    startAltitude,
+    endAltitude,
+    elevationGain,
+    elevationLoss,
+    arrived,
+    pendingRecovery,
+    saveRecoverySnapshot,
+  ]);
 
   // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득 + 중단 시간 안내
   useEffect(() => {
@@ -305,11 +376,28 @@ export default function RunningPage() {
       pace: calcPace(totalDistance, finalElapsed),
       activity_type: config.activityType,
       pathPoints,
+      trackPoints,
+      altitude_start_m: startAltitude,
+      altitude_end_m: endAltitude,
+      elevation_gain_m: elevationGain,
+      elevation_loss_m: elevationLoss,
     }));
     clearRecoverySnapshot();
     sessionStorage.removeItem("runConfig");
     router.push("/result");
-  }, [config, totalDistance, pathPoints, stopTracking, router, clearRecoverySnapshot]);
+  }, [
+    config,
+    totalDistance,
+    pathPoints,
+    trackPoints,
+    startAltitude,
+    endAltitude,
+    elevationGain,
+    elevationLoss,
+    stopTracking,
+    router,
+    clearRecoverySnapshot,
+  ]);
 
   const handlePause = useCallback(() => {
     pauseTracking();
@@ -498,6 +586,11 @@ export default function RunningPage() {
           {!isPaused && (
             <p className="mb-3" style={{ fontSize: 12, fontWeight: 600, color: paceZone.color }}>
               {paceGuide}
+            </p>
+          )}
+          {currentAltitude !== null && (
+            <p className="mb-3" style={{ fontSize: 12, color: "#9da1a6" }}>
+              고도 {Math.round(currentAltitude)}m · 누적 상승 {Math.round(elevationGain)}m
             </p>
           )}
 
