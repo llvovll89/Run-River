@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import PWAUpdateBanner from "@/components/PWAUpdateBanner";
+import { UserProfileProvider } from "@/hooks/useUserProfile";
+import { OfflineSyncProvider } from "@/hooks/useOfflineSync";
 
 export const metadata: Metadata = {
   title: "Run River",
@@ -50,8 +52,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           style={{ background: "var(--c-bg)" }}
         >
           <ThemeProvider>
-            <PWAUpdateBanner />
-            {children}
+            <UserProfileProvider>
+              <OfflineSyncProvider>
+                <PWAUpdateBanner />
+                {children}
+              </OfflineSyncProvider>
+            </UserProfileProvider>
           </ThemeProvider>
         </div>
       </body>
