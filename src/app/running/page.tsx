@@ -4,36 +4,13 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useGeolocation, calcDistance } from "@/hooks/useGeolocation";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { useCompass } from "@/hooks/useCompass";
 import { useNotification } from "@/hooks/useNotification";
 import { formatDuration, formatPace, calcPace, getPaceZone, getPaceGuidance } from "@/lib/utils";
-import type { LatLng, ActivityType, TrackPoint } from "@/types";
+import type { LatLng, ActivityType, TrackPoint, RunConfig, RunRecoverySnapshot } from "@/types";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
-
-interface RunConfig {
-  startPoint: LatLng;
-  endPoint: LatLng | null;
-  activityType: ActivityType;
-  goalDistance: number | null;
-  goalTime: number | null;
-}
-
-interface RunRecoverySnapshot {
-  version: 1;
-  updatedAt: number;
-  config: RunConfig;
-  elapsed: number;
-  isPaused: boolean;
-  totalDistance: number;
-  pathPoints: LatLng[];
-  trackPoints: TrackPoint[];
-  currentAltitude: number | null;
-  startAltitude: number | null;
-  endAltitude: number | null;
-  elevationGain: number;
-  elevationLoss: number;
-}
 
 const RUN_RECOVERY_KEY = "runInProgress";
 const RUN_RECOVERY_MAX_AGE_MS = 1000 * 60 * 60 * 6;
@@ -52,6 +29,7 @@ export default function RunningPage() {
   const isPausedRef = useRef(false);
 
   const { permission, requestPermission } = useNotification();
+  const { profile } = useUserProfile();
   const {
     position,
     error: gpsError,
@@ -62,6 +40,7 @@ export default function RunningPage() {
     pathPoints,
     trackPoints,
     totalDistance,
+    speed,
     isTracking,
     currentAltitude,
     startAltitude,
@@ -77,6 +56,18 @@ export default function RunningPage() {
   const [pendingRecovery, setPendingRecovery] = useState<RunRecoverySnapshot | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 인터벌 트레이닝 state
+  const [intervalPhase, setIntervalPhase] = useState<"run" | "rest">("run");
+  const [intervalSet, setIntervalSet] = useState(1);
+  const [intervalCountdown, setIntervalCountdown] = useState(0);
+  const intervalPhaseRef = useRef<"run" | "rest">("run");
+  const intervalSetRef = useRef(1);
+  const intervalCountdownRef = useRef(0);
+  const intervalRunSecondsRef = useRef(0);
+  const intervalRestSecondsRef = useRef(0);
+  const intervalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -169,8 +160,15 @@ export default function RunningPage() {
 
     const raw = sessionStorage.getItem("runConfig");
     if (raw) {
-      parsedConfig = JSON.parse(raw) as RunConfig;
-      beginSession(parsedConfig);
+      try {
+        parsedConfig = JSON.parse(raw) as RunConfig;
+        beginSession(parsedConfig);
+      } catch {
+        sessionStorage.removeItem("runConfig");
+        showToast("설정 데이터가 손상되었습니다. 다시 설정해주세요.");
+        router.replace("/");
+        return;
+      }
     } else {
       const rawRecovery = sessionStorage.getItem(RUN_RECOVERY_KEY);
       if (rawRecovery) {
@@ -381,6 +379,12 @@ export default function RunningPage() {
       altitude_end_m: endAltitude,
       elevation_gain_m: elevationGain,
       elevation_loss_m: elevationLoss,
+      ...(config.intervalPreset && {
+        intervalPreset: config.intervalPreset,
+        intervalCompletedSets: intervalSetRef.current,
+        intervalTotalRunSeconds: intervalRunSecondsRef.current,
+        intervalTotalRestSeconds: intervalRestSecondsRef.current,
+      }),
     }));
     clearRecoverySnapshot();
     sessionStorage.removeItem("runConfig");
@@ -416,6 +420,96 @@ export default function RunningPage() {
     }, 1000);
     setIsPaused(false);
   }, [resumeTracking]);
+
+  // 인터벌 preset 설정 시 초기화
+  useEffect(() => {
+    if (!config?.intervalPreset || config.intervalPreset.sets === 0) return;
+    const cd = config.intervalPreset.runSeconds;
+    intervalCountdownRef.current = cd;
+    intervalPhaseRef.current = "run";
+    intervalSetRef.current = 1;
+    setIntervalCountdown(cd);
+    setIntervalPhase("run");
+    setIntervalSet(1);
+  }, [config]);
+
+  // 인터벌 tick (pause/tracking 상태에 따라 타이머 on/off)
+  useEffect(() => {
+    if (!config?.intervalPreset || isPaused || !isTracking) {
+      if (intervalTimerRef.current) { clearInterval(intervalTimerRef.current); intervalTimerRef.current = null; }
+      return;
+    }
+    const preset = config.intervalPreset;
+
+    intervalTimerRef.current = setInterval(() => {
+      if (intervalPhaseRef.current === "run") intervalRunSecondsRef.current += 1;
+      else intervalRestSecondsRef.current += 1;
+
+      if (preset.sets === 0) {
+        // 파틀렉: 카운트업
+        intervalCountdownRef.current += 1;
+        setIntervalCountdown((prev) => prev + 1);
+        return;
+      }
+
+      const next = intervalCountdownRef.current - 1;
+      if (next <= 0) {
+        if (intervalPhaseRef.current === "run") {
+          intervalPhaseRef.current = "rest";
+          intervalCountdownRef.current = preset.restSeconds;
+          setIntervalPhase("rest");
+          setIntervalCountdown(preset.restSeconds);
+          if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+        } else {
+          const nextSet = intervalSetRef.current + 1;
+          if (nextSet > preset.sets) {
+            clearInterval(intervalTimerRef.current!);
+            intervalTimerRef.current = null;
+            setIntervalCountdown(0);
+            setArrived(true);
+            arrivedRef.current = true;
+          } else {
+            intervalSetRef.current = nextSet;
+            intervalPhaseRef.current = "run";
+            intervalCountdownRef.current = preset.runSeconds;
+            setIntervalSet(nextSet);
+            setIntervalPhase("run");
+            setIntervalCountdown(preset.runSeconds);
+            if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+          }
+        }
+      } else {
+        intervalCountdownRef.current = next;
+        setIntervalCountdown(next);
+      }
+    }, 1000);
+
+    return () => { if (intervalTimerRef.current) { clearInterval(intervalTimerRef.current); intervalTimerRef.current = null; } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPaused, isTracking, config?.intervalPreset]);
+
+  // Auto-pause: 3초 이상 정지(speed < 0.5 m/s) 감지 시 자동 일시정지
+  useEffect(() => {
+    if (!profile.autoPause || isPaused || !isTracking) {
+      clearTimeout(autoPauseTimerRef.current!);
+      autoPauseTimerRef.current = null;
+      return;
+    }
+    const stopped = speed !== null && speed < 0.5;
+    if (stopped) {
+      if (!autoPauseTimerRef.current) {
+        autoPauseTimerRef.current = setTimeout(() => {
+          autoPauseTimerRef.current = null;
+          handlePause();
+          showToast("자동으로 일시정지됨");
+        }, 3000);
+      }
+    } else {
+      clearTimeout(autoPauseTimerRef.current!);
+      autoPauseTimerRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speed, isPaused, isTracking, profile.autoPause]);
 
   if (!config) {
     if (configError) {
@@ -702,13 +796,27 @@ export default function RunningPage() {
               <MiniStat label="거리" value={`${totalDistance.toFixed(2)}`} unit="km" accent={accent} />
               <MiniStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} />
             </div>
-            <button
-              onClick={handleFinish}
-              className="w-full py-4 rounded-2xl font-bold text-base text-white"
-              style={{ background: accent, boxShadow: `0 4px 20px ${accent}44`, letterSpacing: "-0.01em" }}
-            >
-              결과 보기
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { arrivedRef.current = false; setArrived(false); }}
+                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#d1d4d9",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                계속 달리기
+              </button>
+              <button
+                onClick={handleFinish}
+                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                style={{ background: accent, boxShadow: `0 4px 20px ${accent}44`, letterSpacing: "-0.01em" }}
+              >
+                결과 보기
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -773,6 +881,64 @@ export default function RunningPage() {
           background: "linear-gradient(to top, rgba(10,11,12,0.95) 60%, transparent)",
         }}
       >
+        {/* 인터벌 HUD */}
+        {config.intervalPreset && (
+          <div
+            className="rounded-2xl px-4 py-3 mb-2"
+            style={{
+              background: intervalPhase === "run" ? "rgba(0,122,255,0.15)" : "rgba(52,199,89,0.15)",
+              border: `1px solid ${intervalPhase === "run" ? "rgba(0,122,255,0.3)" : "rgba(52,199,89,0.3)"}`,
+            }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold" style={{ color: intervalPhase === "run" ? "var(--c-toss-blue)" : "var(--c-walk)" }}>
+                {intervalPhase === "run" ? "⚡ 달리기" : "💤 휴식"}
+              </span>
+              {config.intervalPreset.sets > 0 && (
+                <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+                  {intervalSet}/{config.intervalPreset.sets}세트
+                </span>
+              )}
+            </div>
+            {config.intervalPreset.sets === 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="font-bold num" style={{ fontSize: 28, color: "#fff", letterSpacing: "-0.03em" }}>
+                  {Math.floor(intervalCountdown / 60).toString().padStart(2, "0")}:{(intervalCountdown % 60).toString().padStart(2, "0")}
+                </span>
+                <button
+                  onClick={() => {
+                    const next = intervalPhaseRef.current === "run" ? "rest" : "run";
+                    intervalPhaseRef.current = next;
+                    intervalCountdownRef.current = 0;
+                    setIntervalPhase(next);
+                    setIntervalCountdown(0);
+                  }}
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
+                  style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}
+                >
+                  {intervalPhase === "run" ? "→ 휴식" : "→ 달리기"}
+                </button>
+              </div>
+            ) : (
+              <>
+                <span className="font-bold num" style={{ fontSize: 28, color: "#fff", letterSpacing: "-0.03em" }}>
+                  {Math.floor(intervalCountdown / 60).toString().padStart(2, "0")}:{(intervalCountdown % 60).toString().padStart(2, "0")}
+                </span>
+                {config.intervalPreset.sets > 0 && (
+                  <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: "rgba(255,255,255,0.1)" }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.round((intervalSet - 1) / config.intervalPreset.sets * 100)}%`,
+                        background: intervalPhase === "run" ? "var(--c-toss-blue)" : "var(--c-walk)",
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={isPaused ? handleResume : handlePause}

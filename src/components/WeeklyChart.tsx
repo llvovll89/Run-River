@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
 import type { RunningRecord } from "@/types";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 interface Props {
   records: RunningRecord[];
 }
 
-const GOAL_KEY = "weeklyGoalKm";
 const PRESETS = [10, 20, 30, 50];
 
 function getLast7Days(): { date: string; label: string }[] {
@@ -26,19 +26,15 @@ function getLast7Days(): { date: string; label: string }[] {
 }
 
 export default function WeeklyChart({ records }: Props) {
-  const [goal, setGoal] = useState(20);
+  const { profile, saveProfile } = useUserProfile();
+  const goal = profile.weeklyGoalKm;
+
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState("");
 
-  useEffect(() => {
-    const saved = localStorage.getItem(GOAL_KEY);
-    if (saved) setGoal(Number(saved));
-  }, []);
-
   function saveGoal(km: number) {
     const v = Math.max(1, Math.min(200, km));
-    setGoal(v);
-    localStorage.setItem(GOAL_KEY, String(v));
+    saveProfile({ ...profile, weeklyGoalKm: v });
     setEditing(false);
   }
 
@@ -73,7 +69,6 @@ export default function WeeklyChart({ records }: Props) {
 
         {editing ? (
           <div className="space-y-3">
-            {/* 프리셋 버튼 */}
             <div className="flex gap-2">
               {PRESETS.map((p) => (
                 <button
@@ -90,7 +85,6 @@ export default function WeeklyChart({ records }: Props) {
                 </button>
               ))}
             </div>
-            {/* 직접 입력 */}
             <div className="flex gap-2">
               <input
                 type="number"
@@ -132,7 +126,6 @@ export default function WeeklyChart({ records }: Props) {
                 {progress >= 100 ? "달성 🎉" : `${Math.round(progress)}%`}
               </span>
             </div>
-            {/* 진행 바 */}
             <div className="rounded-full overflow-hidden" style={{ height: 6, background: "var(--c-elevated)" }}>
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -183,7 +176,6 @@ export default function WeeklyChart({ records }: Props) {
                 <Cell
                   key={idx}
                   fill={entry.km > 0 ? "var(--c-toss-blue)" : "var(--c-elevated)"}
-                  fillOpacity={entry.km > 0 ? 1 : 1}
                 />
               ))}
             </Bar>

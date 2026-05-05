@@ -283,18 +283,12 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     });
   }, [previewPoint]);
 
-  // activityType 변경 시 기존 폴리라인 색상 업데이트 + 이동 경로 폴리라인
+  // activityType 변경 시 색상 업데이트 — 폴리라인 재생성
   useEffect(() => {
-    if (!mapInstanceRef.current || pathPoints.length < 2) return;
-
-    const path = pathPoints.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
+    if (!mapInstanceRef.current || !polylineRef.current) return;
     const color = activityType === "walking" ? "#34c759" : "#007aff";
-
-    // 색상이 바뀌었거나 폴리라인이 없으면 재생성
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
-    }
+    const path = polylineRef.current.getPath() as kakao.maps.LatLng[];
+    polylineRef.current.setMap(null);
     polylineRef.current = new kakao.maps.Polyline({
       path,
       strokeWeight: 5,
@@ -303,7 +297,28 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       strokeStyle: "solid",
       map: mapInstanceRef.current,
     });
-  }, [pathPoints, activityType]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityType]);
+
+  // pathPoints 변경 시 setPath로 점진적 업데이트 (전체 재생성 방지)
+  useEffect(() => {
+    if (!mapInstanceRef.current || pathPoints.length < 2) return;
+    const color = activityType === "walking" ? "#34c759" : "#007aff";
+    const path = pathPoints.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
+    if (polylineRef.current) {
+      polylineRef.current.setPath(path);
+    } else {
+      polylineRef.current = new kakao.maps.Polyline({
+        path,
+        strokeWeight: 5,
+        strokeColor: color,
+        strokeOpacity: 0.92,
+        strokeStyle: "solid",
+        map: mapInstanceRef.current,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathPoints]);
 
   return <div ref={mapRef} className={`w-full ${className}`} />;
 });

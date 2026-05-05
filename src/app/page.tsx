@@ -9,12 +9,14 @@ import { usePWAInstall } from "@/hooks/usePWAInstall";
 import Image from "next/image";
 import type { LatLng, ActivityType } from "@/types";
 import { calcDistance } from "@/hooks/useGeolocation";
+import { INTERVAL_PRESETS } from "@/lib/intervalPresets";
+import type { IntervalPreset } from "@/lib/intervalPresets";
 import PCLanding from "@/components/PCLanding";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
 type PointMode = "start" | "end" | null;
-type PageMode  = "map" | "goal" | "time";
+type PageMode  = "map" | "goal" | "time" | "interval";
 const GOAL_PRESETS = [3, 5, 10, 21];
 const TIME_PRESETS = [15, 20, 30, 45, 60];
 
@@ -29,6 +31,7 @@ export default function Home() {
   const [sheetOpen, setSheetOpen]   = useState(true);
   const [pageMode, setPageMode]     = useState<PageMode>("map");
   const [goal, setGoal] = useState({ distance: 5, distanceInput: "", time: 30, timeInput: "" });
+  const [selectedPreset, setSelectedPreset] = useState<IntervalPreset>(INTERVAL_PRESETS[0]);
   const [search, setSearch] = useState<{
     open: boolean; query: string; results: kakao.maps.services.PlaceResult[];
     pointMode: "start" | "end"; loading: boolean; preview: kakao.maps.services.PlaceResult | null;
@@ -186,6 +189,13 @@ export default function Home() {
       sessionStorage.setItem("runConfig", JSON.stringify({
         startPoint: origin, endPoint: null, activityType, goalDistance: null, goalTime: goal.time,
       }));
+    } else if (pageMode === "interval") {
+      const origin = userLocation ?? startPoint;
+      if (!origin) return;
+      sessionStorage.setItem("runConfig", JSON.stringify({
+        startPoint: origin, endPoint: null, activityType, goalDistance: null, goalTime: null,
+        intervalPreset: selectedPreset,
+      }));
     } else {
       if (!startPoint || !endPoint) return;
       sessionStorage.setItem("runConfig", JSON.stringify({
@@ -202,6 +212,8 @@ export default function Home() {
     ? !!(userLocation || startPoint) && goal.distance > 0
     : pageMode === "time"
     ? !!(userLocation || startPoint) && goal.time > 0
+    : pageMode === "interval"
+    ? !!(userLocation || startPoint)
     : !!(startPoint && endPoint);
   const isRun     = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
@@ -293,6 +305,13 @@ export default function Home() {
             aria-label="테마 전환"
           >
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
+          <button
+            onClick={() => router.push("/settings")}
+            className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
+            aria-label="설정"
+          >
+            <SettingsIcon />
           </button>
           <button
             onClick={() => router.push("/history")}
@@ -580,7 +599,7 @@ export default function Home() {
         <div className="px-4 space-y-3">
           {/* 모드 탭 */}
           <div className="flex gap-1 p-1 rounded-2xl" style={{ background: "var(--c-elevated)" }}>
-            {([["map", "지도 설정"], ["goal", "거리 목표"], ["time", "시간 목표"]] as [PageMode, string][]).map(([m, label]) => (
+            {([["map", "지도"], ["goal", "거리"], ["time", "시간"], ["interval", "인터벌"]] as [PageMode, string][]).map(([m, label]) => (
               <button
                 key={m}
                 onClick={() => setPageMode(m)}
@@ -774,6 +793,37 @@ export default function Home() {
             </div>
           )}
 
+          {/* 인터벌 모드: 프리셋 카드 */}
+          {pageMode === "interval" && (
+            <div className="space-y-2">
+              {INTERVAL_PRESETS.map((preset) => {
+                const active = selectedPreset.id === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => setSelectedPreset(preset)}
+                    className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-all active:scale-[0.98]"
+                    style={{
+                      background: active ? `${accentVar}18` : "var(--c-elevated)",
+                      border: active ? `1.5px solid ${accentVar}` : "1px solid var(--c-border)",
+                    }}
+                  >
+                    <div>
+                      <p className="font-bold" style={{ fontSize: 14, color: "var(--c-text-1)" }}>{preset.name}</p>
+                      <p style={{ fontSize: 12, color: "var(--c-text-3)", marginTop: 2 }}>{preset.description}</p>
+                    </div>
+                    {active && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full ml-3 flex-shrink-0" style={{ background: accentVar, color: "#fff" }}>선택</span>
+                    )}
+                  </button>
+                );
+              })}
+              <p className="text-xs text-center" style={{ color: "var(--c-text-3)" }}>
+                현재 위치에서 출발 · 인터벌 트레이닝을 시작합니다
+              </p>
+            </div>
+          )}
+
           {/* 액션 버튼 */}
           <div className="flex gap-2">
             {pageMode === "map" && (startPoint || endPoint) && (
@@ -805,6 +855,8 @@ export default function Home() {
                 ? canStart ? `${goal.distance}km 달리기 시작` : "위치 확인 중..."
                 : pageMode === "time"
                 ? canStart ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} 달리기 시작` : "위치 확인 중..."
+                : pageMode === "interval"
+                ? canStart ? `${selectedPreset.name} 시작` : "위치 확인 중..."
                 : canStart ? "출발하기" : "포인트를 설정하세요"}
             </button>
           </div>
@@ -966,6 +1018,15 @@ function WalkIcon() {
       <path d="M9 20l1.5-6L9 11l3-3 2 2h3"/>
       <path d="M12 8l-2 3 2 3"/>
       <path d="M15 20l-1.5-6"/>
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="20" height="20" style={{ color: "var(--c-text-1)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   );
 }

@@ -28,6 +28,9 @@ export interface RunningRecord {
   created_at: string;
 }
 
+import type { IntervalPreset } from "@/lib/intervalPresets";
+export type { IntervalPreset };
+
 /** sessionStorage에 저장되는 런 시작 설정 */
 export interface RunConfig {
   startPoint: LatLng;
@@ -37,6 +40,31 @@ export interface RunConfig {
   goalDistance: number | null;
   /** 목표 시간 모드일 때 설정 (분). null이면 지도/거리 모드 */
   goalTime: number | null;
+  intervalPreset?: IntervalPreset;
+}
+
+export interface RunRecoverySnapshot {
+  version: 1;
+  updatedAt: number;
+  config: RunConfig;
+  elapsed: number;
+  isPaused: boolean;
+  totalDistance: number;
+  pathPoints: LatLng[];
+  trackPoints: TrackPoint[];
+  currentAltitude: number | null;
+  startAltitude: number | null;
+  endAltitude: number | null;
+  elevationGain: number;
+  elevationLoss: number;
+}
+
+export interface UserProfile {
+  weight: number;
+  height: number;
+  age: number;
+  weeklyGoalKm: number;
+  autoPause: boolean;
 }
 
 export interface RunningState {

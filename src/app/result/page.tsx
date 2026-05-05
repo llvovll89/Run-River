@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { saveRunningRecord, deleteRunningRecord, updateRunningMemo, getRunningHistory } from "@/lib/supabase";
+import { enqueue } from "@/lib/offlineQueue";
 import { formatDuration, formatPace, formatDateFull, calcPace, getPaceZone } from "@/lib/utils";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
-import type { LatLng, ActivityType, RunningRecord, TrackPoint } from "@/types";
+import type { LatLng, ActivityType, RunningRecord, TrackPoint, IntervalPreset } from "@/types";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -23,6 +25,10 @@ interface RunResult {
   altitude_end_m?: number | null;
   elevation_gain_m?: number | null;
   elevation_loss_m?: number | null;
+  intervalPreset?: IntervalPreset;
+  intervalCompletedSets?: number;
+  intervalTotalRunSeconds?: number;
+  intervalTotalRestSeconds?: number;
 }
 
 interface AltitudePoint {
@@ -358,10 +364,12 @@ function derivePerformance(current: RunningRecord, records: RunningRecord[]): { 
 export default function ResultPage() {
   const MEMO_MAX_LENGTH = 300;
   const router = useRouter();
+  const { profile } = useUserProfile();
   const [result, setResult] = useState<RunResult | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [offlineSaved, setOfflineSaved] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [memo, setMemo] = useState("");
   const [lastSavedMemo, setLastSavedMemo] = useState("");
@@ -376,7 +384,8 @@ export default function ResultPage() {
   const doSave = useCallback((parsed: RunResult) => {
     setSaving(true);
     setSaveError(false);
-    saveRunningRecord({
+    setOfflineSaved(false);
+    const payload = {
       start_point: parsed.startPoint,
       end_point: parsed.endPoint,
       distance_km: parsed.distance_km,
@@ -387,7 +396,8 @@ export default function ResultPage() {
       altitude_end_m: parsed.altitude_end_m ?? null,
       elevation_gain_m: parsed.elevation_gain_m ?? null,
       elevation_loss_m: parsed.elevation_loss_m ?? null,
-    })
+    };
+    saveRunningRecord(payload)
       .then(async (record) => {
         setSavedId(record.id);
         setLastSavedMemo(record.memo ?? "");
@@ -400,7 +410,10 @@ export default function ResultPage() {
         sessionStorage.removeItem("runResult");
         sessionStorage.removeItem("runConfig");
       })
-      .catch(() => setSaveError(true))
+      .catch(() => {
+        enqueue(payload);
+        setOfflineSaved(true);
+      })
       .finally(() => setSaving(false));
   }, []);
 
@@ -488,8 +501,9 @@ export default function ResultPage() {
 
   const dateStr = formatDateFull(new Date());
 
-  const calories = Math.round(result.distance_km * (isRun ? 65 : 45));
-  const steps = Math.round(result.distance_km * (isRun ? 1300 : 1400));
+  const calories = Math.round((isRun ? 8.0 : 3.5) * profile.weight * (result.duration_seconds / 3600));
+  const strideCm = profile.height * (isRun ? 0.415 : 0.413);
+  const steps = Math.round((result.distance_km * 100000) / strideCm);
   const elevationGain = result.elevation_gain_m ?? null;
   const elevationLoss = result.elevation_loss_m ?? null;
   const hasElevation = elevationGain !== null || elevationLoss !== null;
@@ -528,6 +542,8 @@ export default function ResultPage() {
               <span className="text-xs" style={{ color: "var(--c-text-3)" }}>저장 중…</span>
             ) : savedId ? (
               <span className="text-xs font-semibold" style={{ color: "var(--c-walk)" }}>✓ 자동 저장됨</span>
+            ) : offlineSaved ? (
+              <span className="text-xs font-semibold" style={{ color: "var(--c-text-2)" }}>오프라인 저장됨 · 연결 시 자동 업로드</span>
             ) : saveError ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold" style={{ color: "var(--c-danger)" }}>저장 실패</span>
@@ -809,10 +825,47 @@ export default function ResultPage() {
             className="px-4 pb-3 pt-1"
             style={{ fontSize: 11, color: "var(--c-text-3)" }}
           >
-            * 칼로리는 체중 70kg 기준 추정치입니다
+            * 칼로리: MET × 체중({profile.weight}kg) × 시간 기반 추정치
           </p>
         </div>
       </div>
+
+      {/* 인터벌 요약 */}
+      {result.intervalPreset && (
+        <div className="px-4 mt-3">
+          <div className="card rounded-2xl p-4">
+            <p
+              className="mb-3"
+              style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
+            >
+              인터벌 트레이닝
+            </p>
+            <p className="font-bold mb-3" style={{ fontSize: 15, color: accent }}>{result.intervalPreset.name}</p>
+            <div className="space-y-2">
+              {result.intervalPreset.sets > 0 && (
+                <div className="flex items-center justify-between">
+                  <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>완료 세트</span>
+                  <span className="num font-bold" style={{ fontSize: 14, color: "var(--c-text-1)" }}>
+                    {result.intervalCompletedSets ?? 0} / {result.intervalPreset.sets}세트
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>달리기 시간</span>
+                <span className="num font-bold" style={{ fontSize: 14, color: "var(--c-toss-blue)" }}>
+                  {formatDuration(result.intervalTotalRunSeconds ?? 0)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>휴식 시간</span>
+                <span className="num font-bold" style={{ fontSize: 14, color: "var(--c-walk)" }}>
+                  {formatDuration(result.intervalTotalRestSeconds ?? 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PR 기록 */}
       {personalRecords.length > 0 && (
