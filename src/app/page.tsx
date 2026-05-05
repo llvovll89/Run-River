@@ -16,7 +16,7 @@ import PCLanding from "@/components/PCLanding";
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
 type PointMode = "start" | "end" | null;
-type PageMode  = "map" | "goal" | "time" | "interval";
+type PageMode = "map" | "goal" | "time" | "interval";
 const GOAL_PRESETS = [3, 5, 10, 21];
 const TIME_PRESETS = [15, 20, 30, 45, 60];
 
@@ -24,12 +24,12 @@ export default function Home() {
   const router = useRouter();
   const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
   const [startPoint, setStartPoint] = useState<LatLng | null>(null);
-  const [endPoint, setEndPoint]     = useState<LatLng | null>(null);
-  const [mode, setMode]             = useState<PointMode>("start");
+  const [endPoint, setEndPoint] = useState<LatLng | null>(null);
+  const [mode, setMode] = useState<PointMode>("start");
   const [activityType, setActivityType] = useState<ActivityType>("running");
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
-  const [sheetOpen, setSheetOpen]   = useState(true);
-  const [pageMode, setPageMode]     = useState<PageMode>("map");
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const [pageMode, setPageMode] = useState<PageMode>("map");
   const [goal, setGoal] = useState({ distance: 5, distanceInput: "", time: 30, timeInput: "" });
   const [selectedPreset, setSelectedPreset] = useState<IntervalPreset>(INTERVAL_PRESETS[0]);
   const [search, setSearch] = useState<{
@@ -41,11 +41,11 @@ export default function Home() {
   }>({ info: null, loading: false });
   const [addresses, setAddresses] = useState({ start: "", end: "" });
   const startAddrOverride = useRef<string | null>(null);
-  const endAddrOverride   = useRef<string | null>(null);
-  const dragY   = useRef(0);
+  const endAddrOverride = useRef<string | null>(null);
+  const dragY = useRef(0);
   const didDrag = useRef(false);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const mapRef   = useRef<KakaoMapHandle>(null);
+  const mapRef = useRef<KakaoMapHandle>(null);
   const hasCenteredRef = useRef(false);
 
   // PC 감지: 터치 없는 마우스 환경
@@ -208,14 +208,15 @@ export default function Home() {
   const { theme, toggle } = useTheme();
   const { mode: installMode, canInstall, promptInstall } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
-  const canStart  = pageMode === "goal"
+  const [showMore, setShowMore] = useState(false);
+  const canStart = pageMode === "goal"
     ? !!(userLocation || startPoint) && goal.distance > 0
     : pageMode === "time"
-    ? !!(userLocation || startPoint) && goal.time > 0
-    : pageMode === "interval"
-    ? !!(userLocation || startPoint)
-    : !!(startPoint && endPoint);
-  const isRun     = activityType === "running";
+      ? !!(userLocation || startPoint) && goal.time > 0
+      : pageMode === "interval"
+        ? !!(userLocation || startPoint)
+        : !!(startPoint && endPoint);
+  const isRun = activityType === "running";
   const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
 
   const routeDistKm = startPoint && endPoint ? calcDistance(startPoint, endPoint) : null;
@@ -224,10 +225,10 @@ export default function Home() {
       ? `${Math.round(route.info.distanceM)} m`
       : `${(route.info.distanceM / 1000).toFixed(2)} km`
     : routeDistKm !== null
-    ? routeDistKm < 1
-      ? `${Math.round(routeDistKm * 1000)} m`
-      : `${routeDistKm.toFixed(2)} km`
-    : null;
+      ? routeDistKm < 1
+        ? `${Math.round(routeDistKm * 1000)} m`
+        : `${routeDistKm.toFixed(2)} km`
+      : null;
   const routeTimeLabel = route.info
     ? route.info.durationS < 60
       ? `${Math.round(route.info.durationS)}초`
@@ -237,10 +238,10 @@ export default function Home() {
   const guide = pageMode === "goal"
     ? { text: `목표: ${goal.distance} km · 위치 자동 설정`, color: accentVar }
     : !startPoint
-    ? { text: "출발 지점을 탭하세요", color: "var(--c-toss-blue)" }
-    : !endPoint
-    ? { text: "도착 지점을 탭하세요", color: "#f59e0b" }
-    : { text: "준비 완료 · 출발하세요", color: "var(--c-walk)" };
+      ? { text: "출발 지점을 탭하세요", color: "var(--c-toss-blue)" }
+      : !endPoint
+        ? { text: "도착 지점을 탭하세요", color: "#f59e0b" }
+        : { text: "준비 완료 · 출발하세요", color: "var(--c-walk)" };
 
   if (isDesktop === null) return null;
   if (isDesktop) return <PCLanding />;
@@ -269,18 +270,15 @@ export default function Home() {
       >
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2">
           <Image src="/icons/icon-192x192.png" alt="Run River" width={26} height={26} className="rounded-lg" />
-          <span className="font-bold text-sm tracking-tight" style={{ color: "var(--c-text-1)" }}>
-            Run River
-          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
-              onClick={() => openSearchFor(mode === "end" ? "end" : "start")}
-              className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
-              aria-label="장소 검색"
-            >
-              <SearchIcon />
-            </button>
+            onClick={() => openSearchFor(mode === "end" ? "end" : "start")}
+            className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
+            aria-label="장소 검색"
+          >
+            <SearchIcon />
+          </button>
           {userLocation && (
             <button
               onClick={() => mapRef.current?.panTo(userLocation)}
@@ -290,36 +288,63 @@ export default function Home() {
               <LocateIcon />
             </button>
           )}
-          {canInstall && (
+          <div className="relative">
             <button
-              onClick={installMode === "ios" ? () => setShowIOSGuide(true) : promptInstall}
+              onClick={() => setShowMore(v => !v)}
               className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
-              aria-label="앱 설치"
+              aria-label="더보기"
             >
-              <InstallIcon />
+              <MoreIcon />
             </button>
-          )}
-          <button
-            onClick={toggle}
-            className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
-            aria-label="테마 전환"
-          >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </button>
-          <button
-            onClick={() => router.push("/settings")}
-            className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
-            aria-label="설정"
-          >
-            <SettingsIcon />
-          </button>
-          <button
-            onClick={() => router.push("/history")}
-            className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
-            aria-label="기록"
-          >
-            <HistoryIcon />
-          </button>
+            {showMore && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMore(false)} />
+                <div
+                  className="absolute top-full right-0 mt-2 glass rounded-2xl z-50 overflow-hidden"
+                  style={{ minWidth: 152, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}
+                >
+                  <button
+                    onClick={() => { toggle(); setShowMore(false); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
+                    style={{ color: "var(--c-text-1)" }}
+                  >
+                    {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{theme === "dark" ? "라이트 모드" : "다크 모드"}</span>
+                  </button>
+                  <div style={{ height: 1, background: "var(--c-border)", margin: "0 12px" }} />
+                  <button
+                    onClick={() => { router.push("/history"); setShowMore(false); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
+                    style={{ color: "var(--c-text-1)" }}
+                  >
+                    <HistoryIcon />
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>기록</span>
+                  </button>
+                  <button
+                    onClick={() => { router.push("/settings"); setShowMore(false); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
+                    style={{ color: "var(--c-text-1)" }}
+                  >
+                    <SettingsIcon />
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>설정</span>
+                  </button>
+                  {canInstall && (
+                    <>
+                      <div style={{ height: 1, background: "var(--c-border)", margin: "0 12px" }} />
+                      <button
+                        onClick={() => { installMode === "ios" ? setShowIOSGuide(true) : promptInstall(); setShowMore(false); }}
+                        className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
+                        style={{ color: "var(--c-toss-blue)" }}
+                      >
+                        <InstallIcon />
+                        <span style={{ fontSize: 14, fontWeight: 500 }}>앱 설치</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -619,7 +644,7 @@ export default function Home() {
           <div className="card flex gap-2 p-1 rounded-2xl" style={{ background: "var(--c-elevated)" }}>
             {(["running", "walking"] as ActivityType[]).map((t) => {
               const active = activityType === t;
-              const color  = t === "running" ? "var(--c-toss-blue)" : "var(--c-walk)";
+              const color = t === "running" ? "var(--c-toss-blue)" : "var(--c-walk)";
               return (
                 <button
                   key={t}
@@ -668,7 +693,7 @@ export default function Home() {
                   ) : route.info ? (
                     <>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "#007aff", flexShrink: 0 }}>
-                        <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+                        <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
                         <path d="M9 20l1.5-6L9 11l3-3 2 2h3M12 8l-2 3 2 3M15 20l-1.5-6" />
                       </svg>
                       <span className="text-xs font-bold" style={{ color: "#007aff" }}>도보</span>
@@ -854,10 +879,10 @@ export default function Home() {
               {pageMode === "goal"
                 ? canStart ? `${goal.distance}km 달리기 시작` : "위치 확인 중..."
                 : pageMode === "time"
-                ? canStart ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} 달리기 시작` : "위치 확인 중..."
-                : pageMode === "interval"
-                ? canStart ? `${selectedPreset.name} 시작` : "위치 확인 중..."
-                : canStart ? "출발하기" : "포인트를 설정하세요"}
+                  ? canStart ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} 달리기 시작` : "위치 확인 중..."
+                  : pageMode === "interval"
+                    ? canStart ? `${selectedPreset.name} 시작` : "위치 확인 중..."
+                    : canStart ? "출발하기" : "포인트를 설정하세요"}
             </button>
           </div>
         </div>
@@ -944,9 +969,19 @@ function Step({ num, text, icon }: { num: number; text: string; icon: React.Reac
 
 function InstallIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--c-text-1)" }}>
-      <path d="M12 2v13M8 11l4 4 4-4"/>
-      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "currentColor" }}>
+      <path d="M12 2v13M8 11l4 4 4-4" />
+      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--c-text-1)" }}>
+      <circle cx="12" cy="5" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="12" cy="19" r="1.5" />
     </svg>
   );
 }
@@ -954,7 +989,7 @@ function InstallIcon() {
 function ShareIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98M21 5a3 3 0 11-6 0 3 3 0 016 0zM9 12a3 3 0 11-6 0 3 3 0 016 0zM21 19a3 3 0 11-6 0 3 3 0 016 0z"/>
+      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98M21 5a3 3 0 11-6 0 3 3 0 016 0zM9 12a3 3 0 11-6 0 3 3 0 016 0zM21 19a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   );
 }
@@ -962,8 +997,8 @@ function ShareIcon() {
 function AddBoxIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="3"/>
-      <path d="M12 8v8M8 12h8"/>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M12 8v8M8 12h8" />
     </svg>
   );
 }
@@ -971,7 +1006,7 @@ function AddBoxIcon() {
 function CheckIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6L9 17l-5-5"/>
+      <path d="M20 6L9 17l-5-5" />
     </svg>
   );
 }
@@ -979,15 +1014,15 @@ function CheckIcon() {
 function SunIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--c-text-1)" }}>
-      <circle cx="12" cy="12" r="4"/>
-      <line x1="12" y1="2" x2="12" y2="4"/>
-      <line x1="12" y1="20" x2="12" y2="22"/>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-      <line x1="2" y1="12" x2="4" y2="12"/>
-      <line x1="20" y1="12" x2="22" y2="12"/>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      <circle cx="12" cy="12" r="4" />
+      <line x1="12" y1="2" x2="12" y2="4" />
+      <line x1="12" y1="20" x2="12" y2="22" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="2" y1="12" x2="4" y2="12" />
+      <line x1="20" y1="12" x2="22" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
     </svg>
   );
 }
@@ -995,7 +1030,7 @@ function SunIcon() {
 function MoonIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--c-text-1)" }}>
-      <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
+      <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" />
     </svg>
   );
 }
@@ -1003,10 +1038,10 @@ function MoonIcon() {
 function RunIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="13" cy="4" r="1.5" fill="currentColor" stroke="none"/>
-      <path d="M7 21l3-6 3 3 2-4"/>
-      <path d="M14 13l2-3-3-2 1-3"/>
-      <path d="M8 13l-1 4"/>
+      <circle cx="13" cy="4" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M7 21l3-6 3 3 2-4" />
+      <path d="M14 13l2-3-3-2 1-3" />
+      <path d="M8 13l-1 4" />
     </svg>
   );
 }
@@ -1014,10 +1049,10 @@ function RunIcon() {
 function WalkIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="4" r="1.5" fill="currentColor" stroke="none"/>
-      <path d="M9 20l1.5-6L9 11l3-3 2 2h3"/>
-      <path d="M12 8l-2 3 2 3"/>
-      <path d="M15 20l-1.5-6"/>
+      <circle cx="12" cy="4" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M9 20l1.5-6L9 11l3-3 2 2h3" />
+      <path d="M12 8l-2 3 2 3" />
+      <path d="M15 20l-1.5-6" />
     </svg>
   );
 }
