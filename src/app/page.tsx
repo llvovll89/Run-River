@@ -65,6 +65,10 @@ export default function Home() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  useEffect(() => {
+    router.prefetch("/history");
+  }, [router]);
+
   // 초기 접속 시 내 위치로 지도 이동
   useEffect(() => {
     if (userLocation && !hasCenteredRef.current) {
