@@ -17,6 +17,7 @@ interface UseGeolocationReturn extends GeolocationState {
   pathPoints: LatLng[];
   trackPoints: TrackPoint[];
   totalDistance: number;
+  speed: number | null;
   currentAltitude: number | null;
   startAltitude: number | null;
   endAltitude: number | null;
@@ -67,6 +68,7 @@ export function useGeolocation(): UseGeolocationReturn {
   const [endAltitude, setEndAltitude] = useState<number | null>(null);
   const [elevationGain, setElevationGain] = useState(0);
   const [elevationLoss, setElevationLoss] = useState(0);
+  const [speed, setSpeed] = useState<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastPositionRef = useRef<LatLng | null>(null);
   const lastPathPointRef = useRef<LatLng | null>(null);
@@ -110,6 +112,7 @@ export function useGeolocation(): UseGeolocationReturn {
         };
 
         setState((prev) => ({ ...prev, position: newPos }));
+        setSpeed(Number.isFinite(pos.coords.speed) ? pos.coords.speed : null);
 
         const altitude = Number.isFinite(pos.coords.altitude) ? pos.coords.altitude : null;
         setCurrentAltitude(altitude);
@@ -278,6 +281,7 @@ export function useGeolocation(): UseGeolocationReturn {
     pathPoints,
     trackPoints,
     totalDistance,
+    speed,
     currentAltitude,
     startAltitude,
     endAltitude,
