@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 
 function formatRelativeTime(ts: number | null): string {
@@ -22,6 +23,7 @@ function formatRetryTime(ts: number | null): string {
 }
 
 export default function OfflineSyncBanner() {
+  const pathname = usePathname();
   const {
     pendingCount,
     blockedCount,
@@ -34,6 +36,9 @@ export default function OfflineSyncBanner() {
   } = useOfflineSync();
 
   const shouldShow = pendingCount > 0 || !!lastError;
+
+  // 러닝 화면에서는 하단 컨트롤 터치 우선
+  if (pathname === "/running") return null;
 
   const statusText = useMemo(() => {
     if (syncing) return "동기화 중...";
@@ -59,9 +64,10 @@ export default function OfflineSyncBanner() {
         border: "1px solid rgba(255,255,255,0.12)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
+        pointerEvents: "none",
       }}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2" style={{ pointerEvents: "auto" }}>
         <div>
           <p style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>오프라인 동기화</p>
           <p style={{ fontSize: 11, color: "#9da1a6", marginTop: 1 }}>
