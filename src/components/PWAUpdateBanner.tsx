@@ -3,13 +3,13 @@
 import { usePWAUpdate } from "@/hooks/usePWAUpdate";
 
 export default function PWAUpdateBanner() {
-  const { updateAvailable, applyUpdate, dismissUpdate } = usePWAUpdate();
+  const { updateAvailable, isApplying, applyUpdate, dismissUpdate } = usePWAUpdate();
 
   if (!updateAvailable) return null;
 
   return (
     <div
-      className="fixed left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-4 py-3 rounded-2xl"
+      className="fixed left-1/2 -translate-x-1/2 z-9999 flex items-center gap-3 px-4 py-3 rounded-2xl"
       style={{
         top: "calc(var(--sat, 0px) + 12px)",
         maxWidth: "calc(430px - 32px)",
@@ -35,10 +35,10 @@ export default function PWAUpdateBanner() {
       {/* 텍스트 */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold leading-tight" style={{ color: "var(--c-text-1, #fff)" }}>
-          새 업데이트 available
+          {isApplying ? "업데이트 적용 중..." : "새 업데이트 available"}
         </p>
         <p className="text-xs mt-0.5" style={{ color: "var(--c-text-3, rgba(255,255,255,0.45))" }}>
-          지금 적용하거나 나중에 업데이트할 수 있어요
+          {isApplying ? "잠시만 기다려주세요" : "지금 적용하거나 나중에 업데이트할 수 있어요"}
         </p>
       </div>
 
@@ -46,24 +46,26 @@ export default function PWAUpdateBanner() {
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={dismissUpdate}
+          disabled={isApplying}
           className="px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
           style={{
-            background: "rgba(255,255,255,0.08)",
-            color: "var(--c-text-2, rgba(255,255,255,0.6))",
+            background: isApplying ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+            color: isApplying ? "rgba(255,255,255,0.35)" : "var(--c-text-2, rgba(255,255,255,0.6))",
           }}
         >
           나중에
         </button>
         <button
           onClick={applyUpdate}
+          disabled={isApplying}
           className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 transition-transform"
           style={{
-            background: "#007aff",
+            background: isApplying ? "#4d87c8" : "#007aff",
             color: "#fff",
             boxShadow: "0 2px 10px rgba(0,122,255,0.45)",
           }}
         >
-          업데이트
+          {isApplying ? "적용 중" : "업데이트"}
         </button>
       </div>
     </div>
