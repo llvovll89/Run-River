@@ -57,6 +57,9 @@ export interface RunRecoverySnapshot {
   endAltitude: number | null;
   elevationGain: number;
   elevationLoss: number;
+  adjustedDistanceKm?: number;
+  untrackedSeconds?: number;
+  adjustedGapCount?: number;
 }
 
 export interface UserProfile {
@@ -65,6 +68,7 @@ export interface UserProfile {
   age: number;
   weeklyGoalKm: number;
   autoPause: boolean;
+  autoApplyGapAdjustment: boolean;
 }
 
 export interface RunningState {

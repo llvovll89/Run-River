@@ -9,6 +9,7 @@ import { formatDuration, formatPace, formatDateFull, calcPace, getPaceZone } fro
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
 import type { LatLng, ActivityType, RunningRecord, TrackPoint, IntervalPreset } from "@/types";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -16,6 +17,11 @@ interface RunResult {
   startPoint: LatLng;
   endPoint: LatLng;
   distance_km: number;
+  gps_distance_km_raw?: number;
+  gap_adjustment_distance_km?: number;
+  gap_adjustment_seconds?: number;
+  gap_adjustment_count?: number;
+  gap_adjustment_auto_enabled?: boolean;
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;
@@ -104,6 +110,15 @@ const SINGLE_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
   { key: "single_10", threshold: 10, title: "10km 완주", description: "단일 활동 10km 달성", icon: "🥈" },
   { key: "single_21", threshold: 21, title: "하프 도전", description: "단일 활동 21km 달성", icon: "🥇" },
 ];
+
+function formatSyncAgo(ts: number | null): string {
+  if (!ts) return "아직 없음";
+  const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return `${diffSec}초 전`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}분 전`;
+  return `${Math.round(diffMin / 60)}시간 전`;
+}
 
 function compressPoints<T>(points: T[], maxPoints = 120): T[] {
   if (points.length <= maxPoints) return points;
@@ -380,6 +395,7 @@ export default function ResultPage() {
   const [shareStatus, setShareStatus] = useState<"idle" | "success" | "error">("idle");
   const [altitudeMode, setAltitudeMode] = useState<"distance" | "time">("distance");
   const [splitMode, setSplitMode] = useState<"distance" | "time">("distance");
+  const { pendingCount, syncing, lastSyncedAt, syncNow } = useOfflineSync();
 
   const doSave = useCallback((parsed: RunResult) => {
     setSaving(true);
@@ -411,8 +427,14 @@ export default function ResultPage() {
         sessionStorage.removeItem("runConfig");
       })
       .catch(() => {
-        enqueue(payload);
-        setOfflineSaved(true);
+        try {
+          enqueue(payload);
+          setOfflineSaved(true);
+          sessionStorage.removeItem("runResult");
+          sessionStorage.removeItem("runConfig");
+        } catch {
+          setSaveError(true);
+        }
       })
       .finally(() => setSaving(false));
   }, []);
@@ -473,6 +495,9 @@ export default function ResultPage() {
       `거리 ${result.distance_km.toFixed(2)}km`,
       `시간 ${formatDuration(result.duration_seconds)}`,
       `페이스 ${formatPace(result.pace)}/km`,
+      ...(result.gap_adjustment_distance_km && result.gap_adjustment_distance_km > 0
+        ? [`공백 보정 ${result.gap_adjustment_distance_km.toFixed(2)}km`]
+        : []),
     ].join(" | ") + prText + badgeText;
 
     try {
@@ -507,6 +532,9 @@ export default function ResultPage() {
   const elevationGain = result.elevation_gain_m ?? null;
   const elevationLoss = result.elevation_loss_m ?? null;
   const hasElevation = elevationGain !== null || elevationLoss !== null;
+  const adjustedDistanceKm = result.gap_adjustment_distance_km ?? 0;
+  const rawDistanceKm = result.gps_distance_km_raw ?? result.distance_km;
+  const isAutoGapMode = result.gap_adjustment_auto_enabled ?? false;
 
   return (
     <main className="min-h-dvh flex flex-col" style={{ background: "var(--c-bg)" }}>
@@ -543,7 +571,16 @@ export default function ResultPage() {
             ) : savedId ? (
               <span className="text-xs font-semibold" style={{ color: "var(--c-walk)" }}>✓ 자동 저장됨</span>
             ) : offlineSaved ? (
-              <span className="text-xs font-semibold" style={{ color: "var(--c-text-2)" }}>오프라인 저장됨 · 연결 시 자동 업로드</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold" style={{ color: "var(--c-text-2)" }}>오프라인 저장됨 · 연결 시 자동 업로드</span>
+                <button
+                  onClick={() => void syncNow()}
+                  className="text-xs font-semibold px-2.5 py-1 rounded-full active:scale-95 transition-transform"
+                  style={{ background: "var(--c-elevated)", color: "var(--c-text-1)", border: "1px solid var(--c-border)" }}
+                >
+                  {syncing ? "동기화 중" : "지금 동기화"}
+                </button>
+              </div>
             ) : saveError ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold" style={{ color: "var(--c-danger)" }}>저장 실패</span>
@@ -571,6 +608,25 @@ export default function ResultPage() {
           <span style={{ fontSize: 18, fontWeight: 600, color: "var(--c-text-2)", marginLeft: 6 }}>km</span>
         </h1>
         <p className="mt-1" style={{ fontSize: 14, color: "var(--c-text-3)" }}>{dateStr}</p>
+        {adjustedDistanceKm > 0 && (
+          <div className="mt-2">
+            <span
+              className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
+              style={{
+                background: isAutoGapMode ? "rgba(0,122,255,0.12)" : "rgba(255,159,10,0.15)",
+                color: isAutoGapMode ? "var(--c-toss-blue)" : "#ff9f0a",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              공백 보정 {isAutoGapMode ? "자동 모드" : "수동 모드"}
+            </span>
+          </div>
+        )}
+        {(offlineSaved || pendingCount > 0) && (
+          <p className="mt-1" style={{ fontSize: 12, color: "var(--c-text-3)" }}>
+            동기화 대기 {pendingCount}건 · 마지막 성공 {formatSyncAgo(lastSyncedAt)}
+          </p>
+        )}
       </div>
 
       {/* 경로 지도 */}
@@ -808,6 +864,13 @@ export default function ResultPage() {
             { label: "활동 유형", value: label },
             { label: "예상 칼로리", value: `${calories.toLocaleString()} kcal` },
             { label: "예상 걸음 수", value: `${steps.toLocaleString()} 보` },
+            ...(adjustedDistanceKm > 0
+              ? [
+                { label: "GPS 실측 거리", value: `${rawDistanceKm.toFixed(2)} km` },
+                { label: "공백 보정 거리", value: `+${adjustedDistanceKm.toFixed(2)} km` },
+                { label: "공백 누락 시간", value: formatDuration(result.gap_adjustment_seconds ?? 0) },
+              ]
+              : []),
             ...(hasElevation
               ? [{ label: "누적 상승/하강", value: `${Math.round(elevationGain ?? 0)}m / ${Math.round(elevationLoss ?? 0)}m` }]
               : []),

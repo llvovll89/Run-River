@@ -1,20 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { dequeue, getExhaustedQueue, resetRetry, type PendingRecord } from "@/lib/offlineQueue";
 import type { UserProfile } from "@/types";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { profile, saveProfile } = useUserProfile();
+  const { pendingCount, exhaustedCount, syncing, syncNow } = useOfflineSync();
 
   const [weight, setWeight] = useState(String(profile.weight));
   const [height, setHeight] = useState(String(profile.height));
   const [age, setAge] = useState(String(profile.age));
   const [weeklyGoal, setWeeklyGoal] = useState(String(profile.weeklyGoalKm));
   const [autoPause, setAutoPause] = useState(profile.autoPause ?? true);
+  const [autoApplyGapAdjustment, setAutoApplyGapAdjustment] = useState(profile.autoApplyGapAdjustment ?? false);
+  const [exhaustedItems, setExhaustedItems] = useState<PendingRecord[]>([]);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setExhaustedItems(getExhaustedQueue());
+  }, [pendingCount, exhaustedCount, syncing]);
+
+  async function handleRetryExhausted(id: string) {
+    resetRetry(id);
+    setExhaustedItems(getExhaustedQueue());
+    try {
+      await syncNow();
+      setSyncError(null);
+    } catch {
+      setSyncError("동기화 재시도 중 오류가 발생했습니다.");
+    }
+  }
+
+  function handleDeleteExhausted(id: string) {
+    dequeue(id);
+    setExhaustedItems(getExhaustedQueue());
+  }
 
   function handleSave() {
     const w = Number(weight);
@@ -27,7 +53,14 @@ export default function SettingsPage() {
     if (!a || a < 1 || a > 120) { setError("나이는 1~120세 사이로 입력해주세요."); return; }
     if (!g || g < 1 || g > 500) { setError("주간 목표는 1~500km 사이로 입력해주세요."); return; }
 
-    const p: UserProfile = { weight: w, height: h, age: a, weeklyGoalKm: g, autoPause };
+    const p: UserProfile = {
+      weight: w,
+      height: h,
+      age: a,
+      weeklyGoalKm: g,
+      autoPause,
+      autoApplyGapAdjustment,
+    };
     saveProfile(p);
     router.back();
   }
@@ -108,7 +141,7 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => setAutoPause((v) => !v)}
-            className="relative flex-shrink-0"
+            className="relative shrink-0"
             style={{
               width: 51,
               height: 31,
@@ -133,6 +166,107 @@ export default function SettingsPage() {
               }}
             />
           </button>
+        </div>
+
+        <div
+          className="flex items-center justify-between px-4 py-4 rounded-2xl"
+          style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}
+        >
+          <div>
+            <span className="font-semibold" style={{ fontSize: 15, color: "var(--c-text-1)" }}>공백 구간 자동 보정</span>
+            <p style={{ fontSize: 12, color: "var(--c-text-3)", marginTop: 2 }}>복귀 시 추천 거리를 자동으로 반영</p>
+          </div>
+          <button
+            onClick={() => setAutoApplyGapAdjustment((v) => !v)}
+            className="relative shrink-0"
+            style={{
+              width: 51,
+              height: 31,
+              borderRadius: 16,
+              background: autoApplyGapAdjustment ? "var(--c-toss-blue)" : "var(--c-elevated)",
+              border: "1px solid var(--c-border)",
+              transition: "background 0.2s",
+            }}
+            aria-label="공백 구간 자동 보정 토글"
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 3,
+                left: autoApplyGapAdjustment ? 23 : 3,
+                width: 23,
+                height: 23,
+                borderRadius: "50%",
+                background: "#fff",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+                transition: "left 0.2s",
+              }}
+            />
+          </button>
+        </div>
+
+        <div
+          className="px-4 py-4 rounded-2xl"
+          style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold" style={{ fontSize: 15, color: "var(--c-text-1)" }}>오프라인 동기화</span>
+            <span style={{ fontSize: 12, color: "var(--c-text-3)" }}>대기 {pendingCount}건</span>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--c-text-3)", marginBottom: 10 }}>
+            실패 누적 {exhaustedCount}건은 수동 재시도 또는 삭제할 수 있어요.
+          </p>
+          <button
+            onClick={() => void syncNow()}
+            className="px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+            style={{
+              background: syncing ? "var(--c-elevated)" : "var(--c-toss-blue)",
+              color: syncing ? "var(--c-text-3)" : "#fff",
+              border: "1px solid var(--c-border)",
+            }}
+            disabled={syncing}
+          >
+            {syncing ? "동기화 중..." : "지금 동기화"}
+          </button>
+
+          {syncError && (
+            <p style={{ fontSize: 12, color: "var(--c-danger)", marginTop: 8 }}>{syncError}</p>
+          )}
+
+          {exhaustedItems.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2">
+              {exhaustedItems.map((item) => (
+                <div
+                  key={item.queueId}
+                  className="rounded-xl px-3 py-3"
+                  style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
+                >
+                  <p style={{ fontSize: 12, color: "var(--c-text-2)" }}>
+                    {item.record.activity_type === "running" ? "러닝" : "워킹"} · {item.record.distance_km.toFixed(2)}km
+                  </p>
+                  <p style={{ fontSize: 11, color: "var(--c-text-3)", marginTop: 2 }}>
+                    실패 {item.retryCount}회 · {item.lastError ?? "알 수 없는 오류"}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => void handleRetryExhausted(item.queueId)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
+                      style={{ background: "rgba(0,122,255,0.12)", color: "var(--c-toss-blue)", border: "1px solid rgba(0,122,255,0.3)" }}
+                    >
+                      재시도
+                    </button>
+                    <button
+                      onClick={() => handleDeleteExhausted(item.queueId)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
+                      style={{ background: "rgba(255,69,58,0.12)", color: "var(--c-danger)", border: "1px solid rgba(255,69,58,0.3)" }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {error && (

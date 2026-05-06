@@ -15,6 +15,52 @@ const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 const RUN_RECOVERY_KEY = "runInProgress";
 const RUN_RECOVERY_MAX_AGE_MS = 1000 * 60 * 60 * 6;
 
+interface GapSuggestion {
+  gapSeconds: number;
+  suggestedDistanceKm: number;
+}
+
+function estimateGapDistanceKm(trackPoints: TrackPoint[], totalDistance: number, elapsed: number, gapSeconds: number, activityType: ActivityType): number {
+  if (gapSeconds <= 0) return 0;
+
+  const recentPoints = trackPoints.slice(-8);
+  let speedKmPerSec = 0;
+  const defaultSpeedKmh = activityType === "running" ? 12 : 5;
+
+  if (recentPoints.length >= 2) {
+    let weightedSpeed = 0;
+    let weightSum = 0;
+    for (let i = 1; i < recentPoints.length; i += 1) {
+      const prev = recentPoints[i - 1];
+      const curr = recentPoints[i];
+      const segDistance = Math.max(0, curr.distance_km - prev.distance_km);
+      const segSeconds = Math.max(0, curr.elapsed_seconds - prev.elapsed_seconds);
+      if (segDistance <= 0 || segSeconds <= 0) continue;
+      const segSpeed = segDistance / segSeconds;
+      const weight = i;
+      weightedSpeed += segSpeed * weight;
+      weightSum += weight;
+    }
+    if (weightSum > 0) {
+      speedKmPerSec = weightedSpeed / weightSum;
+    }
+  }
+
+  if (speedKmPerSec <= 0 && totalDistance > 0 && elapsed > 0) {
+    speedKmPerSec = totalDistance / elapsed;
+  }
+
+  if (speedKmPerSec <= 0) {
+    speedKmPerSec = defaultSpeedKmh / 3600;
+  }
+
+  const maxSpeedKmh = activityType === "running" ? 25 : 9;
+  const maxDistanceKm = (maxSpeedKmh / 3600) * gapSeconds;
+  const estimated = speedKmPerSec * gapSeconds;
+
+  return Math.max(0, Math.min(maxDistanceKm, estimated));
+}
+
 export default function RunningPage() {
   const router = useRouter();
   const [config, setConfig] = useState<RunConfig | null>(null);
@@ -54,6 +100,10 @@ export default function RunningPage() {
   const [followUser, setFollowUser] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingRecovery, setPendingRecovery] = useState<RunRecoverySnapshot | null>(null);
+  const [gapSuggestion, setGapSuggestion] = useState<GapSuggestion | null>(null);
+  const [adjustedDistanceKm, setAdjustedDistanceKm] = useState(0);
+  const [untrackedSeconds, setUntrackedSeconds] = useState(0);
+  const [adjustedGapCount, setAdjustedGapCount] = useState(0);
   const hiddenAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,12 +118,24 @@ export default function RunningPage() {
   const intervalRunSecondsRef = useRef(0);
   const intervalRestSecondsRef = useRef(0);
   const intervalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const effectiveDistance = totalDistance + adjustedDistanceKm;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 4000);
   }, []);
+
+  const applyGapAdjustment = useCallback((suggestion: GapSuggestion, isAuto = false) => {
+    setAdjustedDistanceKm((prev) => prev + suggestion.suggestedDistanceKm);
+    setUntrackedSeconds((prev) => prev + suggestion.gapSeconds);
+    setAdjustedGapCount((prev) => prev + 1);
+    if (isAuto) {
+      showToast(`공백 ${suggestion.gapSeconds}초를 ${suggestion.suggestedDistanceKm.toFixed(2)}km로 자동 보정했어요.`);
+    } else {
+      showToast(`공백 ${suggestion.gapSeconds}초를 ${suggestion.suggestedDistanceKm.toFixed(2)}km로 보정했어요.`);
+    }
+  }, [showToast]);
 
   const saveRecoverySnapshot = useCallback((payload: Omit<RunRecoverySnapshot, "version" | "updatedAt">) => {
     try {
@@ -103,7 +165,7 @@ export default function RunningPage() {
 
   const beginSession = useCallback((
     nextConfig: RunConfig,
-    recovery?: Pick<RunRecoverySnapshot, "elapsed" | "isPaused" | "pathPoints" | "trackPoints" | "totalDistance" | "currentAltitude" | "startAltitude" | "endAltitude" | "elevationGain" | "elevationLoss">
+    recovery?: Pick<RunRecoverySnapshot, "elapsed" | "isPaused" | "pathPoints" | "trackPoints" | "totalDistance" | "currentAltitude" | "startAltitude" | "endAltitude" | "elevationGain" | "elevationLoss" | "adjustedDistanceKm" | "untrackedSeconds" | "adjustedGapCount">
   ) => {
     setConfig(nextConfig);
     requestPermission();
@@ -127,6 +189,10 @@ export default function RunningPage() {
     startTimeRef.current = Date.now();
     baseElapsedRef.current = recovery?.elapsed ?? 0;
     setElapsed(recovery?.elapsed ?? 0);
+    setAdjustedDistanceKm(recovery?.adjustedDistanceKm ?? 0);
+    setUntrackedSeconds(recovery?.untrackedSeconds ?? 0);
+    setAdjustedGapCount(recovery?.adjustedGapCount ?? 0);
+    setGapSuggestion(null);
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -193,6 +259,9 @@ export default function RunningPage() {
               elevationGain: parsedRecovery.elevationGain ?? 0,
               elevationLoss: parsedRecovery.elevationLoss ?? 0,
               trackPoints: parsedRecovery.trackPoints ?? [],
+              adjustedDistanceKm: parsedRecovery.adjustedDistanceKm ?? 0,
+              untrackedSeconds: parsedRecovery.untrackedSeconds ?? 0,
+              adjustedGapCount: parsedRecovery.adjustedGapCount ?? 0,
             } as RunRecoverySnapshot;
             setConfig(normalizedRecovery.config);
             setPendingRecovery(normalizedRecovery);
@@ -238,6 +307,9 @@ export default function RunningPage() {
       endAltitude: pendingRecovery.endAltitude,
       elevationGain: pendingRecovery.elevationGain,
       elevationLoss: pendingRecovery.elevationLoss,
+      adjustedDistanceKm: pendingRecovery.adjustedDistanceKm ?? 0,
+      untrackedSeconds: pendingRecovery.untrackedSeconds ?? 0,
+      adjustedGapCount: pendingRecovery.adjustedGapCount ?? 0,
     });
     showToast("이전 러닝 세션을 복구했어요.");
   }, [pendingRecovery, beginSession, showToast]);
@@ -268,6 +340,9 @@ export default function RunningPage() {
         endAltitude,
         elevationGain,
         elevationLoss,
+        adjustedDistanceKm,
+        untrackedSeconds,
+        adjustedGapCount,
       });
     };
 
@@ -290,6 +365,9 @@ export default function RunningPage() {
     endAltitude,
     elevationGain,
     elevationLoss,
+    adjustedDistanceKm,
+    untrackedSeconds,
+    adjustedGapCount,
     arrived,
     pendingRecovery,
     saveRecoverySnapshot,
@@ -305,13 +383,30 @@ export default function RunningPage() {
         if (hiddenAtRef.current) {
           const secs = Math.round((Date.now() - hiddenAtRef.current) / 1000);
           hiddenAtRef.current = null;
-          if (secs >= 3) showToast(`화면이 ${secs}초 꺼져 있었어요. 이 구간은 추적되지 않았어요.`);
+          if (secs >= 3) {
+            showToast(`화면이 ${secs}초 꺼져 있었어요. 이 구간은 추적되지 않았어요.`);
+            if (!isPausedRef.current && config) {
+              const suggestedDistanceKm = estimateGapDistanceKm(
+                trackPoints,
+                totalDistance,
+                elapsed,
+                secs,
+                config.activityType,
+              );
+              const suggestion = { gapSeconds: secs, suggestedDistanceKm };
+              if (profile.autoApplyGapAdjustment) {
+                applyGapAdjustment(suggestion, true);
+              } else {
+                setGapSuggestion(suggestion);
+              }
+            }
+          }
         }
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [acquireWakeLock, showToast]);
+  }, [acquireWakeLock, showToast, config, trackPoints, totalDistance, elapsed, profile.autoApplyGapAdjustment, applyGapAdjustment]);
 
   // 도착지 도착 감지 (지도 모드)
   useEffect(() => {
@@ -331,7 +426,7 @@ export default function RunningPage() {
   // 목표 거리 달성 감지 (거리 목표 모드)
   useEffect(() => {
     if (!config?.goalDistance || arrivedRef.current) return;
-    if (totalDistance >= config.goalDistance) {
+    if (effectiveDistance >= config.goalDistance) {
       arrivedRef.current = true;
       setArrived(true);
       if ("Notification" in window && Notification.permission === "granted") {
@@ -341,7 +436,7 @@ export default function RunningPage() {
         });
       }
     }
-  }, [totalDistance, config]);
+  }, [effectiveDistance, config]);
 
   // 목표 시간 달성 감지 (시간 목표 모드)
   useEffect(() => {
@@ -351,12 +446,12 @@ export default function RunningPage() {
       setArrived(true);
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("시간 목표 달성!", {
-          body: `${config.goalTime}분 완료 · ${totalDistance.toFixed(2)}km 달림`,
+          body: `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`,
           icon: "/icons/icon-192x192.png",
         });
       }
     }
-  }, [elapsed, config, totalDistance]);
+  }, [elapsed, config, effectiveDistance]);
 
   const handleFinish = useCallback(() => {
     if (!config) return;
@@ -369,9 +464,14 @@ export default function RunningPage() {
     sessionStorage.setItem("runResult", JSON.stringify({
       startPoint: config.startPoint,
       endPoint: config.endPoint,
-      distance_km: totalDistance,
+      distance_km: effectiveDistance,
+      gps_distance_km_raw: totalDistance,
+      gap_adjustment_distance_km: adjustedDistanceKm,
+      gap_adjustment_seconds: untrackedSeconds,
+      gap_adjustment_count: adjustedGapCount,
+      gap_adjustment_auto_enabled: profile.autoApplyGapAdjustment,
       duration_seconds: finalElapsed,
-      pace: calcPace(totalDistance, finalElapsed),
+      pace: calcPace(effectiveDistance, finalElapsed),
       activity_type: config.activityType,
       pathPoints,
       trackPoints,
@@ -391,7 +491,12 @@ export default function RunningPage() {
     router.push("/result");
   }, [
     config,
+    effectiveDistance,
     totalDistance,
+    adjustedDistanceKm,
+    untrackedSeconds,
+    adjustedGapCount,
+    profile.autoApplyGapAdjustment,
     pathPoints,
     trackPoints,
     startAltitude,
@@ -420,6 +525,16 @@ export default function RunningPage() {
     }, 1000);
     setIsPaused(false);
   }, [resumeTracking]);
+
+  const handleApplyGapAdjustment = useCallback(() => {
+    if (!gapSuggestion) return;
+    applyGapAdjustment(gapSuggestion);
+    setGapSuggestion(null);
+  }, [gapSuggestion, applyGapAdjustment]);
+
+  const handleSkipGapAdjustment = useCallback(() => {
+    setGapSuggestion(null);
+  }, []);
 
   // 인터벌 preset 설정 시 초기화
   useEffect(() => {
@@ -527,7 +642,7 @@ export default function RunningPage() {
 
   const isRun = config.activityType === "running";
   const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-  const pace = calcPace(totalDistance, elapsed);
+  const pace = calcPace(effectiveDistance, elapsed);
   const paceZone = getPaceZone(pace, config.activityType);
   const paceGuide = getPaceGuidance(pace, config.activityType);
 
@@ -687,9 +802,14 @@ export default function RunningPage() {
               고도 {Math.round(currentAltitude)}m · 누적 상승 {Math.round(elevationGain)}m
             </p>
           )}
+          {adjustedDistanceKm > 0 && (
+            <p className="mb-3" style={{ fontSize: 12, color: "#ff9f0a" }}>
+              공백 보정 {adjustedDistanceKm.toFixed(2)}km · 누락 시간 {formatDuration(untrackedSeconds)}
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
-            <RunStat label="거리" value={totalDistance.toFixed(2)} unit="km" accent={accent} large />
+            <RunStat label="거리" value={effectiveDistance.toFixed(2)} unit="km" accent={accent} large />
             <RunStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} large />
             <RunStat label="페이스" value={formatPace(pace)} unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
             <div
@@ -727,14 +847,14 @@ export default function RunningPage() {
             <div className="flex justify-between items-center mb-1.5">
               <span style={{ fontSize: 11, color: "#5e636a" }}>목표까지</span>
               <span className="num" style={{ fontSize: 11, fontWeight: 700, color: accent }}>
-                {Math.max(0, config.goalDistance - totalDistance).toFixed(2)} km 남음
+                {Math.max(0, config.goalDistance - effectiveDistance).toFixed(2)} km 남음
               </span>
             </div>
             <div className="rounded-full overflow-hidden" style={{ height: 5, background: "rgba(255,255,255,0.1)" }}>
               <div
                 className="h-full rounded-full transition-all"
                 style={{
-                  width: `${Math.min(100, (totalDistance / config.goalDistance) * 100)}%`,
+                  width: `${Math.min(100, (effectiveDistance / config.goalDistance) * 100)}%`,
                   background: accent,
                 }}
               />
@@ -789,11 +909,11 @@ export default function RunningPage() {
               {config.goalDistance
                 ? `${config.goalDistance}km 완주`
                 : config.goalTime
-                  ? `${config.goalTime}분 완료 · ${totalDistance.toFixed(2)}km 달림`
+                  ? `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`
                   : "목적지 5m 이내 진입"}
             </p>
             <div className="grid grid-cols-2 gap-2 mb-5">
-              <MiniStat label="거리" value={`${totalDistance.toFixed(2)}`} unit="km" accent={accent} />
+              <MiniStat label="거리" value={`${effectiveDistance.toFixed(2)}`} unit="km" accent={accent} />
               <MiniStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -821,6 +941,60 @@ export default function RunningPage() {
         </div>
       )}
 
+      {gapSuggestion && (
+        <div
+          className="absolute inset-0 z-30 flex items-end justify-center"
+          style={{ background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)" }}
+        >
+          <div
+            className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
+            style={{
+              background: "#121315",
+              borderTop: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "24px 24px 0 0",
+            }}
+          >
+            <div className="flex justify-center mb-5">
+              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
+            </div>
+            <h2 className="mb-2 text-center" style={{ fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
+              공백 구간을 찾았어요
+            </h2>
+            <p className="text-center mb-2" style={{ fontSize: 14, color: "#9da1a6" }}>
+              화면이 {gapSuggestion.gapSeconds}초 동안 비활성 상태였습니다.
+            </p>
+            <p className="text-center mb-6" style={{ fontSize: 14, color: "#ff9f0a", fontWeight: 700 }}>
+              추천 보정 거리: {gapSuggestion.suggestedDistanceKm.toFixed(2)}km
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleSkipGapAdjustment}
+                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#d1d4d9",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                건너뛰기
+              </button>
+              <button
+                onClick={handleApplyGapAdjustment}
+                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                style={{
+                  background: "#ff9f0a",
+                  boxShadow: "0 4px 20px rgba(255,159,10,0.35)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                보정 적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingRecovery && (
         <div
           className="absolute inset-0 z-40 flex items-end justify-center"
@@ -841,7 +1015,7 @@ export default function RunningPage() {
               러닝 기록을 찾았어요
             </h2>
             <p className="text-center mb-5" style={{ fontSize: 14, color: "#9da1a6" }}>
-              {formatDuration(pendingRecovery.elapsed)} · {pendingRecovery.totalDistance.toFixed(2)}km
+              {formatDuration(pendingRecovery.elapsed)} · {(pendingRecovery.totalDistance + (pendingRecovery.adjustedDistanceKm ?? 0)).toFixed(2)}km
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import PWAUpdateBanner from "@/components/PWAUpdateBanner";
+import OfflineSyncBanner from "@/components/OfflineSyncBanner";
 import { UserProfileProvider } from "@/hooks/useUserProfile";
 import { OfflineSyncProvider } from "@/hooks/useOfflineSync";
 
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <UserProfileProvider>
               <OfflineSyncProvider>
                 <PWAUpdateBanner />
+                <OfflineSyncBanner />
                 {children}
               </OfflineSyncProvider>
             </UserProfileProvider>

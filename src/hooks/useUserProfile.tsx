@@ -3,7 +3,14 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { UserProfile } from "@/types";
 
-const DEFAULT_PROFILE: UserProfile = { weight: 70, height: 170, age: 30, weeklyGoalKm: 20, autoPause: true };
+const DEFAULT_PROFILE: UserProfile = {
+  weight: 70,
+  height: 170,
+  age: 30,
+  weeklyGoalKm: 20,
+  autoPause: true,
+  autoApplyGapAdjustment: false,
+};
 const STORAGE_KEY = "userProfile";
 const LEGACY_GOAL_KEY = "weeklyGoalKm";
 
@@ -24,14 +31,18 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const saved = JSON.parse(raw) as UserProfile;
+        const saved = JSON.parse(raw) as Partial<UserProfile>;
+        const merged: UserProfile = {
+          ...DEFAULT_PROFILE,
+          ...saved,
+        };
         // 기존 별도 저장된 weeklyGoalKm 마이그레이션
-        if (!saved.weeklyGoalKm) {
+        if (!merged.weeklyGoalKm) {
           const legacy = localStorage.getItem(LEGACY_GOAL_KEY);
-          saved.weeklyGoalKm = legacy ? Number(legacy) : DEFAULT_PROFILE.weeklyGoalKm;
+          merged.weeklyGoalKm = legacy ? Number(legacy) : DEFAULT_PROFILE.weeklyGoalKm;
           localStorage.removeItem(LEGACY_GOAL_KEY);
         }
-        setProfile(saved);
+        setProfile(merged);
       } else {
         // 프로필은 없고 주간 목표만 있던 경우
         const legacy = localStorage.getItem(LEGACY_GOAL_KEY);
