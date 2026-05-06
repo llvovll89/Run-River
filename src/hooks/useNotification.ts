@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export function useNotification() {
   const [permission, setPermission] = useState<NotificationPermission>("default");
@@ -11,12 +11,12 @@ export function useNotification() {
     }
   }, []);
 
-  async function requestPermission() {
+  const requestPermission = useCallback(async () => {
     if (!("Notification" in window)) return;
     const result = await Notification.requestPermission();
     setPermission(result);
     return result;
-  }
+  }, []);
 
   return { permission, requestPermission };
 }
