@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
-import { dequeue, getExhaustedQueue, resetRetry, type PendingRecord } from "@/lib/offlineQueue";
+import { dequeue, getExhaustedQueue, resetAllExhaustedRetries, resetRetry, type PendingRecord } from "@/lib/offlineQueue";
 import type { UserProfile } from "@/types";
 
 export default function SettingsPage() {
@@ -20,6 +20,12 @@ export default function SettingsPage() {
   const [autoApplyGapAdjustment, setAutoApplyGapAdjustment] = useState(profile.autoApplyGapAdjustment ?? false);
   const [exhaustedItems, setExhaustedItems] = useState<PendingRecord[]>([]);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [bulkRetryInfo, setBulkRetryInfo] = useState<{
+    running: boolean;
+    total: number;
+    prepared: number;
+    message: string;
+  }>({ running: false, total: 0, prepared: 0, message: "" });
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -34,6 +40,36 @@ export default function SettingsPage() {
       setSyncError(null);
     } catch {
       setSyncError("동기화 재시도 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function handleRetryAllExhausted() {
+    const total = exhaustedItems.length;
+    setBulkRetryInfo({ running: true, total, prepared: 0, message: "재시도 큐 준비 중..." });
+
+    const updated = resetAllExhaustedRetries();
+    setExhaustedItems(getExhaustedQueue());
+    if (updated === 0) {
+      setBulkRetryInfo({ running: false, total: 0, prepared: 0, message: "재시도할 항목이 없습니다." });
+      return;
+    }
+
+    setBulkRetryInfo({ running: true, total, prepared: updated, message: "서버 동기화 진행 중..." });
+
+    try {
+      await syncNow();
+      setSyncError(null);
+      const remaining = getExhaustedQueue().length;
+      const processed = Math.max(0, updated - remaining);
+      setBulkRetryInfo({
+        running: false,
+        total,
+        prepared: updated,
+        message: `전체 재시도 완료 · 성공 ${processed}건, 잔여 ${remaining}건`,
+      });
+    } catch {
+      setSyncError("전체 재시도 중 오류가 발생했습니다.");
+      setBulkRetryInfo({ running: false, total, prepared: updated, message: "전체 재시도 중 오류가 발생했습니다." });
     }
   }
 
@@ -229,8 +265,36 @@ export default function SettingsPage() {
             {syncing ? "동기화 중..." : "지금 동기화"}
           </button>
 
+          {exhaustedItems.length > 1 && (
+            <button
+              onClick={() => void handleRetryAllExhausted()}
+              className="ml-2 px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+              style={{
+                background: "rgba(0,122,255,0.12)",
+                color: "var(--c-toss-blue)",
+                border: "1px solid rgba(0,122,255,0.3)",
+              }}
+              disabled={syncing}
+            >
+              실패 전체 재시도
+            </button>
+          )}
+
           {syncError && (
             <p style={{ fontSize: 12, color: "var(--c-danger)", marginTop: 8 }}>{syncError}</p>
+          )}
+
+          {(bulkRetryInfo.running || bulkRetryInfo.message) && (
+            <div className="mt-2 rounded-xl px-3 py-2" style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}>
+              <p style={{ fontSize: 12, color: "var(--c-text-2)" }}>
+                {bulkRetryInfo.running ? "실행 중" : "실행 결과"}
+                {bulkRetryInfo.total > 0 ? ` · 대상 ${bulkRetryInfo.total}건` : ""}
+                {bulkRetryInfo.prepared > 0 ? ` · 준비 ${bulkRetryInfo.prepared}건` : ""}
+              </p>
+              <p style={{ fontSize: 12, color: "var(--c-text-3)", marginTop: 2 }}>
+                {bulkRetryInfo.message}
+              </p>
+            </div>
           )}
 
           {exhaustedItems.length > 0 && (

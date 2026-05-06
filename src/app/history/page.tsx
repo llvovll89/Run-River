@@ -145,6 +145,9 @@ function SummaryNum({ value, unit, label }: { value: string; unit: string; label
 function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
   const isRun = record.activity_type === "running";
   const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
+  const hasGapAdjustment = (record.gap_adjustment_distance_km ?? 0) > 0;
+  const isAutoGapMode = record.gap_adjustment_auto_enabled ?? false;
+  const gapDistance = record.gap_adjustment_distance_km ?? 0;
   const date = new Date(record.created_at);
 
   const dateStr = formatDateShort(date);
@@ -167,12 +170,28 @@ function RecordCard({ record, rank }: { record: RunningRecord; rank: number }) {
             <p style={{ fontSize: 12, color: "var(--c-text-3)", marginTop: 1 }}>{timeStr}</p>
           </div>
         </div>
-        <span
-          className="text-xs font-bold px-2.5 py-1 rounded-full"
-          style={{ background: `${accent}18`, color: accent }}
-        >
-          {isRun ? "러닝" : "워킹"}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="text-xs font-bold px-2.5 py-1 rounded-full"
+            style={{ background: `${accent}18`, color: accent }}
+          >
+            {isRun ? "러닝" : "워킹"}
+          </span>
+          {hasGapAdjustment && (
+            <span
+              className="text-xs font-bold px-2.5 py-1 rounded-full"
+              style={{
+                background: isAutoGapMode ? "rgba(0,122,255,0.12)" : "rgba(255,159,10,0.15)",
+                color: isAutoGapMode ? "var(--c-toss-blue)" : "#ff9f0a",
+                border: `1px solid ${isAutoGapMode ? "rgba(0,122,255,0.28)" : "rgba(255,159,10,0.35)"}`,
+                boxShadow: isAutoGapMode ? "0 0 0 1px rgba(0,122,255,0.08)" : "0 0 0 1px rgba(255,159,10,0.12)",
+              }}
+              title={`공백 보정 거리 +${gapDistance.toFixed(2)}km`}
+            >
+              {isAutoGapMode ? "자동 보정" : "수동 보정"} +{gapDistance.toFixed(2)}km
+            </span>
+          )}
+        </div>
         <DeleteRecordButton id={record.id} />
       </div>
 

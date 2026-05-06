@@ -17,6 +17,11 @@ export interface RunningRecord {
   start_point: LatLng;
   end_point: LatLng;
   distance_km: number;
+  gps_distance_km_raw?: number | null;
+  gap_adjustment_distance_km?: number | null;
+  gap_adjustment_seconds?: number | null;
+  gap_adjustment_count?: number | null;
+  gap_adjustment_auto_enabled?: boolean | null;
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;

@@ -117,3 +117,20 @@ export function getQueueSummary(): QueueSummary {
 export function getExhaustedQueue(): PendingRecord[] {
   return getQueue().filter((item) => item.nextRetryAt === RETRY_EXHAUSTED_AT);
 }
+
+export function resetAllExhaustedRetries(): number {
+  const queue = getQueue();
+  let updated = 0;
+  const next = queue.map((item) => {
+    if (item.nextRetryAt !== RETRY_EXHAUSTED_AT) return item;
+    updated += 1;
+    return {
+      ...item,
+      retryCount: 0,
+      lastError: null,
+      nextRetryAt: 0,
+    };
+  });
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(next));
+  return updated;
+}

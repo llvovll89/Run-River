@@ -48,11 +48,9 @@ export default function Home() {
   const mapRef = useRef<KakaoMapHandle>(null);
   const hasCenteredRef = useRef(false);
 
-  // PC 감지: 터치 없는 마우스 환경
+  // PC 감지: 임시 비활성화 (개발/테스트용)
   useEffect(() => {
-    const isPC = window.matchMedia("(pointer: fine) and (hover: hover)").matches
-      && window.innerWidth >= 768;
-    setIsDesktop(isPC);
+    setIsDesktop(false);
   }, []);
 
   useEffect(() => {
@@ -269,7 +267,7 @@ export default function Home() {
 
       {/* 헤더 */}
       <div
-        className="absolute top-0 left-0 right-0 z-10 px-4 flex items-center justify-between"
+        className="absolute top-0 left-0 right-0 z-20 px-4 flex items-center justify-between"
         style={{ paddingTop: "calc(var(--sat) + 12px)", paddingBottom: "12px" }}
       >
         <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2">

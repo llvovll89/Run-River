@@ -16,6 +16,11 @@ export async function saveRunningRecord(record: {
   start_point: LatLng;
   end_point: LatLng;
   distance_km: number;
+  gps_distance_km_raw?: number | null;
+  gap_adjustment_distance_km?: number | null;
+  gap_adjustment_seconds?: number | null;
+  gap_adjustment_count?: number | null;
+  gap_adjustment_auto_enabled?: boolean | null;
   duration_seconds: number;
   pace: number;
   activity_type: ActivityType;
@@ -37,7 +42,12 @@ export async function saveRunningRecord(record: {
       message.includes("altitude_start_m") ||
       message.includes("altitude_end_m") ||
       message.includes("elevation_gain_m") ||
-      message.includes("elevation_loss_m");
+      message.includes("elevation_loss_m") ||
+      message.includes("gps_distance_km_raw") ||
+      message.includes("gap_adjustment_distance_km") ||
+      message.includes("gap_adjustment_seconds") ||
+      message.includes("gap_adjustment_count") ||
+      message.includes("gap_adjustment_auto_enabled");
 
     if (hasMissingAltitudeColumn && message.includes("column")) {
       const {
@@ -45,6 +55,11 @@ export async function saveRunningRecord(record: {
         altitude_end_m: _altEnd,
         elevation_gain_m: _gain,
         elevation_loss_m: _loss,
+        gps_distance_km_raw: _rawDist,
+        gap_adjustment_distance_km: _gapDist,
+        gap_adjustment_seconds: _gapSecs,
+        gap_adjustment_count: _gapCount,
+        gap_adjustment_auto_enabled: _gapAuto,
         ...legacyRecord
       } = record;
 

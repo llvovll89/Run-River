@@ -1,10 +1,13 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { usePWAUpdate } from "@/hooks/usePWAUpdate";
 
 export default function PWAUpdateBanner() {
+  const pathname = usePathname();
   const { updateAvailable, isApplying, applyUpdate, dismissUpdate } = usePWAUpdate();
 
+  if (pathname === "/running") return null;
   if (!updateAvailable) return null;
 
   return (

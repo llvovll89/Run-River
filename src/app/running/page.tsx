@@ -1048,7 +1048,7 @@ export default function RunningPage() {
 
       {/* 하단 버튼 */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-10 px-5"
+        className="absolute bottom-0 left-0 right-0 z-30 px-5"
         style={{
           paddingBottom: "calc(var(--sab) + 20px)",
           paddingTop: "16px",
