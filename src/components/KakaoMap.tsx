@@ -3,6 +3,14 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import type { LatLng, ActivityType } from "@/types";
 
+const OVERLAY_UPDATE_INTERVAL_MS = 100;
+const OVERLAY_HEADING_THRESHOLD_DEG = 6;
+
+function getHeadingDeltaDeg(a: number, b: number): number {
+  const diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
 // 출발 마커 — 에메랄드 그라디언트 핀, 플레이 아이콘
 const _startSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><linearGradient id="sg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#059669"/></linearGradient><radialGradient id="shl" cx="38%" cy="30%" r="60%"><stop offset="0%" stop-color="white" stop-opacity="0.38"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient><filter id="ssf" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#064e3b" flood-opacity="0.5"/></filter></defs><g filter="url(#ssf)"><circle cx="26" cy="22" r="20" fill="url(#sg)"/><circle cx="26" cy="22" r="20" fill="url(#shl)"/><polygon points="20,41 26,54 32,41" fill="url(#sg)"/><circle cx="26" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2"/></g><polygon points="22,15 22,23 30,19" fill="white" opacity="0.92"/><text x="26" y="32.5" text-anchor="middle" fill="white" font-size="9.5" font-weight="800" font-family="-apple-system,BlinkMacSystemFont,sans-serif">출발</text></svg>';
 const START_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_startSvg)}`;
@@ -82,6 +90,11 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   const previewLineRef = useRef<kakao.maps.Polyline | null>(null);
   const routeLineRef = useRef<kakao.maps.Polyline | null>(null);
   const circleRef = useRef<kakao.maps.Circle | null>(null);
+  const polylinePathRef = useRef<kakao.maps.LatLng[]>([]);
+  const lastPathPointCountRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const lastOverlayHeadingRef = useRef<number | null>(null);
+  const lastOverlayUpdateAtRef = useRef(0);
   const isLoadedRef = useRef(false);
   // callback refs → 의존성 배열에서 제외
   const onMapClickRef = useRef(onMapClick);
@@ -108,7 +121,11 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       onMapClickRef.current?.({ lat: e.latLng.getLat(), lng: e.latLng.getLng() });
     });
     kakao.maps.event.addListener(mapInstance, "dragstart", () => {
+      isDraggingRef.current = true;
       onUserDragRef.current?.();
+    });
+    kakao.maps.event.addListener(mapInstance, "dragend", () => {
+      isDraggingRef.current = false;
     });
   }, [center]); // onMapClick 의존성 제거
 
@@ -203,11 +220,23 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     if (!mapInstanceRef.current) return;
     if (!currentPosition) return;
     const latlng = new kakao.maps.LatLng(currentPosition.lat, currentPosition.lng);
-    const html = buildCurrentMarkerHTML(heading);
     if (currentOverlayRef.current) {
       currentOverlayRef.current.setPosition(latlng);
-      currentOverlayRef.current.setContent(html);
+      const now = Date.now();
+      const normalizedHeading = heading ?? null;
+      const canUpdateByTime = now - lastOverlayUpdateAtRef.current >= OVERLAY_UPDATE_INTERVAL_MS;
+      const headingChanged = normalizedHeading === null
+        ? lastOverlayHeadingRef.current !== null
+        : lastOverlayHeadingRef.current === null || getHeadingDeltaDeg(lastOverlayHeadingRef.current, normalizedHeading) >= OVERLAY_HEADING_THRESHOLD_DEG;
+
+      // 드래그 중에는 오버레이 HTML 갱신을 생략해 제스처 프레임을 우선한다.
+      if (!isDraggingRef.current && canUpdateByTime && headingChanged) {
+        currentOverlayRef.current.setContent(buildCurrentMarkerHTML(heading));
+        lastOverlayHeadingRef.current = normalizedHeading;
+        lastOverlayUpdateAtRef.current = now;
+      }
     } else {
+      const html = buildCurrentMarkerHTML(heading);
       const overlay = new kakao.maps.CustomOverlay({
         position: latlng,
         content: html,
@@ -215,8 +244,10 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
         map: mapInstanceRef.current,
       });
       currentOverlayRef.current = overlay;
+      lastOverlayHeadingRef.current = heading ?? null;
+      lastOverlayUpdateAtRef.current = Date.now();
     }
-    if (followUser) {
+    if (followUser && !isDraggingRef.current) {
       mapInstanceRef.current.panTo(latlng);
     }
   }, [currentPosition, heading, followUser]);
@@ -297,26 +328,56 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       strokeStyle: "solid",
       map: mapInstanceRef.current,
     });
+    polylinePathRef.current = path;
+    lastPathPointCountRef.current = pathPoints.length;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activityType]);
 
   // pathPoints 변경 시 setPath로 점진적 업데이트 (전체 재생성 방지)
   useEffect(() => {
-    if (!mapInstanceRef.current || pathPoints.length < 2) return;
+    if (!mapInstanceRef.current) return;
     const color = activityType === "walking" ? "#34c759" : "#007aff";
-    const path = pathPoints.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
-    if (polylineRef.current) {
-      polylineRef.current.setPath(path);
-    } else {
+    if (pathPoints.length < 2) {
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
+      }
+      polylinePathRef.current = [];
+      lastPathPointCountRef.current = 0;
+      return;
+    }
+
+    const shouldRebuild = !polylineRef.current || pathPoints.length < lastPathPointCountRef.current;
+    if (shouldRebuild) {
+      const fullPath = pathPoints.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+      }
       polylineRef.current = new kakao.maps.Polyline({
-        path,
+        path: fullPath,
         strokeWeight: 5,
         strokeColor: color,
         strokeOpacity: 0.92,
         strokeStyle: "solid",
         map: mapInstanceRef.current,
       });
+      polylinePathRef.current = fullPath;
+      lastPathPointCountRef.current = pathPoints.length;
+      return;
     }
+
+    if (pathPoints.length === lastPathPointCountRef.current) {
+      return;
+    }
+
+    const appended = pathPoints
+      .slice(lastPathPointCountRef.current)
+      .map((p) => new kakao.maps.LatLng(p.lat, p.lng));
+    if (appended.length === 0) return;
+
+    polylinePathRef.current = [...polylinePathRef.current, ...appended];
+    polylineRef.current.setPath(polylinePathRef.current);
+    lastPathPointCountRef.current = pathPoints.length;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathPoints]);
 
