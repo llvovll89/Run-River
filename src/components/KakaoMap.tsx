@@ -376,7 +376,9 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     if (appended.length === 0) return;
 
     polylinePathRef.current = [...polylinePathRef.current, ...appended];
-    polylineRef.current.setPath(polylinePathRef.current);
+    const polyline = polylineRef.current;
+    if (!polyline) return;
+    polyline.setPath(polylinePathRef.current);
     lastPathPointCountRef.current = pathPoints.length;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathPoints]);
