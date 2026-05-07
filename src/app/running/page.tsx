@@ -97,6 +97,7 @@ export default function RunningPage() {
     useGeolocation();
 
   const [isPaused, setIsPaused] = useState(false);
+  const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
   const [followUser, setFollowUser] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingRecovery, setPendingRecovery] = useState<RunRecoverySnapshot | null>(null);
@@ -743,7 +744,7 @@ export default function RunningPage() {
         className="absolute top-0 left-0 right-0 z-10"
         style={{
           paddingTop: "calc(var(--sat) + 14px)",
-          paddingBottom: "16px",
+          paddingBottom: topPanelCollapsed ? "10px" : "16px",
           background: isPaused
             ? "rgba(10,11,12,0.88)"
             : isRun
@@ -790,59 +791,88 @@ export default function RunningPage() {
                   <span className="text-xs font-semibold" style={{ color: "#34c759" }}>GPS</span>
                 </div>
               ) : null}
-            </div>
-          </div>
-          {!isPaused && (
-            <p className="mb-3" style={{ fontSize: 12, fontWeight: 600, color: paceZone.color }}>
-              {paceGuide}
-            </p>
-          )}
-          {currentAltitude !== null && (
-            <p className="mb-3" style={{ fontSize: 12, color: "#9da1a6" }}>
-              고도 {Math.round(currentAltitude)}m · 누적 상승 {Math.round(elevationGain)}m
-            </p>
-          )}
-          {adjustedDistanceKm > 0 && (
-            <p className="mb-3" style={{ fontSize: 12, color: "#ff9f0a" }}>
-              공백 보정 {adjustedDistanceKm.toFixed(2)}km · 누락 시간 {formatDuration(untrackedSeconds)}
-            </p>
-          )}
-
-          <div className="grid grid-cols-2 gap-2">
-            <RunStat label="거리" value={effectiveDistance.toFixed(2)} unit="km" accent={accent} large />
-            <RunStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} large />
-            <RunStat label="페이스" value={formatPace(pace)} unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
-            <div
-              className="rounded-2xl px-3 py-3 text-center"
-              style={{
-                background: `${accent}0d`,
-                border: `1px solid ${accent}33`,
-                boxShadow: `0 0 12px ${accent}18`,
-                transition: "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
-              }}
-            >
-              <p style={{ fontSize: 11, color: "#5e636a", marginBottom: 4 }}>방위</p>
-              <p className="num" style={{ fontSize: 22, fontWeight: 800, color: accent, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
-                {heading !== null ? toCardinal(heading) : "--"}
-              </p>
-              <svg
-                width="16" height="16" viewBox="0 0 24 24" fill="none"
+              <button
+                onClick={() => setTopPanelCollapsed((prev) => !prev)}
+                aria-label={topPanelCollapsed ? "상단 패널 펼치기" : "상단 패널 접기"}
+                className="px-2.5 py-1 rounded-full active:scale-95 transition-transform"
                 style={{
-                  marginTop: 4,
-                  transform: `rotate(${heading ?? 0}deg)`,
-                  transition: "transform 0.3s ease",
-                  opacity: heading !== null ? 1 : 0.25,
-                  display: "inline-block",
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  color: "#d1d4d9",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "-0.01em",
                 }}
               >
-                <path d="M12 2L8 20l4-4 4 4L12 2Z" fill={accent} />
-              </svg>
+                {topPanelCollapsed ? "펼치기" : "접기"}
+              </button>
             </div>
           </div>
+          {!topPanelCollapsed && (
+            <>
+              {!isPaused && (
+                <p className="mb-3" style={{ fontSize: 12, fontWeight: 600, color: paceZone.color }}>
+                  {paceGuide}
+                </p>
+              )}
+              {currentAltitude !== null && (
+                <p className="mb-3" style={{ fontSize: 12, color: "#9da1a6" }}>
+                  고도 {Math.round(currentAltitude)}m · 누적 상승 {Math.round(elevationGain)}m
+                </p>
+              )}
+              {adjustedDistanceKm > 0 && (
+                <p className="mb-3" style={{ fontSize: 12, color: "#ff9f0a" }}>
+                  공백 보정 {adjustedDistanceKm.toFixed(2)}km · 누락 시간 {formatDuration(untrackedSeconds)}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <RunStat label="거리" value={effectiveDistance.toFixed(2)} unit="km" accent={accent} large />
+                <RunStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} large />
+                <RunStat label="페이스" value={formatPace(pace)} unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
+                <div
+                  className="rounded-2xl px-3 py-3 text-center"
+                  style={{
+                    background: `${accent}0d`,
+                    border: `1px solid ${accent}33`,
+                    boxShadow: `0 0 12px ${accent}18`,
+                    transition: "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
+                  }}
+                >
+                  <p style={{ fontSize: 11, color: "#5e636a", marginBottom: 4 }}>방위</p>
+                  <p className="num" style={{ fontSize: 22, fontWeight: 800, color: accent, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
+                    {heading !== null ? toCardinal(heading) : "--"}
+                  </p>
+                  <svg
+                    width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    style={{
+                      marginTop: 4,
+                      transform: `rotate(${heading ?? 0}deg)`,
+                      transition: "transform 0.3s ease",
+                      opacity: heading !== null ? 1 : 0.25,
+                      display: "inline-block",
+                    }}
+                  >
+                    <path d="M12 2L8 20l4-4 4 4L12 2Z" fill={accent} />
+                  </svg>
+                </div>
+              </div>
+            </>
+          )}
+          {topPanelCollapsed && (
+            <div className="flex items-center justify-between py-1">
+              <p className="num" style={{ fontSize: 16, fontWeight: 800, color: accent, letterSpacing: "-0.02em" }}>
+                {effectiveDistance.toFixed(2)} km
+              </p>
+              <p className="num" style={{ fontSize: 15, fontWeight: 700, color: "#d1d4d9", letterSpacing: "-0.02em" }}>
+                {formatDuration(elapsed)}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 목표 거리 진행 바 */}
-        {config.goalDistance && (
+        {!topPanelCollapsed && config.goalDistance && (
           <div className="px-5 pt-3">
             <div className="flex justify-between items-center mb-1.5">
               <span style={{ fontSize: 11, color: "#5e636a" }}>목표까지</span>
@@ -863,7 +893,7 @@ export default function RunningPage() {
         )}
 
         {/* 목표 시간 진행 바 */}
-        {config.goalTime && (
+        {!topPanelCollapsed && config.goalTime && (
           <div className="px-5 pt-3">
             <div className="flex justify-between items-center mb-1.5">
               <span style={{ fontSize: 11, color: "#5e636a" }}>남은 시간</span>
