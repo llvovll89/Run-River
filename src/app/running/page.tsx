@@ -9,6 +9,7 @@ import { useCompass } from "@/hooks/useCompass";
 import { useNotification } from "@/hooks/useNotification";
 import { formatDuration, formatPace, calcPace, getPaceZone, getPaceGuidance } from "@/lib/utils";
 import type { LatLng, ActivityType, TrackPoint, RunConfig, RunRecoverySnapshot } from "@/types";
+import { useVoiceGuide } from "@/hooks/useVoiceGuide";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -108,6 +109,11 @@ export default function RunningPage() {
   const hiddenAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("voiceGuide") !== "off" : true
+  );
+  const lastAnnouncedKmRef = useRef(0);
+  const { speak, cancel: cancelSpeak } = useVoiceGuide();
 
   // 인터벌 트레이닝 state
   const [intervalPhase, setIntervalPhase] = useState<"run" | "rest">("run");
@@ -456,6 +462,7 @@ export default function RunningPage() {
 
   const handleFinish = useCallback(() => {
     if (!config) return;
+    cancelSpeak();
     stopTracking();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     wakeLockRef.current?.release();
@@ -507,6 +514,7 @@ export default function RunningPage() {
     stopTracking,
     router,
     clearRecoverySnapshot,
+    cancelSpeak,
   ]);
 
   const handlePause = useCallback(() => {
@@ -626,6 +634,28 @@ export default function RunningPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [speed, isPaused, isTracking, profile.autoPause]);
+
+  // 음성 안내: 매 1km 돌파 시
+  useEffect(() => {
+    if (!voiceEnabled || isPaused) return;
+    const km = Math.floor(effectiveDistance);
+    if (km > 0 && km > lastAnnouncedKmRef.current) {
+      lastAnnouncedKmRef.current = km;
+      const currentPace = calcPace(effectiveDistance, elapsed);
+      if (currentPace > 0) {
+        const min = Math.floor(currentPace);
+        const sec = Math.round((currentPace - min) * 60);
+        speak(`${km}킬로미터! 페이스 ${min}분 ${sec}초`);
+      } else {
+        speak(`${km}킬로미터!`);
+      }
+    }
+  }, [effectiveDistance, voiceEnabled, isPaused, speak, elapsed]);
+
+  // voiceEnabled → localStorage
+  useEffect(() => {
+    localStorage.setItem("voiceGuide", voiceEnabled ? "on" : "off");
+  }, [voiceEnabled]);
 
   if (!config) {
     if (configError) {
@@ -791,6 +821,32 @@ export default function RunningPage() {
                   <span className="text-xs font-semibold" style={{ color: "#34c759" }}>GPS</span>
                 </div>
               ) : null}
+              <button
+                onClick={() => setVoiceEnabled((prev) => !prev)}
+                aria-label={voiceEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
+                className="w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                style={{
+                  background: voiceEnabled ? `${accent}22` : "rgba(255,255,255,0.08)",
+                  border: `1px solid ${voiceEnabled ? `${accent}44` : "rgba(255,255,255,0.18)"}`,
+                  color: voiceEnabled ? accent : "#5e636a",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  {voiceEnabled ? (
+                    <>
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                    </>
+                  ) : (
+                    <>
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <line x1="23" y1="9" x2="17" y2="15" />
+                      <line x1="17" y1="9" x2="23" y2="15" />
+                    </>
+                  )}
+                </svg>
+              </button>
               <button
                 onClick={() => setTopPanelCollapsed((prev) => !prev)}
                 aria-label={topPanelCollapsed ? "상단 패널 펼치기" : "상단 패널 접기"}

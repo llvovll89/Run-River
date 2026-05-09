@@ -1,0 +1,1 @@
+(()=>{"use strict";self.addEventListener("message",e=>{var t;(null==(t=e.data)?void 0:t.type)==="SKIP_WAITING"&&self.skipWaiting()}),self.addEventListener("activate",e=>{e.waitUntil(self.clients.claim())})})();

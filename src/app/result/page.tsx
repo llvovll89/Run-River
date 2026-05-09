@@ -111,6 +111,146 @@ const SINGLE_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
   { key: "single_21", threshold: 21, title: "하프 도전", description: "단일 활동 21km 달성", icon: "🥇" },
 ];
 
+function calcCaloriesByPace(pace: number, activityType: ActivityType, weightKg: number, durationSeconds: number): number {
+  let met: number;
+  if (activityType === "running") {
+    if (pace < 4.5) met = 14.0;
+    else if (pace < 5.5) met = 11.5;
+    else if (pace < 6.5) met = 9.8;
+    else met = 8.0;
+  } else {
+    if (pace < 7.0) met = 5.0;
+    else if (pace < 12.0) met = 3.8;
+    else met = 2.5;
+  }
+  return Math.round(met * weightKg * (durationSeconds / 3600));
+}
+
+function ctxRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+async function generateShareImage(
+  result: RunResult,
+  calories: number,
+  personalRecords: PersonalRecordItem[],
+  earnedBadges: BadgeItem[],
+): Promise<Blob> {
+  const W = 750, H = 440;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+
+  const isRun = result.activity_type === "running";
+  const accent = isRun ? "#007aff" : "#34c759";
+  const actLabel = isRun ? "러닝" : "워킹";
+
+  await document.fonts.ready;
+
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, "#0c0c14");
+  bg.addColorStop(1, "#111120");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, 0, W, 5);
+
+  ctx.fillStyle = accent;
+  ctx.font = "bold 22px 'Pretendard', -apple-system, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Run River", 44, 58);
+
+  ctx.font = "bold 13px 'Pretendard', -apple-system, sans-serif";
+  const badgeW = ctx.measureText(actLabel).width + 24;
+  ctx.fillStyle = accent + "33";
+  ctxRoundRect(ctx, 44, 70, badgeW, 26, 13);
+  ctx.fill();
+  ctx.fillStyle = accent;
+  ctx.fillText(actLabel, 56, 88);
+
+  ctx.fillStyle = "#555566";
+  ctx.font = "13px 'Pretendard', -apple-system, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(formatDateFull(new Date()), W - 44, 58);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 92px 'Pretendard', -apple-system, sans-serif";
+  const distStr = result.distance_km.toFixed(2);
+  ctx.fillText(distStr, 44, 210);
+  const distW = ctx.measureText(distStr).width;
+  ctx.fillStyle = "#666677";
+  ctx.font = "bold 30px 'Pretendard', -apple-system, sans-serif";
+  ctx.fillText("km", 44 + distW + 10, 195);
+
+  ctx.strokeStyle = "#22222f";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(44, 240);
+  ctx.lineTo(W - 44, 240);
+  ctx.stroke();
+
+  const stats = [
+    { label: "시간", value: formatDuration(result.duration_seconds) },
+    { label: "페이스", value: formatPace(result.pace) + "/km" },
+    { label: "칼로리", value: calories + " kcal" },
+  ];
+  const colW = (W - 88) / 3;
+  for (let i = 0; i < stats.length; i++) {
+    const x = 44 + i * colW;
+    ctx.fillStyle = "#555566";
+    ctx.font = "12px 'Pretendard', -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(stats[i].label, x, 274);
+    ctx.fillStyle = "#e0e0f0";
+    ctx.font = "bold 20px 'Pretendard', -apple-system, sans-serif";
+    ctx.fillText(stats[i].value, x, 302);
+  }
+
+  const highlights: string[] = [
+    ...personalRecords.map((pr) => `🏆 ${pr.title}`),
+    ...earnedBadges.slice(0, 2).map((b) => `${b.icon} ${b.title}`),
+  ].slice(0, 3);
+
+  if (highlights.length > 0) {
+    ctx.fillStyle = "#1a1a2e";
+    ctxRoundRect(ctx, 44, 330, W - 88, 52, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#2a2a40";
+    ctx.lineWidth = 1;
+    ctxRoundRect(ctx, 44, 330, W - 88, 52, 14);
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    ctx.font = "bold 14px 'Pretendard', -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(highlights.join("   "), 62, 362);
+  }
+
+  ctx.fillStyle = "#333344";
+  ctx.font = "12px 'Pretendard', -apple-system, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("Run River", W - 44, H - 18);
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("canvas toBlob failed"));
+    }, "image/png");
+  });
+}
+
 function formatSyncAgo(ts: number | null): string {
   if (!ts) return "아직 없음";
   const diffSec = Math.max(0, Math.round((Date.now() - ts) / 1000));
@@ -488,38 +628,41 @@ export default function ResultPage() {
     if (!result) return;
 
     const activityLabel = result.activity_type === "running" ? "러닝" : "워킹";
+    const cals = calcCaloriesByPace(result.pace, result.activity_type, profile.weight, result.duration_seconds);
     const prText = personalRecords.length > 0
       ? `\nPR: ${personalRecords.map((item) => `${item.title} (${item.value})`).join(", ")}`
       : "";
-    const badgeText = earnedBadges.length > 0
-      ? `\n배지: ${earnedBadges.slice(0, 3).map((badge) => badge.title).join(", ")}`
-      : "";
-
     const shareText = [
       `Run River ${activityLabel} 완료`,
       `거리 ${result.distance_km.toFixed(2)}km`,
       `시간 ${formatDuration(result.duration_seconds)}`,
       `페이스 ${formatPace(result.pace)}/km`,
-      ...(result.gap_adjustment_distance_km && result.gap_adjustment_distance_km > 0
-        ? [`공백 보정 ${result.gap_adjustment_distance_km.toFixed(2)}km`]
-        : []),
-    ].join(" | ") + prText + badgeText;
+      `칼로리 ${cals}kcal`,
+    ].join(" | ") + prText;
 
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Run River 기록 공유",
-          text: shareText,
-          url: `${window.location.origin}/history`,
-        });
+      const blob = await generateShareImage(result, cals, personalRecords, earnedBadges);
+      const file = new File([blob], "run-river-result.png", { type: "image/png" });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: "Run River 기록 공유", text: shareText, files: [file] });
+      } else if (navigator.share) {
+        await navigator.share({ title: "Run River 기록 공유", text: shareText });
       } else {
-        await navigator.clipboard.writeText(shareText);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "run-river-result.png";
+        a.click();
+        URL.revokeObjectURL(url);
       }
       setShareStatus("success");
-    } catch {
-      setShareStatus("error");
+    } catch (e) {
+      if (!(e instanceof Error && e.name === "AbortError")) {
+        setShareStatus("error");
+      }
     }
-  }, [result, personalRecords, earnedBadges]);
+  }, [result, personalRecords, earnedBadges, profile.weight]);
 
   const analysis = useMemo(() => (result ? deriveRunAnalysis(result) : null), [result]);
 
@@ -531,7 +674,7 @@ export default function ResultPage() {
 
   const dateStr = formatDateFull(new Date());
 
-  const calories = Math.round((isRun ? 8.0 : 3.5) * profile.weight * (result.duration_seconds / 3600));
+  const calories = calcCaloriesByPace(result.pace, result.activity_type, profile.weight, result.duration_seconds);
   const strideCm = profile.height * (isRun ? 0.415 : 0.413);
   const steps = Math.round((result.distance_km * 100000) / strideCm);
   const elevationGain = result.elevation_gain_m ?? null;
@@ -893,7 +1036,7 @@ export default function ResultPage() {
             className="px-4 pb-3 pt-1"
             style={{ fontSize: 11, color: "var(--c-text-3)" }}
           >
-            * 칼로리: MET × 체중({profile.weight}kg) × 시간 기반 추정치
+            * 칼로리: 페이스 기반 MET × 체중({profile.weight}kg) × 시간 추정치
           </p>
         </div>
       </div>
