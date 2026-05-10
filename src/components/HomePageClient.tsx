@@ -23,6 +23,7 @@ type AuthSummary = {
     name: string | null;
     email: string;
 };
+type ProtectedPath = "/history" | "/settings";
 const GOAL_PRESETS = [3, 5, 10, 21];
 const TIME_PRESETS = [15, 20, 30, 45, 60];
 
@@ -318,11 +319,29 @@ export default function Home() {
         router.push("/running");
     }
 
+    function openAuthFor(path: string) {
+        const next = encodeURIComponent(path);
+        router.push(`/auth?next=${next}`);
+    }
+
+    function handleProtectedRoute(path: ProtectedPath) {
+        if (authUser) {
+            router.push(path);
+            setShowMore(false);
+            return;
+        }
+
+        setPendingProtectedRoute(path);
+        setShowMore(false);
+    }
+
     const {theme, toggle} = useTheme();
     const {mode: installMode, canInstall, promptInstall} = usePWAInstall();
     const [showIOSGuide, setShowIOSGuide] = useState(false);
     const [showMore, setShowMore] = useState(false);
     const [authUser, setAuthUser] = useState<AuthSummary | null>(null);
+    const [pendingProtectedRoute, setPendingProtectedRoute] =
+        useState<ProtectedPath | null>(null);
     const canStart =
         pageMode === "goal"
             ? !!(userLocation || startPoint) && goal.distance > 0
@@ -513,7 +532,7 @@ export default function Home() {
                                             "0 8px 32px rgba(0,0,0,0.18)",
                                     }}
                                 >
-                                    {authUser && (
+                                    {authUser ? (
                                         <>
                                             <div className="px-4 py-3">
                                                 <p
@@ -535,6 +554,53 @@ export default function Home() {
                                                 >
                                                     {authUser.email}
                                                 </p>
+                                            </div>
+                                            <div
+                                                style={{
+                                                    height: 1,
+                                                    background:
+                                                        "var(--c-border)",
+                                                    margin: "0 12px",
+                                                }}
+                                            />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="px-4 py-3">
+                                                <p
+                                                    style={{
+                                                        fontSize: 13,
+                                                        fontWeight: 700,
+                                                        color: "var(--c-text-1)",
+                                                    }}
+                                                >
+                                                    게스트 모드
+                                                </p>
+                                                <p
+                                                    style={{
+                                                        fontSize: 11,
+                                                        color: "var(--c-text-3)",
+                                                        marginTop: 2,
+                                                    }}
+                                                >
+                                                    로그인하면 기록 저장이
+                                                    활성화됩니다
+                                                </p>
+                                                <button
+                                                    onClick={() => {
+                                                        openAuthFor("/");
+                                                        setShowMore(false);
+                                                    }}
+                                                    className="mt-2 px-2.5 py-1 rounded-full text-xs font-semibold active:scale-95 transition-transform"
+                                                    style={{
+                                                        background:
+                                                            "var(--c-elevated)",
+                                                        color: "var(--c-text-1)",
+                                                        border: "1px solid var(--c-border)",
+                                                    }}
+                                                >
+                                                    로그인
+                                                </button>
                                             </div>
                                             <div
                                                 style={{
@@ -579,8 +645,7 @@ export default function Home() {
                                     />
                                     <button
                                         onClick={() => {
-                                            router.push("/history");
-                                            setShowMore(false);
+                                            handleProtectedRoute("/history");
                                         }}
                                         className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
                                         style={{color: "var(--c-text-1)"}}
@@ -597,8 +662,7 @@ export default function Home() {
                                     </button>
                                     <button
                                         onClick={() => {
-                                            router.push("/settings");
-                                            setShowMore(false);
+                                            handleProtectedRoute("/settings");
                                         }}
                                         className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
                                         style={{color: "var(--c-text-1)"}}
@@ -1015,6 +1079,68 @@ export default function Home() {
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* 로그인 유도 모달 */}
+            {pendingProtectedRoute && (
+                <div
+                    className="absolute inset-0 z-50 flex items-end"
+                    style={{
+                        background: "rgba(0,0,0,0.5)",
+                        backdropFilter: "blur(4px)",
+                    }}
+                    onClick={() => setPendingProtectedRoute(null)}
+                >
+                    <div
+                        className="w-full rounded-t-3xl p-6"
+                        style={{background: "var(--c-bg)"}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div
+                            className="w-8 h-1 rounded-full mx-auto"
+                            style={{background: "var(--c-border)"}}
+                        />
+                        <h3
+                            className="text-base font-bold text-center mt-4"
+                            style={{color: "var(--c-text-1)"}}
+                        >
+                            로그인하고 기록을 저장하세요
+                        </h3>
+                        <p
+                            className="text-sm text-center mt-2"
+                            style={{color: "var(--c-text-3)"}}
+                        >
+                            지금은 게스트 모드예요. 로그인하면 활동 기록과 개인화
+                            기능을 사용할 수 있어요.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 mt-5">
+                            <button
+                                onClick={() => setPendingProtectedRoute(null)}
+                                className="py-3 rounded-2xl text-sm font-semibold"
+                                style={{
+                                    background: "var(--c-elevated)",
+                                    color: "var(--c-text-2)",
+                                    border: "1px solid var(--c-border)",
+                                }}
+                            >
+                                게스트로 계속하기
+                            </button>
+                            <button
+                                onClick={() => {
+                                    openAuthFor(pendingProtectedRoute);
+                                    setPendingProtectedRoute(null);
+                                }}
+                                className="py-3 rounded-2xl text-sm font-semibold"
+                                style={{
+                                    background: "var(--c-toss-blue)",
+                                    color: "#fff",
+                                }}
+                            >
+                                로그인하고 저장하기
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* iOS 설치 안내 모달 */}
@@ -1558,7 +1684,7 @@ export default function Home() {
                                         </div>
                                         {active && (
                                             <span
-                                                className="text-xs font-bold px-2 py-0.5 rounded-full ml-3 flex-shrink-0"
+                                                className="text-xs font-bold px-2 py-0.5 rounded-full ml-3 shrink-0"
                                                 style={{
                                                     background: accentVar,
                                                     color: "#fff",

@@ -1,7 +1,7 @@
 import {NextResponse, type NextRequest} from "next/server";
 import {updateSession} from "./lib/supabaseMiddleware";
 
-const PUBLIC_ROUTES = ["/auth", "/auth/callback"];
+const AUTH_REQUIRED_ROUTES = ["/history", "/settings"];
 
 function sanitizeNextPath(raw: string | null): string {
     if (!raw) return "/";
@@ -10,8 +10,8 @@ function sanitizeNextPath(raw: string | null): string {
     return value;
 }
 
-function isPublicRoute(pathname: string) {
-    return PUBLIC_ROUTES.some(
+function isAuthRequiredRoute(pathname: string) {
+    return AUTH_REQUIRED_ROUTES.some(
         (route) => pathname === route || pathname.startsWith(`${route}/`),
     );
 }
@@ -20,7 +20,7 @@ export async function middleware(request: NextRequest) {
     const {pathname} = request.nextUrl;
     const {response, user} = await updateSession(request);
 
-    if (!user && !isPublicRoute(pathname)) {
+    if (!user && isAuthRequiredRoute(pathname)) {
         const requestedPath = `${pathname}${request.nextUrl.search}`;
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/auth";
