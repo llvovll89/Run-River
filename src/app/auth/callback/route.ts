@@ -5,6 +5,13 @@ import {cookies} from "next/headers";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
+function sanitizeNextPath(raw: string | null): string {
+    if (!raw) return "/";
+    const value = raw.trim();
+    if (!value.startsWith("/") || value.startsWith("//")) return "/";
+    return value;
+}
+
 function assertEnv() {
     if (!supabaseUrl || !supabaseAnonKey) {
         throw new Error(
@@ -18,7 +25,7 @@ export async function GET(request: Request) {
 
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get("code");
-    const next = requestUrl.searchParams.get("next") ?? "/";
+    const next = sanitizeNextPath(requestUrl.searchParams.get("next"));
     const cookieStore = await cookies();
     type CookieToSet = {
         name: string;

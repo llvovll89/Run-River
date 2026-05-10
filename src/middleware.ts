@@ -1,7 +1,14 @@
 import {NextResponse, type NextRequest} from "next/server";
-import {updateSession} from "./src/lib/supabaseMiddleware";
+import {updateSession} from "./lib/supabaseMiddleware";
 
 const PUBLIC_ROUTES = ["/auth", "/auth/callback"];
+
+function sanitizeNextPath(raw: string | null): string {
+    if (!raw) return "/";
+    const value = raw.trim();
+    if (!value.startsWith("/") || value.startsWith("//")) return "/";
+    return value;
+}
 
 function isPublicRoute(pathname: string) {
     return PUBLIC_ROUTES.some(
@@ -14,16 +21,21 @@ export async function middleware(request: NextRequest) {
     const {response, user} = await updateSession(request);
 
     if (!user && !isPublicRoute(pathname)) {
+        const requestedPath = `${pathname}${request.nextUrl.search}`;
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/auth";
-        redirectUrl.searchParams.set("next", pathname);
+        redirectUrl.search = "";
+        redirectUrl.searchParams.set("next", requestedPath);
         return NextResponse.redirect(redirectUrl);
     }
 
     if (user && pathname === "/auth") {
+        const nextPath = sanitizeNextPath(
+            request.nextUrl.searchParams.get("next"),
+        );
         const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = "/";
-        redirectUrl.searchParams.delete("next");
+        redirectUrl.pathname = nextPath;
+        redirectUrl.search = "";
         return NextResponse.redirect(redirectUrl);
     }
 
