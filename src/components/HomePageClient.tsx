@@ -1093,7 +1093,7 @@ export default function Home() {
                 >
                     <div
                         className="w-full rounded-t-3xl p-6"
-                        style={{background: "var(--c-bg)"}
+                        style={{background: "var(--c-bg)"}}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div
@@ -1110,8 +1110,8 @@ export default function Home() {
                             className="text-sm text-center mt-2"
                             style={{color: "var(--c-text-3)"}}
                         >
-                            지금은 게스트 모드예요. 로그인하면 활동 기록과 개인화
-                            기능을 사용할 수 있어요.
+                            지금은 게스트 모드예요. 로그인하면 활동 기록과
+                            개인화 기능을 사용할 수 있어요.
                         </p>
                         <div className="grid grid-cols-2 gap-2 mt-5">
                             <button
