@@ -1,6 +1,7 @@
 import type {User} from "@supabase/supabase-js";
 import type {RunningRecord, ActivityType, LatLng, UserProfile} from "@/types";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
+import {DEFAULT_RUN_TUNING, normalizeRunTuning} from "@/lib/runTuning";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -107,7 +108,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
     const {data, error} = await supabase
         .from("user_profiles")
         .select(
-            "weight, height, age, weekly_goal_km, auto_pause, auto_apply_gap_adjustment",
+            "weight, height, age, weekly_goal_km, auto_pause, auto_apply_gap_adjustment, tuning_auto_pause_stop_speed_ms, tuning_auto_pause_resume_speed_ms, tuning_auto_pause_stillness_ms, tuning_auto_pause_min_move_km, tuning_off_route_threshold_km, tuning_off_route_sustain_ms, tuning_off_route_alert_cooldown_ms",
         )
         .maybeSingle();
 
@@ -121,6 +122,29 @@ export async function getUserProfile(): Promise<UserProfile | null> {
         weeklyGoalKm: data.weekly_goal_km,
         autoPause: data.auto_pause,
         autoApplyGapAdjustment: data.auto_apply_gap_adjustment,
+        runTuning: normalizeRunTuning({
+            autoPauseStopSpeedMs:
+                data.tuning_auto_pause_stop_speed_ms ??
+                DEFAULT_RUN_TUNING.autoPauseStopSpeedMs,
+            autoPauseResumeSpeedMs:
+                data.tuning_auto_pause_resume_speed_ms ??
+                DEFAULT_RUN_TUNING.autoPauseResumeSpeedMs,
+            autoPauseStillnessMs:
+                data.tuning_auto_pause_stillness_ms ??
+                DEFAULT_RUN_TUNING.autoPauseStillnessMs,
+            autoPauseMinMoveKm:
+                data.tuning_auto_pause_min_move_km ??
+                DEFAULT_RUN_TUNING.autoPauseMinMoveKm,
+            offRouteThresholdKm:
+                data.tuning_off_route_threshold_km ??
+                DEFAULT_RUN_TUNING.offRouteThresholdKm,
+            offRouteSustainMs:
+                data.tuning_off_route_sustain_ms ??
+                DEFAULT_RUN_TUNING.offRouteSustainMs,
+            offRouteAlertCooldownMs:
+                data.tuning_off_route_alert_cooldown_ms ??
+                DEFAULT_RUN_TUNING.offRouteAlertCooldownMs,
+        }),
     };
 }
 
@@ -134,6 +158,8 @@ export async function upsertUserProfile(
         throw new Error("로그인이 필요합니다.");
     }
 
+    const runTuning = normalizeRunTuning(profile.runTuning ?? DEFAULT_RUN_TUNING);
+
     const {data, error} = await supabase
         .from("user_profiles")
         .upsert({
@@ -144,10 +170,17 @@ export async function upsertUserProfile(
             weekly_goal_km: profile.weeklyGoalKm,
             auto_pause: profile.autoPause,
             auto_apply_gap_adjustment: profile.autoApplyGapAdjustment,
+            tuning_auto_pause_stop_speed_ms: runTuning.autoPauseStopSpeedMs,
+            tuning_auto_pause_resume_speed_ms: runTuning.autoPauseResumeSpeedMs,
+            tuning_auto_pause_stillness_ms: runTuning.autoPauseStillnessMs,
+            tuning_auto_pause_min_move_km: runTuning.autoPauseMinMoveKm,
+            tuning_off_route_threshold_km: runTuning.offRouteThresholdKm,
+            tuning_off_route_sustain_ms: runTuning.offRouteSustainMs,
+            tuning_off_route_alert_cooldown_ms: runTuning.offRouteAlertCooldownMs,
             updated_at: new Date().toISOString(),
         })
         .select(
-            "weight, height, age, weekly_goal_km, auto_pause, auto_apply_gap_adjustment",
+            "weight, height, age, weekly_goal_km, auto_pause, auto_apply_gap_adjustment, tuning_auto_pause_stop_speed_ms, tuning_auto_pause_resume_speed_ms, tuning_auto_pause_stillness_ms, tuning_auto_pause_min_move_km, tuning_off_route_threshold_km, tuning_off_route_sustain_ms, tuning_off_route_alert_cooldown_ms",
         )
         .single();
 
@@ -160,6 +193,29 @@ export async function upsertUserProfile(
         weeklyGoalKm: data.weekly_goal_km,
         autoPause: data.auto_pause,
         autoApplyGapAdjustment: data.auto_apply_gap_adjustment,
+        runTuning: normalizeRunTuning({
+            autoPauseStopSpeedMs:
+                data.tuning_auto_pause_stop_speed_ms ??
+                DEFAULT_RUN_TUNING.autoPauseStopSpeedMs,
+            autoPauseResumeSpeedMs:
+                data.tuning_auto_pause_resume_speed_ms ??
+                DEFAULT_RUN_TUNING.autoPauseResumeSpeedMs,
+            autoPauseStillnessMs:
+                data.tuning_auto_pause_stillness_ms ??
+                DEFAULT_RUN_TUNING.autoPauseStillnessMs,
+            autoPauseMinMoveKm:
+                data.tuning_auto_pause_min_move_km ??
+                DEFAULT_RUN_TUNING.autoPauseMinMoveKm,
+            offRouteThresholdKm:
+                data.tuning_off_route_threshold_km ??
+                DEFAULT_RUN_TUNING.offRouteThresholdKm,
+            offRouteSustainMs:
+                data.tuning_off_route_sustain_ms ??
+                DEFAULT_RUN_TUNING.offRouteSustainMs,
+            offRouteAlertCooldownMs:
+                data.tuning_off_route_alert_cooldown_ms ??
+                DEFAULT_RUN_TUNING.offRouteAlertCooldownMs,
+        }),
     };
 }
 

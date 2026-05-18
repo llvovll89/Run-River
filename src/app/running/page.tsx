@@ -10,6 +10,7 @@ import { useNotification } from "@/hooks/useNotification";
 import { formatDuration, formatPace, calcPace, getPaceZone, getPaceGuidance } from "@/lib/utils";
 import type { LatLng, ActivityType, TrackPoint, RunConfig, RunRecoverySnapshot } from "@/types";
 import { useVoiceGuide } from "@/hooks/useVoiceGuide";
+import { DEFAULT_RUN_TUNING, loadRunTuning, normalizeRunTuning, type RunTuning } from "@/lib/runTuning";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
@@ -20,6 +21,8 @@ interface GapSuggestion {
   gapSeconds: number;
   suggestedDistanceKm: number;
 }
+
+type IntervalPhase = "warmup" | "run" | "rest" | "cooldown";
 
 function estimateGapDistanceKm(trackPoints: TrackPoint[], totalDistance: number, elapsed: number, gapSeconds: number, activityType: ActivityType): number {
   if (gapSeconds <= 0) return 0;
@@ -60,6 +63,15 @@ function estimateGapDistanceKm(trackPoints: TrackPoint[], totalDistance: number,
   const estimated = speedKmPerSec * gapSeconds;
 
   return Math.max(0, Math.min(maxDistanceKm, estimated));
+}
+
+function calcMinDistanceToPathKm(point: LatLng, routePath: LatLng[]): number {
+  let minDistance = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < routePath.length; i += 1) {
+    const d = calcDistance(point, routePath[i]);
+    if (d < minDistance) minDistance = d;
+  }
+  return minDistance;
 }
 
 export default function RunningPage() {
@@ -106,6 +118,7 @@ export default function RunningPage() {
   const [adjustedDistanceKm, setAdjustedDistanceKm] = useState(0);
   const [untrackedSeconds, setUntrackedSeconds] = useState(0);
   const [adjustedGapCount, setAdjustedGapCount] = useState(0);
+  const [runTuning, setRunTuning] = useState<RunTuning>(DEFAULT_RUN_TUNING);
   const hiddenAtRef = useRef<number | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,16 +128,36 @@ export default function RunningPage() {
   const lastAnnouncedKmRef = useRef(0);
   const { speak, cancel: cancelSpeak } = useVoiceGuide();
 
+  useEffect(() => {
+    if (profile.runTuning) {
+      setRunTuning(normalizeRunTuning(profile.runTuning));
+      return;
+    }
+    setRunTuning(loadRunTuning());
+  }, [profile.runTuning]);
+
   // 인터벌 트레이닝 state
-  const [intervalPhase, setIntervalPhase] = useState<"run" | "rest">("run");
+  const [intervalPhase, setIntervalPhase] = useState<IntervalPhase>("run");
   const [intervalSet, setIntervalSet] = useState(1);
   const [intervalCountdown, setIntervalCountdown] = useState(0);
-  const intervalPhaseRef = useRef<"run" | "rest">("run");
+  const intervalPhaseRef = useRef<IntervalPhase>("run");
   const intervalSetRef = useRef(1);
   const intervalCountdownRef = useRef(0);
   const intervalRunSecondsRef = useRef(0);
   const intervalRestSecondsRef = useRef(0);
   const intervalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const lastSplitDistanceRef = useRef(0);
+  const lastSplitElapsedRef = useRef(0);
+  const lastSplitPaceRef = useRef<number | null>(null);
+
+  const stillnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speedSamplesRef = useRef<number[]>([]);
+  const lastAutoPauseDistanceRef = useRef(0);
+
+  const offRouteSinceRef = useRef<number | null>(null);
+  const lastOffRouteAlertAtRef = useRef(0);
+
   const effectiveDistance = totalDistance + adjustedDistanceKm;
 
   const showToast = useCallback((msg: string) => {
@@ -200,6 +233,14 @@ export default function RunningPage() {
     setUntrackedSeconds(recovery?.untrackedSeconds ?? 0);
     setAdjustedGapCount(recovery?.adjustedGapCount ?? 0);
     setGapSuggestion(null);
+    lastSplitDistanceRef.current = Math.floor(recovery?.totalDistance ?? 0);
+    lastSplitElapsedRef.current = recovery?.elapsed ?? 0;
+    lastSplitPaceRef.current = null;
+    speedSamplesRef.current = [];
+    lastAutoPauseDistanceRef.current = recovery?.totalDistance ?? 0;
+    offRouteSinceRef.current = null;
+    lastOffRouteAlertAtRef.current = 0;
+    lastAnnouncedKmRef.current = Math.floor((recovery?.totalDistance ?? 0) + (recovery?.adjustedDistanceKm ?? 0));
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -294,6 +335,8 @@ export default function RunningPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (stillnessTimerRef.current) clearTimeout(stillnessTimerRef.current);
+      if (intervalTimerRef.current) clearInterval(intervalTimerRef.current);
       stopTracking();
       wakeLockRef.current?.release();
     };
@@ -460,11 +503,47 @@ export default function RunningPage() {
     }
   }, [elapsed, config, effectiveDistance]);
 
+  // 경로 이탈 감지: 예상 경로에서 일정 거리 이상 벗어나면 안내
+  useEffect(() => {
+    if (!position || !config?.routePath || config.routePath.length < 2) return;
+    if (isPaused || arrived) {
+      offRouteSinceRef.current = null;
+      return;
+    }
+
+    const OFF_ROUTE_THRESHOLD_KM = runTuning.offRouteThresholdKm;
+    const OFF_ROUTE_SUSTAIN_MS = runTuning.offRouteSustainMs;
+    const ALERT_COOLDOWN_MS = runTuning.offRouteAlertCooldownMs;
+    const now = Date.now();
+
+    const minDistanceToRoute = calcMinDistanceToPathKm(position, config.routePath);
+    const isOffRoute = minDistanceToRoute >= OFF_ROUTE_THRESHOLD_KM;
+
+    if (!isOffRoute) {
+      offRouteSinceRef.current = null;
+      return;
+    }
+
+    if (offRouteSinceRef.current === null) {
+      offRouteSinceRef.current = now;
+      return;
+    }
+
+    const sustained = now - offRouteSinceRef.current >= OFF_ROUTE_SUSTAIN_MS;
+    const canAlert = now - lastOffRouteAlertAtRef.current >= ALERT_COOLDOWN_MS;
+
+    if (sustained && canAlert) {
+      lastOffRouteAlertAtRef.current = now;
+      showToast("경로에서 벗어났을 수 있어요. 지도를 확인해 주세요.");
+    }
+  }, [position, config, isPaused, arrived, showToast, runTuning]);
+
   const handleFinish = useCallback(() => {
     if (!config) return;
     cancelSpeak();
     stopTracking();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (stillnessTimerRef.current) { clearTimeout(stillnessTimerRef.current); stillnessTimerRef.current = null; }
     wakeLockRef.current?.release();
     const finalElapsed = Math.floor(
       baseElapsedRef.current + (isPausedRef.current ? 0 : (Date.now() - startTimeRef.current) / 1000)
@@ -547,13 +626,20 @@ export default function RunningPage() {
 
   // 인터벌 preset 설정 시 초기화
   useEffect(() => {
-    if (!config?.intervalPreset || config.intervalPreset.sets === 0) return;
-    const cd = config.intervalPreset.runSeconds;
-    intervalCountdownRef.current = cd;
-    intervalPhaseRef.current = "run";
+    if (!config?.intervalPreset) return;
+
+    const preset = config.intervalPreset;
+    const hasWarmup = preset.sets > 0 && (preset.warmupSeconds ?? 0) > 0;
+    const initialPhase: IntervalPhase = hasWarmup ? "warmup" : "run";
+    const initialCountdown = hasWarmup ? (preset.warmupSeconds ?? 0) : (preset.sets === 0 ? 0 : preset.runSeconds);
+
+    intervalCountdownRef.current = initialCountdown;
+    intervalPhaseRef.current = initialPhase;
     intervalSetRef.current = 1;
-    setIntervalCountdown(cd);
-    setIntervalPhase("run");
+    intervalRunSecondsRef.current = 0;
+    intervalRestSecondsRef.current = 0;
+    setIntervalCountdown(initialCountdown);
+    setIntervalPhase(initialPhase);
     setIntervalSet(1);
   }, [config]);
 
@@ -567,7 +653,7 @@ export default function RunningPage() {
 
     intervalTimerRef.current = setInterval(() => {
       if (intervalPhaseRef.current === "run") intervalRunSecondsRef.current += 1;
-      else intervalRestSecondsRef.current += 1;
+      if (intervalPhaseRef.current === "rest") intervalRestSecondsRef.current += 1;
 
       if (preset.sets === 0) {
         // 파틀렉: 카운트업
@@ -578,20 +664,41 @@ export default function RunningPage() {
 
       const next = intervalCountdownRef.current - 1;
       if (next <= 0) {
-        if (intervalPhaseRef.current === "run") {
+        if (intervalPhaseRef.current === "warmup") {
+          intervalPhaseRef.current = "run";
+          intervalSetRef.current = 1;
+          intervalCountdownRef.current = preset.runSeconds;
+          setIntervalPhase("run");
+          setIntervalSet(1);
+          setIntervalCountdown(preset.runSeconds);
+          if (voiceEnabled) speak("워밍업 완료. 1세트 달리기 시작합니다.");
+          if ("vibrate" in navigator) navigator.vibrate(150);
+        } else if (intervalPhaseRef.current === "run") {
           intervalPhaseRef.current = "rest";
           intervalCountdownRef.current = preset.restSeconds;
           setIntervalPhase("rest");
           setIntervalCountdown(preset.restSeconds);
+          if (voiceEnabled) speak(`${intervalSetRef.current}세트 달리기 완료. 휴식 시작.`);
           if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
-        } else {
+        } else if (intervalPhaseRef.current === "rest") {
           const nextSet = intervalSetRef.current + 1;
           if (nextSet > preset.sets) {
-            clearInterval(intervalTimerRef.current!);
-            intervalTimerRef.current = null;
-            setIntervalCountdown(0);
-            setArrived(true);
-            arrivedRef.current = true;
+            const cooldown = preset.cooldownSeconds ?? 0;
+            if (cooldown > 0) {
+              intervalPhaseRef.current = "cooldown";
+              intervalCountdownRef.current = cooldown;
+              setIntervalPhase("cooldown");
+              setIntervalCountdown(cooldown);
+              if (voiceEnabled) speak("본 세트 완료. 쿨다운 시작합니다.");
+              if ("vibrate" in navigator) navigator.vibrate(200);
+            } else {
+              clearInterval(intervalTimerRef.current!);
+              intervalTimerRef.current = null;
+              setIntervalCountdown(0);
+              setArrived(true);
+              arrivedRef.current = true;
+              if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
+            }
           } else {
             intervalSetRef.current = nextSet;
             intervalPhaseRef.current = "run";
@@ -599,8 +706,16 @@ export default function RunningPage() {
             setIntervalSet(nextSet);
             setIntervalPhase("run");
             setIntervalCountdown(preset.runSeconds);
+            if (voiceEnabled) speak(`${nextSet}세트 달리기 시작.`);
             if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
           }
+        } else if (intervalPhaseRef.current === "cooldown") {
+          clearInterval(intervalTimerRef.current!);
+          intervalTimerRef.current = null;
+          setIntervalCountdown(0);
+          setArrived(true);
+          arrivedRef.current = true;
+          if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
         }
       } else {
         intervalCountdownRef.current = next;
@@ -610,45 +725,98 @@ export default function RunningPage() {
 
     return () => { if (intervalTimerRef.current) { clearInterval(intervalTimerRef.current); intervalTimerRef.current = null; } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPaused, isTracking, config?.intervalPreset]);
+  }, [isPaused, isTracking, config?.intervalPreset, voiceEnabled, speak]);
 
-  // Auto-pause: 3초 이상 정지(speed < 0.5 m/s) 감지 시 자동 일시정지
+  // Auto-pause: 속도 평활 + 거리 변화를 함께 보고 정지 판정
   useEffect(() => {
+    const STOP_SPEED_THRESHOLD = runTuning.autoPauseStopSpeedMs;
+    const RESUME_SPEED_THRESHOLD = runTuning.autoPauseResumeSpeedMs;
+    const MIN_MOVE_DISTANCE_KM = runTuning.autoPauseMinMoveKm;
+    const REQUIRED_STILLNESS_MS = runTuning.autoPauseStillnessMs;
+
     if (!profile.autoPause || isPaused || !isTracking) {
-      clearTimeout(autoPauseTimerRef.current!);
+      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
       autoPauseTimerRef.current = null;
+      if (stillnessTimerRef.current) clearTimeout(stillnessTimerRef.current);
+      stillnessTimerRef.current = null;
       return;
     }
-    const stopped = speed !== null && speed < 0.5;
-    if (stopped) {
-      if (!autoPauseTimerRef.current) {
-        autoPauseTimerRef.current = setTimeout(() => {
-          autoPauseTimerRef.current = null;
+
+    if (speed !== null && Number.isFinite(speed)) {
+      const nextSamples = [...speedSamplesRef.current, speed];
+      if (nextSamples.length > 6) nextSamples.shift();
+      speedSamplesRef.current = nextSamples;
+    }
+
+    const validSamples = speedSamplesRef.current.filter((v) => Number.isFinite(v));
+    const smoothSpeed = validSamples.length > 0
+      ? validSamples.reduce((sum, value) => sum + value, 0) / validSamples.length
+      : null;
+
+    const distanceDelta = Math.max(0, effectiveDistance - lastAutoPauseDistanceRef.current);
+
+    const moving =
+      distanceDelta >= MIN_MOVE_DISTANCE_KM ||
+      (smoothSpeed !== null && smoothSpeed >= RESUME_SPEED_THRESHOLD);
+
+    if (moving) {
+      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
+      autoPauseTimerRef.current = null;
+      if (stillnessTimerRef.current) clearTimeout(stillnessTimerRef.current);
+      stillnessTimerRef.current = null;
+      lastAutoPauseDistanceRef.current = effectiveDistance;
+      return;
+    }
+
+    const likelyStopped =
+      distanceDelta < MIN_MOVE_DISTANCE_KM &&
+      smoothSpeed !== null &&
+      smoothSpeed <= STOP_SPEED_THRESHOLD;
+
+    if (!likelyStopped) return;
+
+    if (!stillnessTimerRef.current) {
+      stillnessTimerRef.current = setTimeout(() => {
+        stillnessTimerRef.current = null;
+        if (!isPausedRef.current) {
           handlePause();
           showToast("자동으로 일시정지됨");
-        }, 3000);
-      }
-    } else {
-      clearTimeout(autoPauseTimerRef.current!);
-      autoPauseTimerRef.current = null;
+        }
+      }, REQUIRED_STILLNESS_MS);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speed, isPaused, isTracking, profile.autoPause]);
 
-  // 음성 안내: 매 1km 돌파 시
+    return () => {
+      // no-op cleanup: 타이머는 상태 전환 분기에서 관리
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speed, effectiveDistance, isPaused, isTracking, profile.autoPause, runTuning]);
+
+  // 음성 안내: 매 1km 스플릿 + 직전 구간 대비 코칭
   useEffect(() => {
     if (!voiceEnabled || isPaused) return;
     const km = Math.floor(effectiveDistance);
     if (km > 0 && km > lastAnnouncedKmRef.current) {
       lastAnnouncedKmRef.current = km;
-      const currentPace = calcPace(effectiveDistance, elapsed);
-      if (currentPace > 0) {
-        const min = Math.floor(currentPace);
-        const sec = Math.round((currentPace - min) * 60);
-        speak(`${km}킬로미터! 페이스 ${min}분 ${sec}초`);
-      } else {
-        speak(`${km}킬로미터!`);
+      const splitDistance = Math.max(0.01, effectiveDistance - lastSplitDistanceRef.current);
+      const splitElapsed = Math.max(1, elapsed - lastSplitElapsedRef.current);
+      const splitPace = calcPace(splitDistance, splitElapsed);
+
+      let trendComment = "리듬 유지 좋아요.";
+      if (lastSplitPaceRef.current !== null) {
+        const diff = splitPace - lastSplitPaceRef.current;
+        if (diff <= -0.12) trendComment = "직전 구간보다 빨라졌어요.";
+        else if (diff >= 0.12) trendComment = "조금 느려졌어요. 호흡을 정리해봐요.";
       }
+
+      if (splitPace > 0 && Number.isFinite(splitPace)) {
+        speak(`${km}킬로미터 통과. 이번 구간 페이스 ${formatPace(splitPace)}. ${trendComment}`);
+      } else {
+        speak(`${km}킬로미터 통과. ${trendComment}`);
+      }
+
+      lastSplitDistanceRef.current = effectiveDistance;
+      lastSplitElapsedRef.current = elapsed;
+      lastSplitPaceRef.current = splitPace > 0 && Number.isFinite(splitPace) ? splitPace : null;
     }
   }, [effectiveDistance, voiceEnabled, isPaused, speak, elapsed]);
 
@@ -676,6 +844,34 @@ export default function RunningPage() {
   const pace = calcPace(effectiveDistance, elapsed);
   const paceZone = getPaceZone(pace, config.activityType);
   const paceGuide = getPaceGuidance(pace, config.activityType);
+  const intervalTone = intervalPhase === "run"
+    ? "var(--c-toss-blue)"
+    : intervalPhase === "rest"
+      ? "var(--c-walk)"
+      : intervalPhase === "warmup"
+        ? "#ffd60a"
+        : "#64d2ff";
+  const intervalBg = intervalPhase === "run"
+    ? "rgba(0,122,255,0.15)"
+    : intervalPhase === "rest"
+      ? "rgba(52,199,89,0.15)"
+      : intervalPhase === "warmup"
+        ? "rgba(255,214,10,0.16)"
+        : "rgba(100,210,255,0.16)";
+  const intervalBorder = intervalPhase === "run"
+    ? "rgba(0,122,255,0.3)"
+    : intervalPhase === "rest"
+      ? "rgba(52,199,89,0.3)"
+      : intervalPhase === "warmup"
+        ? "rgba(255,214,10,0.35)"
+        : "rgba(100,210,255,0.35)";
+  const intervalLabel = intervalPhase === "run"
+    ? "⚡ 달리기"
+    : intervalPhase === "rest"
+      ? "💤 휴식"
+      : intervalPhase === "warmup"
+        ? "🔥 워밍업"
+        : "🧊 쿨다운";
 
   return (
     <main className="relative w-full h-dvh overflow-hidden" style={{ background: "#0a0b0c" }}>
@@ -881,6 +1077,9 @@ export default function RunningPage() {
                   공백 보정 {adjustedDistanceKm.toFixed(2)}km · 누락 시간 {formatDuration(untrackedSeconds)}
                 </p>
               )}
+              <p className="mb-3" style={{ fontSize: 11, color: "#7f8690" }}>
+                튜닝값 · 정지 {runTuning.autoPauseStopSpeedMs.toFixed(2)}m/s · 재개 {runTuning.autoPauseResumeSpeedMs.toFixed(2)}m/s · 정지판정 {(runTuning.autoPauseStillnessMs / 1000).toFixed(1)}초 · 이탈 {Math.round(runTuning.offRouteThresholdKm * 1000)}m
+              </p>
 
               <div className="grid grid-cols-2 gap-2">
                 <RunStat label="거리" value={effectiveDistance.toFixed(2)} unit="km" accent={accent} large />
@@ -1146,13 +1345,13 @@ export default function RunningPage() {
           <div
             className="rounded-2xl px-4 py-3 mb-2"
             style={{
-              background: intervalPhase === "run" ? "rgba(0,122,255,0.15)" : "rgba(52,199,89,0.15)",
-              border: `1px solid ${intervalPhase === "run" ? "rgba(0,122,255,0.3)" : "rgba(52,199,89,0.3)"}`,
+              background: intervalBg,
+              border: `1px solid ${intervalBorder}`,
             }}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold" style={{ color: intervalPhase === "run" ? "var(--c-toss-blue)" : "var(--c-walk)" }}>
-                {intervalPhase === "run" ? "⚡ 달리기" : "💤 휴식"}
+              <span className="text-xs font-bold" style={{ color: intervalTone }}>
+                {intervalLabel}
               </span>
               {config.intervalPreset.sets > 0 && (
                 <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
@@ -1190,7 +1389,7 @@ export default function RunningPage() {
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${Math.round((intervalSet - 1) / config.intervalPreset.sets * 100)}%`,
-                        background: intervalPhase === "run" ? "var(--c-toss-blue)" : "var(--c-walk)",
+                        background: intervalTone,
                       }}
                     />
                   </div>

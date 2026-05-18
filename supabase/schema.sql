@@ -85,9 +85,46 @@ create table if not exists public.user_profiles (
   weekly_goal_km numeric not null check (weekly_goal_km >= 1 and weekly_goal_km <= 500),
   auto_pause boolean not null default true,
   auto_apply_gap_adjustment boolean not null default false,
+  tuning_auto_pause_stop_speed_ms double precision not null default 0.45,
+  tuning_auto_pause_resume_speed_ms double precision not null default 0.9,
+  tuning_auto_pause_stillness_ms integer not null default 4500,
+  tuning_auto_pause_min_move_km double precision not null default 0.0003,
+  tuning_off_route_threshold_km double precision not null default 0.06,
+  tuning_off_route_sustain_ms integer not null default 10000,
+  tuning_off_route_alert_cooldown_ms integer not null default 90000,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint user_profiles_tuning_stop_speed_check check (tuning_auto_pause_stop_speed_ms >= 0.2 and tuning_auto_pause_stop_speed_ms <= 1.2),
+  constraint user_profiles_tuning_resume_speed_check check (tuning_auto_pause_resume_speed_ms >= 0.3 and tuning_auto_pause_resume_speed_ms <= 2.0),
+  constraint user_profiles_tuning_stillness_check check (tuning_auto_pause_stillness_ms >= 2000 and tuning_auto_pause_stillness_ms <= 12000),
+  constraint user_profiles_tuning_min_move_check check (tuning_auto_pause_min_move_km >= 0.0001 and tuning_auto_pause_min_move_km <= 0.002),
+  constraint user_profiles_tuning_off_route_threshold_check check (tuning_off_route_threshold_km >= 0.02 and tuning_off_route_threshold_km <= 0.2),
+  constraint user_profiles_tuning_off_route_sustain_check check (tuning_off_route_sustain_ms >= 3000 and tuning_off_route_sustain_ms <= 30000),
+  constraint user_profiles_tuning_off_route_cooldown_check check (tuning_off_route_alert_cooldown_ms >= 10000 and tuning_off_route_alert_cooldown_ms <= 300000)
 );
+
+alter table public.user_profiles add column if not exists tuning_auto_pause_stop_speed_ms double precision not null default 0.45;
+alter table public.user_profiles add column if not exists tuning_auto_pause_resume_speed_ms double precision not null default 0.9;
+alter table public.user_profiles add column if not exists tuning_auto_pause_stillness_ms integer not null default 4500;
+alter table public.user_profiles add column if not exists tuning_auto_pause_min_move_km double precision not null default 0.0003;
+alter table public.user_profiles add column if not exists tuning_off_route_threshold_km double precision not null default 0.06;
+alter table public.user_profiles add column if not exists tuning_off_route_sustain_ms integer not null default 10000;
+alter table public.user_profiles add column if not exists tuning_off_route_alert_cooldown_ms integer not null default 90000;
+
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_stop_speed_check;
+alter table public.user_profiles add constraint user_profiles_tuning_stop_speed_check check (tuning_auto_pause_stop_speed_ms >= 0.2 and tuning_auto_pause_stop_speed_ms <= 1.2);
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_resume_speed_check;
+alter table public.user_profiles add constraint user_profiles_tuning_resume_speed_check check (tuning_auto_pause_resume_speed_ms >= 0.3 and tuning_auto_pause_resume_speed_ms <= 2.0);
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_stillness_check;
+alter table public.user_profiles add constraint user_profiles_tuning_stillness_check check (tuning_auto_pause_stillness_ms >= 2000 and tuning_auto_pause_stillness_ms <= 12000);
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_min_move_check;
+alter table public.user_profiles add constraint user_profiles_tuning_min_move_check check (tuning_auto_pause_min_move_km >= 0.0001 and tuning_auto_pause_min_move_km <= 0.002);
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_off_route_threshold_check;
+alter table public.user_profiles add constraint user_profiles_tuning_off_route_threshold_check check (tuning_off_route_threshold_km >= 0.02 and tuning_off_route_threshold_km <= 0.2);
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_off_route_sustain_check;
+alter table public.user_profiles add constraint user_profiles_tuning_off_route_sustain_check check (tuning_off_route_sustain_ms >= 3000 and tuning_off_route_sustain_ms <= 30000);
+alter table public.user_profiles drop constraint if exists user_profiles_tuning_off_route_cooldown_check;
+alter table public.user_profiles add constraint user_profiles_tuning_off_route_cooldown_check check (tuning_off_route_alert_cooldown_ms >= 10000 and tuning_off_route_alert_cooldown_ms <= 300000);
 
 alter table public.user_profiles alter column user_id set default auth.uid();
 

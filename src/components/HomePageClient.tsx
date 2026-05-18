@@ -310,6 +310,7 @@ export default function Home() {
                 JSON.stringify({
                     startPoint,
                     endPoint,
+                    routePath: route.info?.path,
                     activityType,
                     goalDistance: null,
                     goalTime: null,

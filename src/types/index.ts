@@ -36,11 +36,14 @@ export interface RunningRecord {
 
 import type {IntervalPreset} from "@/lib/intervalPresets";
 export type {IntervalPreset};
+import type {RunTuning} from "@/lib/runTuning";
+export type {RunTuning};
 
 /** sessionStorage에 저장되는 런 시작 설정 */
 export interface RunConfig {
     startPoint: LatLng;
     endPoint: LatLng | null;
+    routePath?: LatLng[];
     activityType: ActivityType;
     /** 목표 거리 모드일 때 설정 (km). null이면 지도/시간 모드 */
     goalDistance: number | null;
@@ -75,6 +78,7 @@ export interface UserProfile {
     weeklyGoalKm: number;
     autoPause: boolean;
     autoApplyGapAdjustment: boolean;
+    runTuning?: RunTuning;
 }
 
 export interface RunningState {

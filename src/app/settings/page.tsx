@@ -16,11 +16,13 @@ import {
     getUnclaimedLegacyCount,
     signOut,
 } from "@/lib/supabase";
+import {DEFAULT_RUN_TUNING, normalizeRunTuning} from "@/lib/runTuning";
 import type {UserProfile} from "@/types";
 
 export default function SettingsPage() {
     const router = useRouter();
-    const {profile, saveProfile} = useUserProfile();
+    const {profile, saveProfile, syncState, syncErrorMessage, retrySync} =
+        useUserProfile();
     const {pendingCount, exhaustedCount, syncing, syncNow} = useOfflineSync();
 
     const [weight, setWeight] = useState(String(profile.weight));
@@ -43,10 +45,39 @@ export default function SettingsPage() {
     const [claiming, setClaiming] = useState(false);
     const [claimMessage, setClaimMessage] = useState("");
     const [error, setError] = useState("");
+    const [autoPauseStopSpeed, setAutoPauseStopSpeed] = useState("0.45");
+    const [autoPauseResumeSpeed, setAutoPauseResumeSpeed] = useState("0.90");
+    const [autoPauseStillnessSec, setAutoPauseStillnessSec] = useState("4.5");
+    const [autoPauseMinMoveMeters, setAutoPauseMinMoveMeters] = useState("0.3");
+    const [offRouteThresholdMeters, setOffRouteThresholdMeters] = useState("60");
+    const [offRouteSustainSec, setOffRouteSustainSec] = useState("10");
+    const [offRouteAlertCooldownSec, setOffRouteAlertCooldownSec] = useState("90");
+
+    const applyTuningInputs = (source: typeof DEFAULT_RUN_TUNING) => {
+        setAutoPauseStopSpeed(source.autoPauseStopSpeedMs.toFixed(2));
+        setAutoPauseResumeSpeed(source.autoPauseResumeSpeedMs.toFixed(2));
+        setAutoPauseStillnessSec((source.autoPauseStillnessMs / 1000).toFixed(1));
+        setAutoPauseMinMoveMeters((source.autoPauseMinMoveKm * 1000).toFixed(1));
+        setOffRouteThresholdMeters((source.offRouteThresholdKm * 1000).toFixed(0));
+        setOffRouteSustainSec((source.offRouteSustainMs / 1000).toFixed(0));
+        setOffRouteAlertCooldownSec((source.offRouteAlertCooldownMs / 1000).toFixed(0));
+    };
 
     useEffect(() => {
         setExhaustedItems(getExhaustedQueue());
     }, [pendingCount, exhaustedCount, syncing]);
+
+    useEffect(() => {
+        setWeight(String(profile.weight));
+        setHeight(String(profile.height));
+        setAge(String(profile.age));
+        setWeeklyGoal(String(profile.weeklyGoalKm));
+        setAutoPause(profile.autoPause ?? true);
+        setAutoApplyGapAdjustment(profile.autoApplyGapAdjustment ?? false);
+        applyTuningInputs(
+            normalizeRunTuning(profile.runTuning ?? DEFAULT_RUN_TUNING),
+        );
+    }, [profile]);
 
     useEffect(() => {
         let mounted = true;
@@ -172,6 +203,13 @@ export default function SettingsPage() {
         const h = Number(height);
         const a = Number(age);
         const g = Number(weeklyGoal);
+        const stopSpeed = Number(autoPauseStopSpeed);
+        const resumeSpeed = Number(autoPauseResumeSpeed);
+        const stillnessSec = Number(autoPauseStillnessSec);
+        const minMoveMeters = Number(autoPauseMinMoveMeters);
+        const routeThresholdMeters = Number(offRouteThresholdMeters);
+        const routeSustainSec = Number(offRouteSustainSec);
+        const routeCooldownSec = Number(offRouteAlertCooldownSec);
 
         if (!w || w < 20 || w > 300) {
             setError("체중은 20~300kg 사이로 입력해주세요.");
@@ -189,6 +227,34 @@ export default function SettingsPage() {
             setError("주간 목표는 1~500km 사이로 입력해주세요.");
             return;
         }
+        if (!stopSpeed || stopSpeed < 0.2 || stopSpeed > 1.2) {
+            setError("자동 정지 속도는 0.2~1.2m/s 사이로 입력해주세요.");
+            return;
+        }
+        if (!resumeSpeed || resumeSpeed < 0.3 || resumeSpeed > 2.0) {
+            setError("자동 재개 속도는 0.3~2.0m/s 사이로 입력해주세요.");
+            return;
+        }
+        if (!stillnessSec || stillnessSec < 2 || stillnessSec > 12) {
+            setError("정지 판정 시간은 2~12초 사이로 입력해주세요.");
+            return;
+        }
+        if (!minMoveMeters || minMoveMeters < 0.1 || minMoveMeters > 2) {
+            setError("이동 감지 거리는 0.1~2.0m 사이로 입력해주세요.");
+            return;
+        }
+        if (!routeThresholdMeters || routeThresholdMeters < 20 || routeThresholdMeters > 200) {
+            setError("경로 이탈 감지 거리는 20~200m 사이로 입력해주세요.");
+            return;
+        }
+        if (!routeSustainSec || routeSustainSec < 3 || routeSustainSec > 30) {
+            setError("이탈 지속 시간은 3~30초 사이로 입력해주세요.");
+            return;
+        }
+        if (!routeCooldownSec || routeCooldownSec < 10 || routeCooldownSec > 300) {
+            setError("이탈 알림 간격은 10~300초 사이로 입력해주세요.");
+            return;
+        }
 
         const p: UserProfile = {
             weight: w,
@@ -197,9 +263,23 @@ export default function SettingsPage() {
             weeklyGoalKm: g,
             autoPause,
             autoApplyGapAdjustment,
+            runTuning: normalizeRunTuning({
+                autoPauseStopSpeedMs: stopSpeed,
+                autoPauseResumeSpeedMs: resumeSpeed,
+                autoPauseStillnessMs: Math.round(stillnessSec * 1000),
+                autoPauseMinMoveKm: minMoveMeters / 1000,
+                offRouteThresholdKm: routeThresholdMeters / 1000,
+                offRouteSustainMs: Math.round(routeSustainSec * 1000),
+                offRouteAlertCooldownMs: Math.round(routeCooldownSec * 1000),
+            }),
         };
         saveProfile(p);
         router.back();
+    }
+
+    function handleResetRunTuningDefaults() {
+        applyTuningInputs(DEFAULT_RUN_TUNING);
+        setError("");
     }
 
     return (
@@ -251,6 +331,62 @@ export default function SettingsPage() {
                 >
                     내 프로필
                 </h1>
+                <div className="mt-2 flex items-center gap-2">
+                    <span
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
+                        style={{
+                            background:
+                                syncState === "saving"
+                                    ? "rgba(0,122,255,0.15)"
+                                    : syncState === "synced"
+                                      ? "rgba(52,199,89,0.15)"
+                                      : syncState === "error"
+                                        ? "rgba(255,69,58,0.15)"
+                                        : "var(--c-elevated)",
+                            color:
+                                syncState === "saving"
+                                    ? "var(--c-toss-blue)"
+                                    : syncState === "synced"
+                                      ? "var(--c-walk)"
+                                      : syncState === "error"
+                                        ? "var(--c-danger)"
+                                        : "var(--c-text-3)",
+                            border: "1px solid var(--c-border)",
+                        }}
+                    >
+                        {syncState === "saving"
+                            ? "클라우드 저장 중..."
+                            : syncState === "synced"
+                              ? "클라우드 반영됨"
+                              : syncState === "error"
+                                ? "로컬 저장됨 · 클라우드 재시도 필요"
+                                : "로컬/클라우드 동기화 대기"}
+                    </span>
+                    {syncState === "error" && (
+                        <button
+                            onClick={() => void retrySync()}
+                            className="px-2.5 py-1 rounded-full text-xs font-semibold active:scale-95 transition-transform"
+                            style={{
+                                background: "rgba(0,122,255,0.14)",
+                                color: "var(--c-toss-blue)",
+                                border: "1px solid rgba(0,122,255,0.35)",
+                            }}
+                        >
+                            지금 재시도
+                        </button>
+                    )}
+                </div>
+                {syncState === "error" && syncErrorMessage && (
+                    <p
+                        style={{
+                            fontSize: 12,
+                            color: "var(--c-danger)",
+                            marginTop: 6,
+                        }}
+                    >
+                        최근 오류: {syncErrorMessage}
+                    </p>
+                )}
                 <p
                     style={{
                         fontSize: 13,
@@ -461,6 +597,96 @@ export default function SettingsPage() {
                             }}
                         />
                     </button>
+                </div>
+
+                <div
+                    className="rounded-2xl p-4"
+                    style={{
+                        background: "var(--c-surface)",
+                        border: "1px solid var(--c-border)",
+                    }}
+                >
+                    <div className="flex items-center justify-between gap-2">
+                        <p
+                            className="font-semibold"
+                            style={{fontSize: 15, color: "var(--c-text-1)"}}
+                        >
+                            러닝 정밀 설정
+                        </p>
+                        <button
+                            onClick={handleResetRunTuningDefaults}
+                            className="px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
+                            style={{
+                                background: "var(--c-elevated)",
+                                color: "var(--c-text-2)",
+                                border: "1px solid var(--c-border)",
+                            }}
+                        >
+                            기본값으로 되돌리기
+                        </button>
+                    </div>
+                    <p
+                        style={{
+                            fontSize: 12,
+                            color: "var(--c-text-3)",
+                            marginTop: 4,
+                            marginBottom: 10,
+                        }}
+                    >
+                        자동 일시정지/경로 이탈 감지 민감도를 조정합니다.
+                    </p>
+
+                    <div className="flex flex-col gap-2">
+                        <ProfileField
+                            label="자동 정지 속도"
+                            unit="m/s"
+                            value={autoPauseStopSpeed}
+                            onChange={setAutoPauseStopSpeed}
+                            placeholder="0.45"
+                        />
+                        <ProfileField
+                            label="자동 재개 속도"
+                            unit="m/s"
+                            value={autoPauseResumeSpeed}
+                            onChange={setAutoPauseResumeSpeed}
+                            placeholder="0.90"
+                        />
+                        <ProfileField
+                            label="정지 판정 시간"
+                            unit="초"
+                            value={autoPauseStillnessSec}
+                            onChange={setAutoPauseStillnessSec}
+                            placeholder="4.5"
+                        />
+                        <ProfileField
+                            label="이동 감지 거리"
+                            unit="m"
+                            value={autoPauseMinMoveMeters}
+                            onChange={setAutoPauseMinMoveMeters}
+                            placeholder="0.3"
+                        />
+                        <ProfileField
+                            label="경로 이탈 감지"
+                            unit="m"
+                            value={offRouteThresholdMeters}
+                            onChange={setOffRouteThresholdMeters}
+                            placeholder="60"
+                        />
+                        <ProfileField
+                            label="이탈 지속 시간"
+                            unit="초"
+                            value={offRouteSustainSec}
+                            onChange={setOffRouteSustainSec}
+                            placeholder="10"
+                        />
+                        <ProfileField
+                            label="이탈 알림 간격"
+                            unit="초"
+                            value={offRouteAlertCooldownSec}
+                            onChange={setOffRouteAlertCooldownSec}
+                            placeholder="90"
+                        />
+                    </div>
                 </div>
 
                 <div
