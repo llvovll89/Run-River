@@ -355,6 +355,8 @@ export default function Home() {
     );
     const [weeklyDistanceKm, setWeeklyDistanceKm] = useState(0);
     const [weeklyLoaded, setWeeklyLoaded] = useState(false);
+    const [weeklyChallengeCollapsed, setWeeklyChallengeCollapsed] =
+        useState(true);
     const [pendingProtectedRoute, setPendingProtectedRoute] =
         useState<ProtectedPath | null>(null);
     const canStart =
@@ -367,6 +369,7 @@ export default function Home() {
                 : !!(startPoint && endPoint);
     const isRun = activityType === "running";
     const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
+    const startActionText = isRun ? "달리기" : "걷기";
     const isShareReferral = searchParams.get("ref") === "share";
     const showGrowthDebug = searchParams.get("debug") === "growth";
     const weeklyGoalKm = Math.max(1, profile.weeklyGoalKm || 20);
@@ -915,15 +918,16 @@ export default function Home() {
             )}
 
             <div
-                className="absolute left-4 right-4 z-20"
+                className="absolute right-4 z-20"
                 style={{
                     top: showReferralBanner
                         ? "calc(var(--sat) + 232px)"
                         : "calc(var(--sat) + 106px)",
+                    width: "min(320px, calc(100vw - 32px))",
                 }}
             >
                 <div
-                    className="rounded-2xl px-4 py-3"
+                    className="rounded-2xl px-3.5 py-2.5"
                     style={{
                         background: "rgba(18,19,21,0.78)",
                         border: "1px solid rgba(255,255,255,0.12)",
@@ -931,15 +935,34 @@ export default function Home() {
                     }}
                 >
                     <div className="flex items-center justify-between">
-                        <p
-                            style={{
-                                fontSize: 12,
-                                fontWeight: 700,
-                                color: "var(--c-text-1)",
-                            }}
-                        >
-                            이번 주 챌린지
-                        </p>
+                        <div className="flex items-center gap-2">
+                            <p
+                                style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "var(--c-text-1)",
+                                }}
+                            >
+                                이번 주 챌린지
+                            </p>
+                            <button
+                                onClick={() =>
+                                    setWeeklyChallengeCollapsed((prev) => !prev)
+                                }
+                                className="w-5 h-5 rounded-md flex items-center justify-center"
+                                style={{
+                                    color: "var(--c-text-3)",
+                                    background: "rgba(255,255,255,0.08)",
+                                }}
+                                aria-label={
+                                    weeklyChallengeCollapsed
+                                        ? "이번 주 챌린지 펼치기"
+                                        : "이번 주 챌린지 접기"
+                                }
+                            >
+                                {weeklyChallengeCollapsed ? "+" : "-"}
+                            </button>
+                        </div>
                         <p
                             className="num"
                             style={{fontSize: 12, color: "var(--c-text-2)"}}
@@ -947,29 +970,37 @@ export default function Home() {
                             {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
                         </p>
                     </div>
-                    <div
-                        className="mt-2 rounded-full overflow-hidden"
-                        style={{height: 7, background: "rgba(255,255,255,0.12)"}}
-                    >
-                        <div
-                            style={{
-                                width: `${Math.round(weeklyProgress * 100)}%`,
-                                height: "100%",
-                                background: "linear-gradient(90deg, #007aff, #34c759)",
-                                transition: "width 220ms ease",
-                            }}
-                        />
-                    </div>
-                    <p
-                        className="mt-2"
-                        style={{fontSize: 11, color: "var(--c-text-3)"}}
-                    >
-                        {weeklyLoaded
-                            ? weeklyRemainKm > 0
-                                ? `목표까지 ${weeklyRemainKm.toFixed(1)}km 남았어요.`
-                                : "이번 주 목표를 달성했어요. 훌륭해요!"
-                            : "이번 주 진행률을 계산하는 중..."}
-                    </p>
+                    {!weeklyChallengeCollapsed && (
+                        <>
+                            <div
+                                className="mt-2 rounded-full overflow-hidden"
+                                style={{
+                                    height: 7,
+                                    background: "rgba(255,255,255,0.12)",
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        width: `${Math.round(weeklyProgress * 100)}%`,
+                                        height: "100%",
+                                        background:
+                                            "linear-gradient(90deg, #007aff, #34c759)",
+                                        transition: "width 220ms ease",
+                                    }}
+                                />
+                            </div>
+                            <p
+                                className="mt-2"
+                                style={{fontSize: 11, color: "var(--c-text-3)"}}
+                            >
+                                {weeklyLoaded
+                                    ? weeklyRemainKm > 0
+                                        ? `목표까지 ${weeklyRemainKm.toFixed(1)}km 남았어요.`
+                                        : "이번 주 목표를 달성했어요. 훌륭해요!"
+                                    : "이번 주 진행률을 계산하는 중..."}
+                            </p>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -2034,11 +2065,11 @@ export default function Home() {
                         >
                             {pageMode === "goal"
                                 ? canStart
-                                    ? `${goal.distance}km 달리기 시작`
+                                                                        ? `${goal.distance}km ${startActionText} 시작`
                                     : "위치 확인 중..."
                                 : pageMode === "time"
                                   ? canStart
-                                      ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} 달리기 시작`
+                                                                            ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} ${startActionText} 시작`
                                       : "위치 확인 중..."
                                   : pageMode === "interval"
                                     ? canStart
