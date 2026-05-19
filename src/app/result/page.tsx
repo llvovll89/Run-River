@@ -2079,7 +2079,7 @@ export default function ResultPage() {
                     </p>
                     <p
                         className="mt-1"
-                        style={{fontSize: 13, color: "var(--c-text-2)"}
+                        style={{fontSize: 13, color: "var(--c-text-2)"}}
                     >
                         방금 끝난 지점에서 바로 목표형 러닝을 시작할 수 있어요.
                     </p>
