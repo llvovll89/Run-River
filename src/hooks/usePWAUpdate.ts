@@ -2,6 +2,12 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 
+function reloadWithBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("sw", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 export function usePWAUpdate() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
   const [isApplying, setIsApplying] = useState(false);
@@ -31,7 +37,7 @@ export function usePWAUpdate() {
       if (refreshingRef.current) return;
       refreshingRef.current = true;
       window.setTimeout(() => {
-        window.location.reload();
+        reloadWithBuster();
       }, 300);
     };
 
@@ -51,7 +57,7 @@ export function usePWAUpdate() {
     window.setTimeout(() => {
       if (!refreshingRef.current) {
         refreshingRef.current = true;
-        window.location.reload();
+        reloadWithBuster();
       }
     }, 3500);
   }, [waitingWorker]);

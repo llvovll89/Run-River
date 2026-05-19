@@ -3,12 +3,37 @@ import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import PWAUpdateBanner from "@/components/PWAUpdateBanner";
 import OfflineSyncBanner from "@/components/OfflineSyncBanner";
+import AppRecovery from "@/components/AppRecovery";
 import { UserProfileProvider } from "@/hooks/useUserProfile";
 import { OfflineSyncProvider } from "@/hooks/useOfflineSync";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://run-river.vercel.app";
+
 export const metadata: Metadata = {
   title: "Run River",
-  description: "GPS 러닝 트래커",
+  description: "휴대폰만으로 바로 시작하는 목표형 러닝 트래커",
+  metadataBase: new URL(siteUrl),
+  openGraph: {
+    type: "website",
+    siteName: "Run River",
+    title: "Run River",
+    description: "거리/시간/인터벌 목표로 바로 시작하는 러닝 트래커",
+    url: "/",
+    images: [
+      {
+        url: "/icons/icon-512x512.png",
+        width: 512,
+        height: 512,
+        alt: "Run River",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Run River",
+    description: "휴대폰만으로 바로 시작하는 목표형 러닝 트래커",
+    images: ["/icons/icon-512x512.png"],
+  },
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -53,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           style={{ background: "var(--c-bg)" }}
         >
           <ThemeProvider>
+            <AppRecovery />
             <UserProfileProvider>
               <OfflineSyncProvider>
                 <PWAUpdateBanner />
