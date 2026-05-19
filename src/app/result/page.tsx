@@ -980,6 +980,8 @@ export default function ResultPage() {
     const nextGoalDistanceKm = suggestNextGoalDistanceKm(result.distance_km);
 
     function handleStartSuggestedGoal() {
+        if (!result) return;
+
         const runConfig = {
             startPoint: result.endPoint,
             endPoint: null,
