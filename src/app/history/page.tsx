@@ -13,6 +13,48 @@ import EditableMemo from "@/components/EditableMemo";
 
 export const revalidate = 0;
 
+function parseDayLocal(day: string): Date {
+    const [year, month, date] = day.split("-").map(Number);
+    return new Date(year, (month ?? 1) - 1, date ?? 1);
+}
+
+function calcCurrentStreak(records: RunningRecord[]): number {
+    if (records.length === 0) return 0;
+
+    const uniqueDays = Array.from(
+        new Set(records.map((record) => record.created_at.slice(0, 10))),
+    ).sort((a, b) => b.localeCompare(a));
+
+    if (uniqueDays.length === 0) return 0;
+
+    const today = new Date();
+    const todayDateOnly = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+    );
+    const latestDate = parseDayLocal(uniqueDays[0]);
+    const latestDiffDays = Math.floor(
+        (todayDateOnly.getTime() - latestDate.getTime()) / 86400000,
+    );
+
+    if (latestDiffDays > 1) return 0;
+
+    let streak = 1;
+    let prevDate = latestDate;
+    for (let idx = 1; idx < uniqueDays.length; idx += 1) {
+        const currentDate = parseDayLocal(uniqueDays[idx]);
+        const diffDays = Math.floor(
+            (prevDate.getTime() - currentDate.getTime()) / 86400000,
+        );
+        if (diffDays !== 1) break;
+        streak += 1;
+        prevDate = currentDate;
+    }
+
+    return streak;
+}
+
 export default async function HistoryPage() {
     let records: RunningRecord[] = [];
     let fetchError = "";
@@ -31,6 +73,7 @@ export default async function HistoryPage() {
         records.length > 0
             ? records.reduce((s, r) => s + r.pace, 0) / records.length
             : 0;
+    const currentStreak = calcCurrentStreak(records);
 
     return (
         <main className="min-h-dvh" style={{background: "var(--c-bg)"}}>
@@ -104,7 +147,7 @@ export default async function HistoryPage() {
                         >
                             전체 요약
                         </p>
-                        <div className="grid grid-cols-3 gap-0">
+                        <div className="grid grid-cols-4 gap-0">
                             <SummaryNum
                                 value={totalDist.toFixed(1)}
                                 unit="km"
@@ -119,6 +162,11 @@ export default async function HistoryPage() {
                                 value={String(totalDays)}
                                 unit="일"
                                 label="활동일"
+                            />
+                            <SummaryNum
+                                value={String(currentStreak)}
+                                unit="일"
+                                label="연속"
                             />
                         </div>
                         {avgPace > 0 && (

@@ -1,11 +1,14 @@
 "use client";
 
 import {useState, useEffect, useRef} from "react";
-import {useRouter} from "next/navigation";
+import {useRouter, useSearchParams} from "next/navigation";
 import dynamicImport from "next/dynamic";
 import type {KakaoMapHandle} from "@/components/KakaoMap";
 import {useTheme} from "@/hooks/useTheme";
 import {usePWAInstall} from "@/hooks/usePWAInstall";
+import {useUserProfile} from "@/hooks/useUserProfile";
+import {getCurrentUser, getRunningHistory} from "@/lib/supabase";
+import {getGrowthSummary, trackGrowthEvent, type GrowthSummary} from "@/lib/growthEvents";
 import Image from "next/image";
 import type {LatLng, ActivityType} from "@/types";
 import {calcDistance} from "@/hooks/useGeolocation";
@@ -26,9 +29,14 @@ type AuthSummary = {
 type ProtectedPath = "/history" | "/settings";
 const GOAL_PRESETS = [3, 5, 10, 21];
 const TIME_PRESETS = [15, 20, 30, 45, 60];
+const REFERRAL_BANNER_SEEN_KEY = "rr_referral_banner_seen_at";
+const REFERRAL_BANNER_COOLDOWN_MS = 1000 * 60 * 60 * 24 * 7;
+const REFERRAL_VISIT_SESSION_KEY = "rr_referral_visit_logged";
 
 export default function Home() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const {profile} = useUserProfile();
     const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
     const [startPoint, setStartPoint] = useState<LatLng | null>(null);
     const [endPoint, setEndPoint] = useState<LatLng | null>(null);
@@ -341,6 +349,12 @@ export default function Home() {
     const [showIOSGuide, setShowIOSGuide] = useState(false);
     const [showMore, setShowMore] = useState(false);
     const [authUser, setAuthUser] = useState<AuthSummary | null>(null);
+    const [showReferralBanner, setShowReferralBanner] = useState(false);
+    const [growthSummary, setGrowthSummary] = useState<GrowthSummary | null>(
+        null,
+    );
+    const [weeklyDistanceKm, setWeeklyDistanceKm] = useState(0);
+    const [weeklyLoaded, setWeeklyLoaded] = useState(false);
     const [pendingProtectedRoute, setPendingProtectedRoute] =
         useState<ProtectedPath | null>(null);
     const canStart =
@@ -353,6 +367,11 @@ export default function Home() {
                 : !!(startPoint && endPoint);
     const isRun = activityType === "running";
     const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
+    const isShareReferral = searchParams.get("ref") === "share";
+    const showGrowthDebug = searchParams.get("debug") === "growth";
+    const weeklyGoalKm = Math.max(1, profile.weeklyGoalKm || 20);
+    const weeklyProgress = Math.min(1, weeklyDistanceKm / weeklyGoalKm);
+    const weeklyRemainKm = Math.max(0, weeklyGoalKm - weeklyDistanceKm);
 
     const routeDistKm =
         startPoint && endPoint ? calcDistance(startPoint, endPoint) : null;
@@ -443,6 +462,108 @@ export default function Home() {
             stopAuthListener?.();
         };
     }, []);
+
+    useEffect(() => {
+        if (!isShareReferral) {
+            setShowReferralBanner(false);
+            return;
+        }
+
+        const current = Date.now();
+        const lastSeen = Number(
+            localStorage.getItem(REFERRAL_BANNER_SEEN_KEY) ?? "0",
+        );
+        const shouldShow = current - lastSeen >= REFERRAL_BANNER_COOLDOWN_MS;
+
+        const sessionLogged =
+            sessionStorage.getItem(REFERRAL_VISIT_SESSION_KEY) === "1";
+        if (!sessionLogged) {
+            trackGrowthEvent("referral_visit", {
+                source: "share",
+                challenge: searchParams.get("challenge") ?? "unknown",
+            });
+            sessionStorage.setItem(REFERRAL_VISIT_SESSION_KEY, "1");
+        }
+
+        setShowReferralBanner(shouldShow);
+        if (shouldShow) {
+            trackGrowthEvent("referral_banner_shown", {
+                challenge: searchParams.get("challenge") ?? "unknown",
+            });
+        }
+    }, [isShareReferral, searchParams]);
+
+    useEffect(() => {
+        if (!showGrowthDebug) return;
+        setGrowthSummary(getGrowthSummary());
+    }, [showGrowthDebug, showReferralBanner]);
+
+    useEffect(() => {
+        let mounted = true;
+
+        async function loadWeeklyProgress() {
+            setWeeklyLoaded(false);
+            try {
+                const user = await getCurrentUser();
+                if (!user) {
+                    if (mounted) {
+                        setWeeklyDistanceKm(0);
+                        setWeeklyLoaded(true);
+                    }
+                    return;
+                }
+
+                const records = await getRunningHistory();
+                const now = new Date();
+                const day = now.getDay();
+                const mondayOffset = (day + 6) % 7;
+                const weekStart = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate() - mondayOffset,
+                );
+
+                const distance = records.reduce((sum, record) => {
+                    const created = new Date(record.created_at);
+                    return created >= weekStart ? sum + record.distance_km : sum;
+                }, 0);
+
+                if (mounted) {
+                    setWeeklyDistanceKm(distance);
+                    setWeeklyLoaded(true);
+                }
+            } catch {
+                if (mounted) {
+                    setWeeklyDistanceKm(0);
+                    setWeeklyLoaded(true);
+                }
+            }
+        }
+
+        void loadWeeklyProgress();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    function startReferralChallenge() {
+        localStorage.setItem(REFERRAL_BANNER_SEEN_KEY, String(Date.now()));
+        trackGrowthEvent("referral_banner_start", {
+            challenge: "5k",
+        });
+        setShowReferralBanner(false);
+        setPageMode("goal");
+        setGoal((prev) => ({...prev, distance: 5, distanceInput: ""}));
+        setSheetOpen(true);
+    }
+
+    function dismissReferralBanner() {
+        localStorage.setItem(REFERRAL_BANNER_SEEN_KEY, String(Date.now()));
+        trackGrowthEvent("referral_banner_dismiss", {
+            challenge: searchParams.get("challenge") ?? "unknown",
+        });
+        setShowReferralBanner(false);
+    }
 
     if (isDesktop === null) return null;
     if (isDesktop) return <PCLanding />;
@@ -736,6 +857,173 @@ export default function Home() {
                     {guide.text}
                 </span>
             </div>
+
+            {showReferralBanner && (
+                <div
+                    className="absolute left-4 right-4 z-20"
+                    style={{top: "calc(var(--sat) + 106px)"}}
+                >
+                    <div
+                        className="rounded-2xl px-4 py-3"
+                        style={{
+                            background: "rgba(0,122,255,0.14)",
+                            border: "1px solid rgba(0,122,255,0.35)",
+                            backdropFilter: "blur(12px)",
+                        }}
+                    >
+                        <div className="flex items-center justify-end">
+                            <button
+                                onClick={dismissReferralBanner}
+                                className="w-6 h-6 rounded-lg flex items-center justify-center"
+                                style={{
+                                    color: "var(--c-text-2)",
+                                    background: "rgba(255,255,255,0.25)",
+                                }}
+                                aria-label="추천 배너 닫기"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <p
+                            style={{
+                                fontSize: 13,
+                                fontWeight: 800,
+                                color: "var(--c-toss-blue)",
+                                letterSpacing: "-0.01em",
+                            }}
+                        >
+                            친구가 공유한 기록을 보고 오셨네요
+                        </p>
+                        <p
+                            className="mt-1"
+                            style={{fontSize: 12, color: "var(--c-text-2)"}
+                        >
+                            지금 5km 챌린지를 바로 시작해보세요.
+                        </p>
+                        <button
+                            onClick={startReferralChallenge}
+                            className="mt-2 w-full rounded-xl py-2.5 text-sm font-semibold active:scale-[0.98] transition-transform"
+                            style={{
+                                background: "var(--c-toss-blue)",
+                                color: "#fff",
+                            }}
+                        >
+                            5km 챌린지 시작
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div
+                className="absolute left-4 right-4 z-20"
+                style={{
+                    top: showReferralBanner
+                        ? "calc(var(--sat) + 232px)"
+                        : "calc(var(--sat) + 106px)",
+                }}
+            >
+                <div
+                    className="rounded-2xl px-4 py-3"
+                    style={{
+                        background: "rgba(18,19,21,0.78)",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        backdropFilter: "blur(14px)",
+                    }}
+                >
+                    <div className="flex items-center justify-between">
+                        <p
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "var(--c-text-1)",
+                            }}
+                        >
+                            이번 주 챌린지
+                        </p>
+                        <p
+                            className="num"
+                            style={{fontSize: 12, color: "var(--c-text-2)"}
+                        >
+                            {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
+                        </p>
+                    </div>
+                    <div
+                        className="mt-2 rounded-full overflow-hidden"
+                        style={{height: 7, background: "rgba(255,255,255,0.12)"}}
+                    >
+                        <div
+                            style={{
+                                width: `${Math.round(weeklyProgress * 100)}%`,
+                                height: "100%",
+                                background: "linear-gradient(90deg, #007aff, #34c759)",
+                                transition: "width 220ms ease",
+                            }}
+                        />
+                    </div>
+                    <p
+                        className="mt-2"
+                        style={{fontSize: 11, color: "var(--c-text-3)"}
+                    >
+                        {weeklyLoaded
+                            ? weeklyRemainKm > 0
+                                ? `목표까지 ${weeklyRemainKm.toFixed(1)}km 남았어요.`
+                                : "이번 주 목표를 달성했어요. 훌륭해요!"
+                            : "이번 주 진행률을 계산하는 중..."}
+                    </p>
+                </div>
+            </div>
+
+            {showGrowthDebug && growthSummary && (
+                <div
+                    className="absolute left-4 right-4 z-20"
+                    style={{
+                        top: showReferralBanner
+                            ? "calc(var(--sat) + 358px)"
+                            : "calc(var(--sat) + 232px)",
+                    }}
+                >
+                    <div
+                        className="rounded-2xl px-4 py-3"
+                        style={{
+                            background: "rgba(16,16,20,0.84)",
+                            border: "1px solid rgba(255,255,255,0.18)",
+                            backdropFilter: "blur(14px)",
+                        }}
+                    >
+                        <div className="flex items-center justify-between">
+                            <p
+                                style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "var(--c-text-1)",
+                                }}
+                            >
+                                Growth Debug
+                            </p>
+                            <button
+                                onClick={() => setGrowthSummary(getGrowthSummary())}
+                                className="px-2 py-1 rounded-lg text-xs font-semibold"
+                                style={{
+                                    background: "var(--c-elevated)",
+                                    color: "var(--c-text-2)",
+                                    border: "1px solid var(--c-border)",
+                                }}
+                            >
+                                새로고침
+                            </button>
+                        </div>
+                        <p className="mt-2" style={{fontSize: 11, color: "var(--c-text-3)"}}>
+                            유입 {growthSummary.counters.referral_visit} · 배너노출 {growthSummary.counters.referral_banner_shown} · 시작 {growthSummary.counters.referral_banner_start}
+                        </p>
+                        <p className="mt-1" style={{fontSize: 11, color: "var(--c-text-3)"}}>
+                            전환율(유입→노출) {Math.round(growthSummary.conversion.referralToBannerRate * 100)}% · 전환율(노출→시작) {Math.round(growthSummary.conversion.bannerToStartRate * 100)}%
+                        </p>
+                        <p className="mt-1" style={{fontSize: 11, color: "var(--c-text-3)"}}>
+                            공유 성공률 {Math.round(growthSummary.conversion.shareSuccessRate * 100)}%
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* 장소 검색 패널 - 바텀시트 */}
             {search.open && (

@@ -36,6 +36,7 @@ import type {
 } from "@/types";
 import {useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
+import {trackGrowthEvent} from "@/lib/growthEvents";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
@@ -117,6 +118,17 @@ interface MilestoneBadgeRule {
     title: string;
     description: string;
     icon: string;
+}
+
+function suggestNextGoalDistanceKm(currentKm: number): number {
+    if (!Number.isFinite(currentKm) || currentKm <= 0) return 3;
+    const presets = [3, 5, 10, 21, 42.195];
+    const nextPreset = presets.find((value) => value > currentKm);
+    if (nextPreset) return nextPreset;
+
+    const scaled = currentKm * 1.1;
+    const rounded = Math.ceil(scaled * 2) / 2;
+    return Number(rounded.toFixed(1));
 }
 
 const ACTIVITY_BADGE_RULES: MilestoneBadgeRule[] = [
@@ -237,6 +249,7 @@ async function generateShareImage(
     calories: number,
     personalRecords: PersonalRecordItem[],
     earnedBadges: BadgeItem[],
+    challengeLabel: string,
 ): Promise<Blob> {
     const W = 750,
         H = 440;
@@ -259,6 +272,15 @@ async function generateShareImage(
 
     ctx.fillStyle = accent;
     ctx.fillRect(0, 0, W, 5);
+
+    const challengeBadgeW = Math.max(88, 20 + ctx.measureText(challengeLabel).width);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctxRoundRect(ctx, W - 44 - challengeBadgeW, 72, challengeBadgeW, 26, 13);
+    ctx.fill();
+    ctx.fillStyle = "#d6d9ff";
+    ctx.font = "bold 12px 'Pretendard', -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(challengeLabel, W - 44 - challengeBadgeW + 10, 89);
 
     ctx.fillStyle = accent;
     ctx.font = "bold 22px 'Pretendard', -apple-system, sans-serif";
@@ -855,6 +877,9 @@ export default function ResultPage() {
             personalRecords.length > 0
                 ? `\nPR: ${personalRecords.map((item) => `${item.title} (${item.value})`).join(", ")}`
                 : "";
+        const challenge = result.distance_km >= 10 ? "10k" : "5k";
+        const challengeLabel = challenge === "10k" ? "10K 챌린지" : "5K 챌린지";
+        const shareUrl = `${window.location.origin}/?ref=share&challenge=${challenge}`;
         const shareText =
             [
                 `Run River ${activityLabel} 완료`,
@@ -863,6 +888,7 @@ export default function ResultPage() {
                 `페이스 ${formatPace(result.pace)}/km`,
                 `칼로리 ${cals}kcal`,
             ].join(" | ") + prText;
+        const shareTextWithInvite = `${shareText}\n\n같이 뛰기 챌린지: ${shareUrl}`;
 
         try {
             const blob = await generateShareImage(
@@ -870,6 +896,7 @@ export default function ResultPage() {
                 cals,
                 personalRecords,
                 earnedBadges,
+                challengeLabel,
             );
             const file = new File([blob], "run-river-result.png", {
                 type: "image/png",
@@ -878,13 +905,15 @@ export default function ResultPage() {
             if (navigator.share && navigator.canShare?.({files: [file]})) {
                 await navigator.share({
                     title: "Run River 기록 공유",
-                    text: shareText,
+                    text: shareTextWithInvite,
+                    url: shareUrl,
                     files: [file],
                 });
             } else if (navigator.share) {
                 await navigator.share({
                     title: "Run River 기록 공유",
-                    text: shareText,
+                    text: shareTextWithInvite,
+                    url: shareUrl,
                 });
             } else {
                 const url = URL.createObjectURL(blob);
@@ -893,10 +922,23 @@ export default function ResultPage() {
                 a.download = "run-river-result.png";
                 a.click();
                 URL.revokeObjectURL(url);
+
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(
+                        shareTextWithInvite,
+                    );
+                }
             }
+            trackGrowthEvent("share_success", {
+                challenge,
+                distanceKm: Number(result.distance_km.toFixed(2)),
+            });
             setShareStatus("success");
         } catch (e) {
             if (!(e instanceof Error && e.name === "AbortError")) {
+                trackGrowthEvent("share_error", {
+                    challenge,
+                });
                 setShareStatus("error");
             }
         }
@@ -935,6 +977,19 @@ export default function ResultPage() {
     const adjustedDistanceKm = result.gap_adjustment_distance_km ?? 0;
     const rawDistanceKm = result.gps_distance_km_raw ?? result.distance_km;
     const isAutoGapMode = result.gap_adjustment_auto_enabled ?? false;
+    const nextGoalDistanceKm = suggestNextGoalDistanceKm(result.distance_km);
+
+    function handleStartSuggestedGoal() {
+        const runConfig = {
+            startPoint: result.endPoint,
+            endPoint: null,
+            activityType: result.activity_type,
+            goalDistance: nextGoalDistanceKm,
+            goalTime: null,
+        };
+        sessionStorage.setItem("runConfig", JSON.stringify(runConfig));
+        router.push("/running");
+    }
 
     return (
         <main
@@ -1997,6 +2052,51 @@ export default function ResultPage() {
                 </div>
             </div>
 
+            {/* 다음 목표 제안 */}
+            <div className="px-4 mt-3">
+                <div className="card rounded-2xl p-4">
+                    <p
+                        className="mb-2"
+                        style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.08em",
+                            color: "var(--c-text-3)",
+                        }}
+                    >
+                        다음 목표
+                    </p>
+                    <p
+                        style={{
+                            fontSize: 16,
+                            fontWeight: 800,
+                            color: "var(--c-text-1)",
+                            letterSpacing: "-0.02em",
+                        }}
+                    >
+                        다음엔 {nextGoalDistanceKm.toFixed(nextGoalDistanceKm % 1 === 0 ? 0 : 1)}km 도전
+                    </p>
+                    <p
+                        className="mt-1"
+                        style={{fontSize: 13, color: "var(--c-text-2)"}
+                    >
+                        방금 끝난 지점에서 바로 목표형 러닝을 시작할 수 있어요.
+                    </p>
+                    <button
+                        onClick={handleStartSuggestedGoal}
+                        className="mt-3 w-full py-3 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
+                        style={{
+                            background: `${accent}14`,
+                            color: accent,
+                            border: `1px solid ${accent}44`,
+                        }}
+                    >
+                        이 목표로 바로 시작
+                    </button>
+                </div>
+            </div>
+
             {/* 액션 */}
             <div
                 className="px-4 mt-auto pt-4 space-y-2"
@@ -2021,7 +2121,7 @@ export default function ResultPage() {
                         className="text-center"
                         style={{fontSize: 12, color: "var(--c-walk)"}}
                     >
-                        공유 완료!
+                        공유 완료! 친구 초대 링크도 함께 전송됐어요.
                     </p>
                 )}
                 {shareStatus === "error" && (
