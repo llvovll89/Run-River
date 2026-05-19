@@ -17,18 +17,18 @@ export default function PWAUpdateBanner() {
         top: "calc(var(--sat, 0px) + 12px)",
         maxWidth: "calc(430px - 32px)",
         width: "calc(100vw - 32px)",
-        background: "var(--c-elevated, #1c1c1e)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+        background: "var(--c-surface)",
+        border: "1px solid var(--c-border)",
+        boxShadow: "var(--c-card-shadow, 0 8px 24px rgba(0,0,0,0.18))",
         backdropFilter: "blur(16px)",
       }}
     >
       {/* 아이콘 */}
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: "rgba(0,122,255,0.18)" }}
+        style={{ background: "color-mix(in srgb, var(--c-toss-blue) 14%, transparent)" }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#007aff" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-toss-blue)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
@@ -52,8 +52,9 @@ export default function PWAUpdateBanner() {
           disabled={isApplying}
           className="px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
           style={{
-            background: isApplying ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
-            color: isApplying ? "rgba(255,255,255,0.35)" : "var(--c-text-2, rgba(255,255,255,0.6))",
+            background: "var(--c-elevated)",
+            border: "1px solid var(--c-border)",
+            color: isApplying ? "var(--c-text-3)" : "var(--c-text-2)",
           }}
         >
           나중에
@@ -63,9 +64,11 @@ export default function PWAUpdateBanner() {
           disabled={isApplying}
           className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 transition-transform"
           style={{
-            background: isApplying ? "#4d87c8" : "#007aff",
+            background: isApplying
+              ? "color-mix(in srgb, var(--c-toss-blue) 68%, var(--c-surface))"
+              : "var(--c-toss-blue)",
             color: "#fff",
-            boxShadow: "0 2px 10px rgba(0,122,255,0.45)",
+            boxShadow: "0 2px 10px color-mix(in srgb, var(--c-toss-blue) 45%, transparent)",
           }}
         >
           {isApplying ? "적용 중" : "업데이트"}

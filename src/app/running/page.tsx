@@ -828,10 +828,10 @@ export default function RunningPage() {
   if (!config) {
     if (configError) {
       return (
-        <main className="min-h-dvh flex items-center justify-center" style={{ background: "#0a0b0c" }}>
+        <main className="min-h-dvh flex items-center justify-center" style={{ background: "var(--c-bg)" }}>
           <div className="text-center px-6">
-            <p style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 8 }}>설정 정보가 없어요</p>
-            <p style={{ fontSize: 13, color: "#5e636a" }}>홈으로 돌아갑니다…</p>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "var(--c-text-1)", marginBottom: 8 }}>설정 정보가 없어요</p>
+            <p style={{ fontSize: 13, color: "var(--c-text-3)" }}>홈으로 돌아갑니다…</p>
           </div>
         </main>
       );
@@ -874,7 +874,7 @@ export default function RunningPage() {
         : "🧊 쿨다운";
 
   return (
-    <main className="relative w-full h-dvh overflow-hidden" style={{ background: "#0a0b0c" }}>
+    <main className="relative w-full h-dvh overflow-hidden" style={{ background: "var(--c-bg)" }}>
       <KakaoMap
         center={position ?? config.startPoint}
         startPoint={config.startPoint}

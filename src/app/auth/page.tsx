@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect, useState} from "react";
+import {useRouter} from "next/navigation";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 
 type AuthMode = "login" | "signup";
@@ -59,6 +60,7 @@ function toKoreanAuthError(rawMessage: string, mode: AuthMode): string {
 }
 
 export default function AuthPage() {
+    const router = useRouter();
     const [next, setNext] = useState("/");
     const [mode, setMode] = useState<AuthMode>("login");
     const [email, setEmail] = useState("");
@@ -253,6 +255,47 @@ export default function AuthPage() {
                     </div>
                 </div>
             )}
+
+            <div className="mb-3 flex items-center gap-2">
+                <button
+                    onClick={() => {
+                        if (window.history.length > 1) {
+                            router.back();
+                            return;
+                        }
+                        router.push("/");
+                    }}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                    style={{
+                        background: "var(--c-surface)",
+                        border: "1px solid var(--c-border)",
+                        color: "var(--c-text-1)",
+                    }}
+                    aria-label="뒤로가기"
+                >
+                    <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <path d="M15 18l-6-6 6-6" />
+                    </svg>
+                </button>
+                <p
+                    style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "var(--c-text-2)",
+                    }}
+                >
+                    홈으로 돌아가기
+                </p>
+            </div>
 
             <section
                 className="rounded-3xl p-5"

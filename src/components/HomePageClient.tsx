@@ -355,8 +355,7 @@ export default function Home() {
     );
     const [weeklyDistanceKm, setWeeklyDistanceKm] = useState(0);
     const [weeklyLoaded, setWeeklyLoaded] = useState(false);
-    const [weeklyChallengeCollapsed, setWeeklyChallengeCollapsed] =
-        useState(true);
+    const [weeklyChallengeOpen, setWeeklyChallengeOpen] = useState(false);
     const [pendingProtectedRoute, setPendingProtectedRoute] =
         useState<ProtectedPath | null>(null);
     const canStart =
@@ -375,6 +374,9 @@ export default function Home() {
     const weeklyGoalKm = Math.max(1, profile.weeklyGoalKm || 20);
     const weeklyProgress = Math.min(1, weeklyDistanceKm / weeklyGoalKm);
     const weeklyRemainKm = Math.max(0, weeklyGoalKm - weeklyDistanceKm);
+    const growthDebugTop = showReferralBanner
+        ? "calc(var(--sat) + 232px)"
+        : "calc(var(--sat) + 106px)";
 
     const routeDistKm =
         startPoint && endPoint ? calcDistance(startPoint, endPoint) : null;
@@ -406,93 +408,32 @@ export default function Home() {
                 : {text: "준비 완료 · 출발하세요", color: "var(--c-walk)"};
 
     useEffect(() => {
-        let mounted = true;
-        let stopAuthListener: (() => void) | null = null;
-
-        async function syncAuthUser() {
-            try {
-                const {getSupabaseBrowserClient} =
-                    await import("@/lib/supabaseClient");
-                const supabase = getSupabaseBrowserClient();
-
-                const applyAuthUser = (
-                    user: {
-                        email?: string | null;
-                        user_metadata?: Record<string, unknown>;
-                    } | null,
-                ) => {
-                    if (!mounted) return;
-                    if (!user?.email) {
-                        setAuthUser(null);
-                        return;
-                    }
-
-                    const meta = user.user_metadata;
-                    const metaName =
-                        typeof meta?.full_name === "string"
-                            ? meta.full_name
-                            : typeof meta?.name === "string"
-                              ? meta.name
-                              : typeof meta?.nickname === "string"
-                                ? meta.nickname
-                                : null;
-
-                    setAuthUser({
-                        email: user.email,
-                        name: metaName,
-                    });
-                };
-
-                const {data} = await supabase.auth.getUser();
-                applyAuthUser(data.user ?? null);
-
-                // 로그인/로그아웃 직후 메뉴 정보가 즉시 반영되도록 구독
-                const {data: authState} = supabase.auth.onAuthStateChange(
-                    (_event, session) => {
-                        applyAuthUser(session?.user ?? null);
-                    },
-                );
-                stopAuthListener = () => authState.subscription.unsubscribe();
-            } catch {
-                if (mounted) setAuthUser(null);
-            }
-        }
-
-        void syncAuthUser();
-
-        return () => {
-            mounted = false;
-            stopAuthListener?.();
-        };
-    }, []);
-
-    useEffect(() => {
         if (!isShareReferral) {
             setShowReferralBanner(false);
             return;
         }
 
-        const current = Date.now();
-        const lastSeen = Number(
-            localStorage.getItem(REFERRAL_BANNER_SEEN_KEY) ?? "0",
-        );
-        const shouldShow = current - lastSeen >= REFERRAL_BANNER_COOLDOWN_MS;
+        const now = Date.now();
+        const lastSeenRaw = localStorage.getItem(REFERRAL_BANNER_SEEN_KEY);
+        const lastSeenAt = lastSeenRaw ? Number(lastSeenRaw) : 0;
+        const withinCooldown =
+            Number.isFinite(lastSeenAt) &&
+            lastSeenAt > 0 &&
+            now - lastSeenAt < REFERRAL_BANNER_COOLDOWN_MS;
+        const shouldShow = !withinCooldown;
+        setShowReferralBanner(shouldShow);
 
-        const sessionLogged =
+        const challenge = searchParams.get("challenge") ?? "unknown";
+        const visitLogged =
             sessionStorage.getItem(REFERRAL_VISIT_SESSION_KEY) === "1";
-        if (!sessionLogged) {
-            trackGrowthEvent("referral_visit", {
-                source: "share",
-                challenge: searchParams.get("challenge") ?? "unknown",
-            });
+
+        if (!visitLogged) {
+            trackGrowthEvent("referral_visit", {challenge});
             sessionStorage.setItem(REFERRAL_VISIT_SESSION_KEY, "1");
         }
 
-        setShowReferralBanner(shouldShow);
         if (shouldShow) {
-            trackGrowthEvent("referral_banner_shown", {
-                challenge: searchParams.get("challenge") ?? "unknown",
-            });
+            trackGrowthEvent("referral_banner_shown", {challenge});
         }
     }, [isShareReferral, searchParams]);
 
@@ -917,101 +858,10 @@ export default function Home() {
                 </div>
             )}
 
-            <div
-                className="absolute right-4 z-20"
-                style={{
-                    top: showReferralBanner
-                        ? "calc(var(--sat) + 232px)"
-                        : "calc(var(--sat) + 106px)",
-                    width: "min(320px, calc(100vw - 32px))",
-                }}
-            >
-                <div
-                    className="rounded-2xl px-3.5 py-2.5"
-                    style={{
-                        background: "rgba(18,19,21,0.78)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        backdropFilter: "blur(14px)",
-                    }}
-                >
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <p
-                                style={{
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    color: "var(--c-text-1)",
-                                }}
-                            >
-                                이번 주 챌린지
-                            </p>
-                            <button
-                                onClick={() =>
-                                    setWeeklyChallengeCollapsed((prev) => !prev)
-                                }
-                                className="w-5 h-5 rounded-md flex items-center justify-center"
-                                style={{
-                                    color: "var(--c-text-3)",
-                                    background: "rgba(255,255,255,0.08)",
-                                }}
-                                aria-label={
-                                    weeklyChallengeCollapsed
-                                        ? "이번 주 챌린지 펼치기"
-                                        : "이번 주 챌린지 접기"
-                                }
-                            >
-                                {weeklyChallengeCollapsed ? "+" : "-"}
-                            </button>
-                        </div>
-                        <p
-                            className="num"
-                            style={{fontSize: 12, color: "var(--c-text-2)"}}
-                        >
-                            {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
-                        </p>
-                    </div>
-                    {!weeklyChallengeCollapsed && (
-                        <>
-                            <div
-                                className="mt-2 rounded-full overflow-hidden"
-                                style={{
-                                    height: 7,
-                                    background: "rgba(255,255,255,0.12)",
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        width: `${Math.round(weeklyProgress * 100)}%`,
-                                        height: "100%",
-                                        background:
-                                            "linear-gradient(90deg, #007aff, #34c759)",
-                                        transition: "width 220ms ease",
-                                    }}
-                                />
-                            </div>
-                            <p
-                                className="mt-2"
-                                style={{fontSize: 11, color: "var(--c-text-3)"}}
-                            >
-                                {weeklyLoaded
-                                    ? weeklyRemainKm > 0
-                                        ? `목표까지 ${weeklyRemainKm.toFixed(1)}km 남았어요.`
-                                        : "이번 주 목표를 달성했어요. 훌륭해요!"
-                                    : "이번 주 진행률을 계산하는 중..."}
-                            </p>
-                        </>
-                    )}
-                </div>
-            </div>
-
             {showGrowthDebug && growthSummary && (
                 <div
                     className="absolute left-4 right-4 z-20"
-                    style={{
-                        top: showReferralBanner
-                            ? "calc(var(--sat) + 358px)"
-                            : "calc(var(--sat) + 232px)",
-                    }}
+                    style={{top: growthDebugTop}}
                 >
                     <div
                         className="rounded-2xl px-4 py-3"
@@ -1573,6 +1423,107 @@ export default function Home() {
                 </div>
 
                 <div className="px-4 space-y-3">
+                    {!weeklyChallengeOpen ? (
+                        <button
+                            onClick={() => setWeeklyChallengeOpen(true)}
+                            className="rounded-full pl-2 pr-2.5 py-1.5 flex items-center gap-1.5 self-start"
+                            style={{
+                                background: "var(--c-elevated)",
+                                border: "1px solid var(--c-border)",
+                                backdropFilter: "blur(12px)",
+                            }}
+                            aria-label="이번 주 챌린지 펼치기"
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="w-4 h-4 rounded-full flex items-center justify-center"
+                                style={{
+                                    background: "rgba(0,122,255,0.2)",
+                                    color: "#64d2ff",
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    lineHeight: 1,
+                                }}
+                            >
+                                ★
+                            </span>
+                            <span
+                                className="num"
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "var(--c-text-1)",
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
+                            </span>
+                        </button>
+                    ) : (
+                        <div
+                            className="rounded-2xl px-4 py-3"
+                            style={{
+                                background: "var(--c-elevated)",
+                                border: "1px solid var(--c-border)",
+                                backdropFilter: "blur(12px)",
+                            }}
+                        >
+                            <div className="flex items-center justify-between">
+                                <p
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        color: "var(--c-text-1)",
+                                    }}
+                                >
+                                    이번 주 챌린지
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <p
+                                        className="num"
+                                        style={{fontSize: 12, color: "var(--c-text-2)"}}
+                                    >
+                                        {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
+                                    </p>
+                                    <button
+                                        onClick={() => setWeeklyChallengeOpen(false)}
+                                        className="w-5 h-5 rounded-md flex items-center justify-center"
+                                        style={{
+                                            color: "var(--c-text-3)",
+                                            background: "var(--c-surface)",
+                                        }}
+                                        aria-label="이번 주 챌린지 접기"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                            <div
+                                className="mt-2 rounded-full overflow-hidden"
+                                style={{height: 7, background: "var(--c-border)"}}
+                            >
+                                <div
+                                    style={{
+                                        width: `${Math.round(weeklyProgress * 100)}%`,
+                                        height: "100%",
+                                        background: "linear-gradient(90deg, #007aff, #34c759)",
+                                        transition: "width 220ms ease",
+                                    }}
+                                />
+                            </div>
+                            <p
+                                className="mt-2"
+                                style={{fontSize: 11, color: "var(--c-text-3)"}}
+                            >
+                                {weeklyLoaded
+                                    ? weeklyRemainKm > 0
+                                        ? `목표까지 ${weeklyRemainKm.toFixed(1)}km 남았어요.`
+                                        : "이번 주 목표를 달성했어요. 훌륭해요!"
+                                    : "이번 주 진행률을 계산하는 중..."}
+                            </p>
+                        </div>
+                    )}
+
                     {/* 모드 탭 */}
                     <div
                         className="flex gap-1 p-1 rounded-2xl"
