@@ -896,7 +896,7 @@ export default function Home() {
                         </p>
                         <p
                             className="mt-1"
-                            style={{fontSize: 12, color: "var(--c-text-2)"}
+                            style={{fontSize: 12, color: "var(--c-text-2)"}}
                         >
                             지금 5km 챌린지를 바로 시작해보세요.
                         </p>
@@ -942,7 +942,7 @@ export default function Home() {
                         </p>
                         <p
                             className="num"
-                            style={{fontSize: 12, color: "var(--c-text-2)"}
+                            style={{fontSize: 12, color: "var(--c-text-2)"}}
                         >
                             {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
                         </p>
@@ -962,7 +962,7 @@ export default function Home() {
                     </div>
                     <p
                         className="mt-2"
-                        style={{fontSize: 11, color: "var(--c-text-3)"}
+                        style={{fontSize: 11, color: "var(--c-text-3)"}}
                     >
                         {weeklyLoaded
                             ? weeklyRemainKm > 0
