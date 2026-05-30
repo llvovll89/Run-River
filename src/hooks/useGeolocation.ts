@@ -76,6 +76,8 @@ export function useGeolocation(): UseGeolocationReturn {
   const elapsedSecondsRef = useRef(0);
   const lastAltitudeRef = useRef<number | null>(null);
   const startAltitudeRef = useRef<number | null>(null);
+  const altGainBufferRef = useRef(0);
+  const altLossBufferRef = useRef(0);
   const totalDistanceRef = useRef(0);
   const activityTypeRef = useRef<ActivityType>("running");
 
@@ -123,9 +125,20 @@ export function useGeolocation(): UseGeolocationReturn {
           }
           if (lastAltitudeRef.current !== null) {
             const deltaAltitude = altitude - lastAltitudeRef.current;
-            if (Math.abs(deltaAltitude) >= ALTITUDE_NOISE_THRESHOLD_M) {
-              if (deltaAltitude > 0) setElevationGain((prev) => prev + deltaAltitude);
-              if (deltaAltitude < 0) setElevationLoss((prev) => prev + Math.abs(deltaAltitude));
+            if (deltaAltitude > 0) {
+              altGainBufferRef.current += deltaAltitude;
+              altLossBufferRef.current = 0;
+              if (altGainBufferRef.current >= ALTITUDE_NOISE_THRESHOLD_M) {
+                setElevationGain((prev) => prev + altGainBufferRef.current);
+                altGainBufferRef.current = 0;
+              }
+            } else if (deltaAltitude < 0) {
+              altLossBufferRef.current += Math.abs(deltaAltitude);
+              altGainBufferRef.current = 0;
+              if (altLossBufferRef.current >= ALTITUDE_NOISE_THRESHOLD_M) {
+                setElevationLoss((prev) => prev + altLossBufferRef.current);
+                altLossBufferRef.current = 0;
+              }
             }
           }
           lastAltitudeRef.current = altitude;
@@ -208,6 +221,8 @@ export function useGeolocation(): UseGeolocationReturn {
       lastTimestampRef.current = null;
       lastAltitudeRef.current = restore.endAltitude;
       startAltitudeRef.current = restore.startAltitude;
+      altGainBufferRef.current = 0;
+      altLossBufferRef.current = 0;
     } else {
       setPathPoints([]);
       setTrackPoints([]);
@@ -224,6 +239,8 @@ export function useGeolocation(): UseGeolocationReturn {
       lastTimestampRef.current = null;
       lastAltitudeRef.current = null;
       startAltitudeRef.current = null;
+      altGainBufferRef.current = 0;
+      altLossBufferRef.current = 0;
     }
 
     setState((prev) => ({ ...prev, isTracking: true, error: null }));

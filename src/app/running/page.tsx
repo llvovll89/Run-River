@@ -86,6 +86,8 @@ export default function RunningPage() {
   const startTimeRef = useRef<number>(0);
   const baseElapsedRef = useRef<number>(0);
   const isPausedRef = useRef(false);
+  const isPausingRef = useRef(false);
+  const frozenPositionRef = useRef<typeof position>(null);
 
   const { permission, requestPermission } = useNotification();
   const { profile } = useUserProfile();
@@ -112,7 +114,8 @@ export default function RunningPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
   const [followUser, setFollowUser] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; undoFn?: () => void } | null>(null);
+  const [isOnline, setIsOnline] = useState(() => typeof navigator !== "undefined" ? navigator.onLine : true);
   const [pendingRecovery, setPendingRecovery] = useState<RunRecoverySnapshot | null>(null);
   const [gapSuggestion, setGapSuggestion] = useState<GapSuggestion | null>(null);
   const [adjustedDistanceKm, setAdjustedDistanceKm] = useState(0);
@@ -160,8 +163,8 @@ export default function RunningPage() {
 
   const effectiveDistance = totalDistance + adjustedDistanceKm;
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((msg: string, undoFn?: () => void) => {
+    setToast({ msg, undoFn });
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 4000);
   }, []);
@@ -170,11 +173,14 @@ export default function RunningPage() {
     setAdjustedDistanceKm((prev) => prev + suggestion.suggestedDistanceKm);
     setUntrackedSeconds((prev) => prev + suggestion.gapSeconds);
     setAdjustedGapCount((prev) => prev + 1);
-    if (isAuto) {
-      showToast(`공백 ${suggestion.gapSeconds}초를 ${suggestion.suggestedDistanceKm.toFixed(2)}km로 자동 보정했어요.`);
-    } else {
-      showToast(`공백 ${suggestion.gapSeconds}초를 ${suggestion.suggestedDistanceKm.toFixed(2)}km로 보정했어요.`);
-    }
+    const undoFn = () => {
+      setAdjustedDistanceKm((prev) => prev - suggestion.suggestedDistanceKm);
+      setUntrackedSeconds((prev) => prev - suggestion.gapSeconds);
+      setAdjustedGapCount((prev) => prev - 1);
+      showToast("공백 보정을 취소했어요.");
+    };
+    const prefix = isAuto ? "GPS 신호 끊김" : "공백 보정";
+    showToast(`${prefix} ${suggestion.gapSeconds}초 → +${suggestion.suggestedDistanceKm.toFixed(2)}km`, undoFn);
   }, [showToast]);
 
   const saveRecoverySnapshot = useCallback((payload: Omit<RunRecoverySnapshot, "version" | "updatedAt">) => {
@@ -597,14 +603,17 @@ export default function RunningPage() {
   ]);
 
   const handlePause = useCallback(() => {
+    frozenPositionRef.current = position;
     pauseTracking();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     baseElapsedRef.current += (Date.now() - startTimeRef.current) / 1000;
     isPausedRef.current = true;
+    isPausingRef.current = false;
     setIsPaused(true);
-  }, [pauseTracking]);
+  }, [pauseTracking, position]);
 
   const handleResume = useCallback(() => {
+    frozenPositionRef.current = null;
     resumeTracking();
     startTimeRef.current = Date.now();
     isPausedRef.current = false;
@@ -778,7 +787,8 @@ export default function RunningPage() {
     if (!stillnessTimerRef.current) {
       stillnessTimerRef.current = setTimeout(() => {
         stillnessTimerRef.current = null;
-        if (!isPausedRef.current) {
+        if (!isPausedRef.current && !isPausingRef.current) {
+          isPausingRef.current = true;
           handlePause();
           showToast("자동으로 일시정지됨");
         }
@@ -824,6 +834,18 @@ export default function RunningPage() {
   useEffect(() => {
     localStorage.setItem("voiceGuide", voiceEnabled ? "on" : "off");
   }, [voiceEnabled]);
+
+  // 온라인/오프라인 감지
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
 
   if (!config) {
     if (configError) {
@@ -876,11 +898,11 @@ export default function RunningPage() {
   return (
     <main className="relative w-full h-dvh overflow-hidden" style={{ background: "var(--c-bg)" }}>
       <KakaoMap
-        center={position ?? config.startPoint}
+        center={(isPaused ? frozenPositionRef.current : position) ?? config.startPoint}
         startPoint={config.startPoint}
         endPoint={config.endPoint}
-        currentPosition={position}
-        heading={heading}
+        currentPosition={isPaused ? frozenPositionRef.current : position}
+        heading={isPaused ? undefined : heading}
         pathPoints={pathPoints}
         showArrivalRadius
         activityType={config.activityType}
@@ -916,26 +938,75 @@ export default function RunningPage() {
         </button>
       )}
 
-      {/* GPS 중단 토스트 */}
+      {/* 오프라인 배너 */}
+      {!isOnline && (
+        <div
+          className="absolute z-30 left-0 right-0 flex items-center justify-center gap-2 px-4 py-2"
+          style={{
+            top: "calc(var(--sat) + 0px)",
+            background: "rgba(255,69,58,0.92)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          오프라인 — 기록은 로컬 저장됨
+        </div>
+      )}
+
+      {/* 토스트 */}
       {toast && (
         <div
-          className="absolute z-30 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-2xl"
+          className="absolute z-30 left-1/2 -translate-x-1/2 rounded-2xl"
           style={{
-            top: "calc(var(--sat) + 80px)",
+            top: isOnline ? "calc(var(--sat) + 80px)" : "calc(var(--sat) + 112px)",
             background: "rgba(30,30,32,0.95)",
             border: "1px solid rgba(255,159,10,0.4)",
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
-            color: "#ff9f0a",
-            fontSize: 13,
-            fontWeight: 600,
             maxWidth: "calc(100vw - 32px)",
-            textAlign: "center",
             boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-            whiteSpace: "pre-wrap",
           }}
         >
-          {toast}
+          <div
+            className="flex items-center gap-2 px-4 py-2.5"
+            style={{
+              color: "#ff9f0a",
+              fontSize: 13,
+              fontWeight: 600,
+              textAlign: toast.undoFn ? "left" : "center",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            <span>{toast.msg}</span>
+            {toast.undoFn && (
+              <button
+                onClick={() => {
+                  toast.undoFn?.();
+                  setToast(null);
+                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+                }}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#fff",
+                  background: "rgba(255,255,255,0.18)",
+                  border: "1px solid rgba(255,255,255,0.28)",
+                  borderRadius: 8,
+                  padding: "2px 10px",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+            )}
+          </div>
         </div>
       )}
 

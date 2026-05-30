@@ -17,7 +17,13 @@ import {
     formatDateFull,
     calcPace,
     getPaceZone,
+    calcCaloriesByPace,
 } from "@/lib/utils";
+import {
+    type BadgeItem,
+    type PersonalRecordItem,
+    derivePerformance,
+} from "@/lib/badges";
 import {
     ResponsiveContainer,
     LineChart,
@@ -99,27 +105,6 @@ interface RunAnalysis {
     timeSplits: SplitRow[];
 }
 
-interface PersonalRecordItem {
-    key: "distance" | "pace" | "duration";
-    title: string;
-    value: string;
-}
-
-interface BadgeItem {
-    key: string;
-    title: string;
-    description: string;
-    icon: string;
-}
-
-interface MilestoneBadgeRule {
-    key: string;
-    threshold: number;
-    title: string;
-    description: string;
-    icon: string;
-}
-
 function suggestNextGoalDistanceKm(currentKm: number): number {
     if (!Number.isFinite(currentKm) || currentKm <= 0) return 3;
     const presets = [3, 5, 10, 21, 42.195];
@@ -131,97 +116,6 @@ function suggestNextGoalDistanceKm(currentKm: number): number {
     return Number(rounded.toFixed(1));
 }
 
-const ACTIVITY_BADGE_RULES: MilestoneBadgeRule[] = [
-    {
-        key: "activity_5",
-        threshold: 5,
-        title: "첫 루틴",
-        description: "누적 5회 활동",
-        icon: "🗓",
-    },
-    {
-        key: "activity_10",
-        threshold: 10,
-        title: "꾸준한 러너",
-        description: "누적 10회 활동",
-        icon: "🔥",
-    },
-    {
-        key: "activity_25",
-        threshold: 25,
-        title: "습관 완성",
-        description: "누적 25회 활동",
-        icon: "🏅",
-    },
-];
-
-const TOTAL_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
-    {
-        key: "total_10",
-        threshold: 10,
-        title: "10km 누적",
-        description: "총 10km 달성",
-        icon: "📍",
-    },
-    {
-        key: "total_42195",
-        threshold: 42.195,
-        title: "첫 마라톤 누적",
-        description: "총 42.195km 달성",
-        icon: "🏁",
-    },
-    {
-        key: "total_100",
-        threshold: 100,
-        title: "100km 클럽",
-        description: "총 100km 달성",
-        icon: "💯",
-    },
-];
-
-const SINGLE_DISTANCE_BADGE_RULES: MilestoneBadgeRule[] = [
-    {
-        key: "single_5",
-        threshold: 5,
-        title: "5km 완주",
-        description: "단일 활동 5km 달성",
-        icon: "🥉",
-    },
-    {
-        key: "single_10",
-        threshold: 10,
-        title: "10km 완주",
-        description: "단일 활동 10km 달성",
-        icon: "🥈",
-    },
-    {
-        key: "single_21",
-        threshold: 21,
-        title: "하프 도전",
-        description: "단일 활동 21km 달성",
-        icon: "🥇",
-    },
-];
-
-function calcCaloriesByPace(
-    pace: number,
-    activityType: ActivityType,
-    weightKg: number,
-    durationSeconds: number,
-): number {
-    let met: number;
-    if (activityType === "running") {
-        if (pace < 4.5) met = 14.0;
-        else if (pace < 5.5) met = 11.5;
-        else if (pace < 6.5) met = 9.8;
-        else met = 8.0;
-    } else {
-        if (pace < 7.0) met = 5.0;
-        else if (pace < 12.0) met = 3.8;
-        else met = 2.5;
-    }
-    return Math.round(met * weightKg * (durationSeconds / 3600));
-}
 
 function ctxRoundRect(
     ctx: CanvasRenderingContext2D,
@@ -583,126 +477,6 @@ function deriveRunAnalysis(result: RunResult): RunAnalysis | null {
     };
 }
 
-function resolveMilestoneBadges(
-    prevValue: number,
-    nextValue: number,
-    rules: MilestoneBadgeRule[],
-): BadgeItem[] {
-    return rules
-        .filter(
-            (rule) => prevValue < rule.threshold && nextValue >= rule.threshold,
-        )
-        .map((rule) => ({
-            key: rule.key,
-            title: rule.title,
-            description: rule.description,
-            icon: rule.icon,
-        }));
-}
-
-function derivePerformance(
-    current: RunningRecord,
-    records: RunningRecord[],
-): {personalRecords: PersonalRecordItem[]; earnedBadges: BadgeItem[]} {
-    const previousRecords = records.filter((r) => r.id !== current.id);
-    const previousSameActivity = previousRecords.filter(
-        (r) => r.activity_type === current.activity_type,
-    );
-
-    const personalRecords: PersonalRecordItem[] = [];
-
-    const prevMaxDistance =
-        previousSameActivity.length > 0
-            ? Math.max(...previousSameActivity.map((r) => r.distance_km))
-            : 0;
-    if (
-        previousSameActivity.length === 0 ||
-        current.distance_km > prevMaxDistance + 0.0001
-    ) {
-        personalRecords.push({
-            key: "distance",
-            title: "최장 거리 PR",
-            value: `${current.distance_km.toFixed(2)}km`,
-        });
-    }
-
-    const paceCandidates = previousSameActivity.filter(
-        (r) => r.distance_km >= 1 && r.duration_seconds >= 300,
-    );
-    const hasCurrentPaceCandidate =
-        current.distance_km >= 1 && current.duration_seconds >= 300;
-    const prevBestPace =
-        paceCandidates.length > 0
-            ? Math.min(...paceCandidates.map((r) => r.pace))
-            : Number.POSITIVE_INFINITY;
-    if (
-        hasCurrentPaceCandidate &&
-        (paceCandidates.length === 0 || current.pace < prevBestPace - 0.0001)
-    ) {
-        personalRecords.push({
-            key: "pace",
-            title: "최고 페이스 PR",
-            value: `${formatPace(current.pace)}/km`,
-        });
-    }
-
-    const prevMaxDuration =
-        previousSameActivity.length > 0
-            ? Math.max(...previousSameActivity.map((r) => r.duration_seconds))
-            : 0;
-    if (
-        previousSameActivity.length === 0 ||
-        current.duration_seconds > prevMaxDuration
-    ) {
-        personalRecords.push({
-            key: "duration",
-            title: "최장 시간 PR",
-            value: formatDuration(current.duration_seconds),
-        });
-    }
-
-    const prevCount = previousRecords.length;
-    const nextCount = records.length;
-    const prevTotalDistance = previousRecords.reduce(
-        (sum, r) => sum + r.distance_km,
-        0,
-    );
-    const nextTotalDistance = records.reduce(
-        (sum, r) => sum + r.distance_km,
-        0,
-    );
-
-    const earnedBadges: BadgeItem[] = [];
-    earnedBadges.push(
-        ...resolveMilestoneBadges(prevCount, nextCount, ACTIVITY_BADGE_RULES),
-    );
-    earnedBadges.push(
-        ...resolveMilestoneBadges(
-            prevTotalDistance,
-            nextTotalDistance,
-            TOTAL_DISTANCE_BADGE_RULES,
-        ),
-    );
-    earnedBadges.push(
-        ...resolveMilestoneBadges(
-            0,
-            current.distance_km,
-            SINGLE_DISTANCE_BADGE_RULES,
-        ),
-    );
-
-    if (prevCount === 0) {
-        earnedBadges.push({
-            key: "first_activity",
-            title: "첫 발자국",
-            description: "첫 활동 기록 저장 완료",
-            icon: "🌱",
-        });
-    }
-
-    return {personalRecords, earnedBadges};
-}
-
 export default function ResultPage() {
     const MEMO_MAX_LENGTH = 300;
     const router = useRouter();
@@ -719,6 +493,7 @@ export default function ResultPage() {
     const [memo, setMemo] = useState("");
     const [lastSavedMemo, setLastSavedMemo] = useState("");
     const [memoSaving, setMemoSaving] = useState(false);
+    const [isSharing, setIsSharing] = useState(false);
     const [memoStatus, setMemoStatus] = useState<"idle" | "success" | "error">(
         "idle",
     );
@@ -863,7 +638,8 @@ export default function ResultPage() {
     }, [savedId, memoSaving, memo]);
 
     const handleShare = useCallback(async () => {
-        if (!result) return;
+        if (!result || isSharing) return;
+        setIsSharing(true);
 
         const activityLabel =
             result.activity_type === "running" ? "러닝" : "워킹";
@@ -941,8 +717,10 @@ export default function ResultPage() {
                 });
                 setShareStatus("error");
             }
+        } finally {
+            setIsSharing(false);
         }
-    }, [result, personalRecords, earnedBadges, profile.weight]);
+    }, [result, personalRecords, earnedBadges, profile.weight, isSharing]);
 
     const analysis = useMemo(
         () => (result ? deriveRunAnalysis(result) : null),
@@ -2106,17 +1884,17 @@ export default function ResultPage() {
             >
                 <button
                     onClick={handleShare}
-                    disabled={saving || !savedId}
+                    disabled={saving || !savedId || isSharing}
                     className="w-full py-3.5 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
                     style={{
                         background: accent,
                         color: "#fff",
-                        opacity: saving || !savedId ? 0.6 : 1,
+                        opacity: saving || !savedId || isSharing ? 0.6 : 1,
                         letterSpacing: "-0.01em",
                         boxShadow: `0 4px 20px ${accent}44`,
                     }}
                 >
-                    기록 공유하기
+                    {isSharing ? "이미지 생성 중…" : "기록 공유하기"}
                 </button>
                 {shareStatus === "success" && (
                     <p

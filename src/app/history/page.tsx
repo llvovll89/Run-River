@@ -4,12 +4,15 @@ import {
     formatPace,
     formatDateShort,
     formatTime,
+    calcCaloriesByPace,
 } from "@/lib/utils";
 import Link from "next/link";
 import type {RunningRecord} from "@/types";
 import WeeklyChart from "@/components/WeeklyChart";
+import PaceTrendChart from "@/components/PaceTrendChart";
 import DeleteRecordButton from "@/components/DeleteRecordButton";
 import EditableMemo from "@/components/EditableMemo";
+import {deriveAllBadges} from "@/lib/badges";
 
 export const revalidate = 0;
 
@@ -75,6 +78,20 @@ export default async function HistoryPage() {
             : 0;
     const currentStreak = calcCurrentStreak(records);
 
+    const DEFAULT_WEIGHT_KG = 70;
+    const totalCalories = records.reduce(
+        (s, r) => s + calcCaloriesByPace(r.pace, r.activity_type, DEFAULT_WEIGHT_KG, r.duration_seconds),
+        0,
+    );
+
+    const runRecords = records.filter((r) => r.activity_type === "running");
+    const walkRecords = records.filter((r) => r.activity_type === "walking");
+    const runDist = runRecords.reduce((s, r) => s + r.distance_km, 0);
+    const walkDist = walkRecords.reduce((s, r) => s + r.distance_km, 0);
+    const runAvgPace = runRecords.length > 0 ? runRecords.reduce((s, r) => s + r.pace, 0) / runRecords.length : 0;
+    const walkAvgPace = walkRecords.length > 0 ? walkRecords.reduce((s, r) => s + r.pace, 0) / walkRecords.length : 0;
+    const allBadges = deriveAllBadges(records);
+
     return (
         <main className="min-h-dvh" style={{background: "var(--c-bg)"}}>
             {/* 헤더 */}
@@ -133,6 +150,7 @@ export default async function HistoryPage() {
 
             {/* 요약 카드 */}
             {records.length > 0 && (
+                <>
                 <div className="px-4 pt-4">
                     <div className="card rounded-2xl p-4">
                         <p
@@ -169,42 +187,111 @@ export default async function HistoryPage() {
                                 label="연속"
                             />
                         </div>
-                        {avgPace > 0 && (
-                            <div
-                                className="flex justify-between items-center mt-3 pt-3"
-                                style={{borderTop: "1px solid var(--c-border)"}}
-                            >
-                                <span
-                                    style={{
-                                        fontSize: 13,
-                                        color: "var(--c-text-2)",
-                                    }}
-                                >
-                                    평균 페이스
-                                </span>
-                                <span
-                                    className="num"
-                                    style={{
-                                        fontSize: 15,
-                                        fontWeight: 700,
-                                        color: "var(--c-text-1)",
-                                    }}
-                                >
-                                    {formatPace(avgPace)}{" "}
-                                    <span
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: 500,
-                                            color: "var(--c-text-2)",
-                                        }}
-                                    >
-                                        /km
+                        <div
+                            className="grid mt-3 pt-3"
+                            style={{
+                                borderTop: "1px solid var(--c-border)",
+                                gridTemplateColumns: avgPace > 0 ? "1fr 1fr" : "1fr",
+                                gap: 8,
+                            }}
+                        >
+                            {avgPace > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>평균 페이스</span>
+                                    <span className="num" style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>
+                                        {formatPace(avgPace)}{" "}
+                                        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--c-text-2)" }}>/km</span>
                                     </span>
-                                </span>
-                            </div>
-                        )}
+                                </div>
+                            )}
+                            {totalCalories > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span style={{ fontSize: 13, color: "var(--c-text-2)" }}>총 칼로리</span>
+                                    <span className="num" style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>
+                                        {totalCalories.toLocaleString()}{" "}
+                                        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--c-text-2)" }}>kcal</span>
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
+
+                {/* 활동 유형별 분석 */}
+                {runRecords.length > 0 && walkRecords.length > 0 && (
+                    <div className="px-4 pt-3">
+                        <div className="card rounded-2xl p-4">
+                            <p
+                                className="mb-3"
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    color: "var(--c-text-3)",
+                                }}
+                            >
+                                유형별 분석
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <ActivityTypeCard
+                                    label="러닝"
+                                    accent="var(--c-toss-blue)"
+                                    count={runRecords.length}
+                                    distKm={runDist}
+                                    avgPace={runAvgPace}
+                                />
+                                <ActivityTypeCard
+                                    label="워킹"
+                                    accent="var(--c-walk)"
+                                    count={walkRecords.length}
+                                    distKm={walkDist}
+                                    avgPace={walkAvgPace}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <PaceTrendChart records={records} />
+
+                {allBadges.length > 0 && (
+                    <div className="px-4 pt-3">
+                        <div className="card rounded-2xl p-4">
+                            <p
+                                className="mb-3"
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    color: "var(--c-text-3)",
+                                }}
+                            >
+                                획득한 배지
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {allBadges.map((badge) => (
+                                    <div
+                                        key={badge.key}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                                        style={{
+                                            background: "var(--c-elevated)",
+                                            border: "1px solid var(--c-border)",
+                                        }}
+                                    >
+                                        <span style={{fontSize: 20}}>{badge.icon}</span>
+                                        <div>
+                                            <p style={{fontSize: 12, fontWeight: 600, color: "var(--c-text-1)", lineHeight: 1.2}}>{badge.title}</p>
+                                            <p style={{fontSize: 10, color: "var(--c-text-3)", marginTop: 1}}>{badge.description}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                </>
             )}
 
             {/* 주간 차트 */}
@@ -318,6 +405,48 @@ function SummaryNum({
             <p style={{fontSize: 11, color: "var(--c-text-3)", marginTop: 2}}>
                 {label}
             </p>
+        </div>
+    );
+}
+
+function ActivityTypeCard({
+    label,
+    accent,
+    count,
+    distKm,
+    avgPace,
+}: {
+    label: string;
+    accent: string;
+    count: number;
+    distKm: number;
+    avgPace: number;
+}) {
+    return (
+        <div
+            className="rounded-xl p-3"
+            style={{ background: "var(--c-elevated)", border: "1px solid var(--c-border)" }}
+        >
+            <div className="flex items-center gap-1.5 mb-2">
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: accent }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--c-text-2)" }}>{label}</span>
+            </div>
+            <div className="space-y-1">
+                <div className="flex justify-between">
+                    <span style={{ fontSize: 11, color: "var(--c-text-3)" }}>거리</span>
+                    <span className="num" style={{ fontSize: 13, fontWeight: 700, color: "var(--c-text-1)" }}>{distKm.toFixed(1)} km</span>
+                </div>
+                <div className="flex justify-between">
+                    <span style={{ fontSize: 11, color: "var(--c-text-3)" }}>횟수</span>
+                    <span className="num" style={{ fontSize: 13, fontWeight: 700, color: "var(--c-text-1)" }}>{count}회</span>
+                </div>
+                {avgPace > 0 && (
+                    <div className="flex justify-between">
+                        <span style={{ fontSize: 11, color: "var(--c-text-3)" }}>평균 페이스</span>
+                        <span className="num" style={{ fontSize: 13, fontWeight: 700, color: accent }}>{formatPace(avgPace)}</span>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

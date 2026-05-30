@@ -4,6 +4,7 @@ import ThemeProvider from "@/components/ThemeProvider";
 import PWAUpdateBanner from "@/components/PWAUpdateBanner";
 import OfflineSyncBanner from "@/components/OfflineSyncBanner";
 import AppRecovery from "@/components/AppRecovery";
+import PageTransition from "@/components/PageTransition";
 import { UserProfileProvider } from "@/hooks/useUserProfile";
 import { OfflineSyncProvider } from "@/hooks/useOfflineSync";
 
@@ -83,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <OfflineSyncProvider>
                 <PWAUpdateBanner />
                 <OfflineSyncBanner />
-                {children}
+                <PageTransition>{children}</PageTransition>
               </OfflineSyncProvider>
             </UserProfileProvider>
           </ThemeProvider>

@@ -22,6 +22,14 @@ const KakaoMap = dynamicImport(() => import("@/components/KakaoMap"), {
 
 type PointMode = "start" | "end" | null;
 type PageMode = "map" | "goal" | "time" | "interval";
+interface SavedRoute {
+    id: string;
+    label: string;
+    startPoint: LatLng;
+    endPoint: LatLng;
+    startAddr: string;
+    endAddr: string;
+}
 type AuthSummary = {
     name: string | null;
     email: string;
@@ -29,6 +37,8 @@ type AuthSummary = {
 type ProtectedPath = "/history" | "/settings";
 const GOAL_PRESETS = [3, 5, 10, 21];
 const TIME_PRESETS = [15, 20, 30, 45, 60];
+const SAVED_ROUTES_KEY = "rr_saved_routes";
+const SAVED_ROUTES_MAX = 5;
 const REFERRAL_BANNER_SEEN_KEY = "rr_referral_banner_seen_at";
 const REFERRAL_BANNER_COOLDOWN_MS = 1000 * 60 * 60 * 24 * 7;
 const REFERRAL_VISIT_SESSION_KEY = "rr_referral_visit_logged";
@@ -81,6 +91,44 @@ export default function Home() {
     const sheetRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<KakaoMapHandle>(null);
     const hasCenteredRef = useRef(false);
+    const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(SAVED_ROUTES_KEY);
+            if (raw) setSavedRoutes(JSON.parse(raw) as SavedRoute[]);
+        } catch {}
+    }, []);
+
+    function saveCurrentRoute() {
+        if (!startPoint || !endPoint) return;
+        const newRoute: SavedRoute = {
+            id: Date.now().toString(),
+            label: addresses.end || `경로 ${savedRoutes.length + 1}`,
+            startPoint,
+            endPoint,
+            startAddr: addresses.start,
+            endAddr: addresses.end,
+        };
+        const next = [newRoute, ...savedRoutes].slice(0, SAVED_ROUTES_MAX);
+        setSavedRoutes(next);
+        localStorage.setItem(SAVED_ROUTES_KEY, JSON.stringify(next));
+    }
+
+    function deleteSavedRoute(id: string) {
+        const next = savedRoutes.filter((r) => r.id !== id);
+        setSavedRoutes(next);
+        localStorage.setItem(SAVED_ROUTES_KEY, JSON.stringify(next));
+    }
+
+    function loadSavedRoute(r: SavedRoute) {
+        startAddrOverride.current = r.startAddr;
+        endAddrOverride.current = r.endAddr;
+        setStartPoint(r.startPoint);
+        setEndPoint(r.endPoint);
+        setAddresses({start: r.startAddr, end: r.endAddr});
+        mapRef.current?.panTo(r.startPoint);
+    }
 
     // PC 감지: 임시 비활성화 (개발/테스트용)
     useEffect(() => {
@@ -1605,6 +1653,42 @@ export default function Home() {
                     {/* 지도 모드: 포인트 카드 */}
                     {pageMode === "map" && (
                         <div className="space-y-2">
+                            {/* 저장된 경로 */}
+                            {savedRoutes.length > 0 && (
+                                <div className="flex gap-2 overflow-x-auto pb-1" style={{scrollbarWidth: "none"}}>
+                                    {savedRoutes.map((r) => (
+                                        <div
+                                            key={r.id}
+                                            className="flex items-center gap-1.5 shrink-0 rounded-full pl-3 pr-1 py-1.5"
+                                            style={{
+                                                background: "var(--c-elevated)",
+                                                border: "1px solid var(--c-border)",
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                color: "var(--c-text-1)",
+                                                cursor: "pointer",
+                                            }}
+                                            onClick={() => loadSavedRoute(r)}
+                                        >
+                                            <span style={{maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                                                {r.label}
+                                            </span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteSavedRoute(r.id);
+                                                }}
+                                                className="w-5 h-5 rounded-full flex items-center justify-center"
+                                                style={{background: "var(--c-border)", color: "var(--c-text-3)", flexShrink: 0}}
+                                            >
+                                                <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                                                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-2">
                                 <PointCard
                                     label="출발"
@@ -1640,6 +1724,24 @@ export default function Home() {
                                     onClick={() => openSearchFor("end")}
                                 />
                             </div>
+                            {startPoint && endPoint && (
+                                <button
+                                    onClick={saveCurrentRoute}
+                                    className="w-full py-2 rounded-2xl flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+                                    style={{
+                                        background: "var(--c-elevated)",
+                                        border: "1px solid var(--c-border)",
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: "var(--c-text-2)",
+                                    }}
+                                >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                                    </svg>
+                                    이 경로 저장
+                                </button>
+                            )}
                             {(routeDistLabel || route.loading) && (
                                 <div
                                     className="flex items-center justify-center gap-2 py-2 rounded-2xl"

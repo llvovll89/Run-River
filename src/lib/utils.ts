@@ -55,6 +55,26 @@ export function getPaceZone(
   }
 }
 
+export function calcCaloriesByPace(
+  pace: number,
+  activityType: "running" | "walking",
+  weightKg: number,
+  durationSeconds: number,
+): number {
+  let met: number;
+  if (activityType === "running") {
+    if (pace < 4.5) met = 14.0;
+    else if (pace < 5.5) met = 11.5;
+    else if (pace < 6.5) met = 9.8;
+    else met = 8.0;
+  } else {
+    if (pace < 7.0) met = 5.0;
+    else if (pace < 12.0) met = 3.8;
+    else met = 2.5;
+  }
+  return Math.round(met * weightKg * (durationSeconds / 3600));
+}
+
 export function getPaceGuidance(
   pace: number,
   activityType: "running" | "walking"

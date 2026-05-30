@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import type { RunningRecord } from "@/types";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { formatDuration, formatPace, calcPace } from "@/lib/utils";
 
 interface Props {
   records: RunningRecord[];
@@ -25,10 +26,25 @@ function getLast7Days(): { date: string; label: string }[] {
   });
 }
 
+function getCurrentMonthDays(): { date: string; label: string }[] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const today = now.getDate();
+  return Array.from({ length: today }, (_, i) => {
+    const d = new Date(year, month, i + 1);
+    return {
+      date: d.toISOString().slice(0, 10),
+      label: String(i + 1),
+    };
+  });
+}
+
 export default function WeeklyChart({ records }: Props) {
   const { profile, saveProfile } = useUserProfile();
   const goal = profile.weeklyGoalKm;
 
+  const [tab, setTab] = useState<"weekly" | "monthly">("weekly");
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState("");
 
@@ -39,16 +55,41 @@ export default function WeeklyChart({ records }: Props) {
   }
 
   const days = getLast7Days();
-  const data = days.map(({ date, label }) => {
+  const weekData = days.map(({ date, label }) => {
     const km = records
       .filter((r) => r.created_at.slice(0, 10) === date)
       .reduce((s, r) => s + r.distance_km, 0);
     return { label, km: parseFloat(km.toFixed(2)) };
   });
 
-  const weekTotal = data.reduce((s, d) => s + d.km, 0);
-  const progress  = Math.min(100, (weekTotal / goal) * 100);
-  const accent    = "var(--c-toss-blue)";
+  const monthDays = getCurrentMonthDays();
+  const monthData = monthDays.map(({ date, label }) => {
+    const km = records
+      .filter((r) => r.created_at.slice(0, 10) === date)
+      .reduce((s, r) => s + r.distance_km, 0);
+    return { label, km: parseFloat(km.toFixed(2)) };
+  });
+
+  const weekTotal = weekData.reduce((s, d) => s + d.km, 0);
+  const monthTotal = monthData.reduce((s, d) => s + d.km, 0);
+  const monthRecords = records.filter((r) => {
+    const now = new Date();
+    const d = new Date(r.created_at);
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+  const monthAvgPace =
+    monthRecords.length > 0
+      ? calcPace(
+          monthRecords.reduce((s, r) => s + r.distance_km, 0),
+          monthRecords.reduce((s, r) => s + r.duration_seconds, 0),
+        )
+      : 0;
+  const monthTotalDuration = monthRecords.reduce((s, r) => s + r.duration_seconds, 0);
+
+  const progress = Math.min(100, (weekTotal / goal) * 100);
+  const accent = "var(--c-toss-blue)";
+
+  const data = tab === "weekly" ? weekData : monthData;
 
   return (
     <div className="px-4 pt-3 space-y-3">
@@ -136,22 +177,43 @@ export default function WeeklyChart({ records }: Props) {
         )}
       </div>
 
-      {/* 바 차트 카드 */}
+      {/* 탭 + 차트 카드 */}
       <div className="card rounded-2xl p-4">
-        <p
-          className="mb-4"
-          style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}
-        >
-          최근 7일 거리
-        </p>
+        <div className="flex items-center justify-between mb-4">
+          <div
+            className="flex rounded-xl overflow-hidden"
+            style={{ border: "1px solid var(--c-border)", background: "var(--c-elevated)" }}
+          >
+            {(["weekly", "monthly"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className="px-3 py-1.5 text-xs font-semibold transition-all"
+                style={{
+                  background: tab === t ? accent : "transparent",
+                  color: tab === t ? "#fff" : "var(--c-text-2)",
+                }}
+              >
+                {t === "weekly" ? "주간" : "월간"}
+              </button>
+            ))}
+          </div>
+          {tab === "monthly" && monthTotal > 0 && (
+            <span className="num text-xs" style={{ color: "var(--c-text-3)" }}>
+              이달 {monthTotal.toFixed(1)} km
+            </span>
+          )}
+        </div>
+
         <ResponsiveContainer width="100%" height={140}>
           <BarChart data={data} barCategoryGap="30%">
             <CartesianGrid vertical={false} stroke="var(--c-border)" strokeDasharray="3 3" />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 11, fill: "var(--c-text-3)" }}
+              tick={{ fontSize: tab === "monthly" ? 9 : 11, fill: "var(--c-text-3)" }}
               axisLine={false}
               tickLine={false}
+              interval={tab === "monthly" ? 4 : 0}
             />
             <YAxis
               tick={{ fontSize: 11, fill: "var(--c-text-3)" }}
@@ -175,11 +237,11 @@ export default function WeeklyChart({ records }: Props) {
               {data.map((entry, idx) => (
                 <Cell
                   key={idx}
-                  fill={entry.km > 0 ? "var(--c-toss-blue)" : "var(--c-elevated)"}
+                  fill={entry.km > 0 ? accent : "var(--c-elevated)"}
                 />
               ))}
             </Bar>
-            {goal > 0 && (
+            {tab === "weekly" && goal > 0 && (
               <ReferenceLine
                 y={goal / 7}
                 stroke="#f59e0b"
@@ -189,9 +251,28 @@ export default function WeeklyChart({ records }: Props) {
             )}
           </BarChart>
         </ResponsiveContainer>
-        <p className="text-right mt-1" style={{ fontSize: 10, color: "var(--c-text-3)" }}>
-          점선 = 목표 일일 평균 ({(goal / 7).toFixed(1)} km/일)
-        </p>
+
+        {tab === "weekly" && (
+          <p className="text-right mt-1" style={{ fontSize: 10, color: "var(--c-text-3)" }}>
+            점선 = 목표 일일 평균 ({(goal / 7).toFixed(1)} km/일)
+          </p>
+        )}
+
+        {tab === "monthly" && monthRecords.length > 0 && (
+          <div className="grid grid-cols-3 mt-3 pt-3" style={{ borderTop: "1px solid var(--c-border)" }}>
+            {[
+              { label: "활동", value: String(monthRecords.length), unit: "회" },
+              { label: "시간", value: formatDuration(monthTotalDuration), unit: "" },
+              { label: "평균 페이스", value: formatPace(monthAvgPace), unit: "/km" },
+            ].map(({ label, value, unit }) => (
+              <div key={label} className="text-center">
+                <p style={{ fontSize: 10, color: "var(--c-text-3)", marginBottom: 2 }}>{label}</p>
+                <span className="num" style={{ fontSize: 14, fontWeight: 700, color: "var(--c-text-1)" }}>{value}</span>
+                {unit && <span style={{ fontSize: 10, color: "var(--c-text-3)" }}> {unit}</span>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
