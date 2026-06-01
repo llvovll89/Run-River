@@ -19,11 +19,26 @@ import {
 import {DEFAULT_RUN_TUNING, normalizeRunTuning} from "@/lib/runTuning";
 import type {UserProfile} from "@/types";
 
+function formatRetryTime(ts: number | null): string {
+    if (!ts) return "-";
+    const diffSec = Math.max(0, Math.round((ts - Date.now()) / 1000));
+    if (diffSec <= 0) return "지금";
+    if (diffSec < 60) return `${diffSec}초 후`;
+    return `${Math.round(diffSec / 60)}분 후`;
+}
+
 export default function SettingsPage() {
     const router = useRouter();
     const {profile, saveProfile, syncState, syncErrorMessage, retrySync} =
         useUserProfile();
-    const {pendingCount, exhaustedCount, syncing, syncNow} = useOfflineSync();
+    const {
+        pendingCount,
+        blockedCount,
+        exhaustedCount,
+        syncing,
+        nextRetryAt,
+        syncNow,
+    } = useOfflineSync();
 
     const [weight, setWeight] = useState(String(profile.weight));
     const [height, setHeight] = useState(String(profile.height));
@@ -41,6 +56,9 @@ export default function SettingsPage() {
         prepared: number;
         message: string;
     }>({running: false, total: 0, prepared: 0, message: ""});
+    const [isOnline, setIsOnline] = useState(() =>
+        typeof navigator !== "undefined" ? navigator.onLine : true,
+    );
     const [unclaimedCount, setUnclaimedCount] = useState(0);
     const [claiming, setClaiming] = useState(false);
     const [claimMessage, setClaimMessage] = useState("");
@@ -97,11 +115,22 @@ export default function SettingsPage() {
         };
     }, []);
 
+    useEffect(() => {
+        const onOnline = () => setIsOnline(true);
+        const onOffline = () => setIsOnline(false);
+        window.addEventListener("online", onOnline);
+        window.addEventListener("offline", onOffline);
+        return () => {
+            window.removeEventListener("online", onOnline);
+            window.removeEventListener("offline", onOffline);
+        };
+    }, []);
+
     async function handleRetryExhausted(id: string) {
         resetRetry(id);
         setExhaustedItems(getExhaustedQueue());
         try {
-            await syncNow();
+            await syncNow(true);
             setSyncError(null);
         } catch {
             setSyncError("동기화 재시도 중 오류가 발생했습니다.");
@@ -137,7 +166,7 @@ export default function SettingsPage() {
         });
 
         try {
-            await syncNow();
+            await syncNow(true);
             setSyncError(null);
             const remaining = getExhaustedQueue().length;
             const processed = Math.max(0, updated - remaining);
@@ -178,7 +207,7 @@ export default function SettingsPage() {
                     : "가져올 기존 기록이 없습니다.",
             );
             if (claimed > 0) {
-                await syncNow();
+                await syncNow(true);
             }
         } catch {
             setClaimMessage(
@@ -297,7 +326,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-2 mb-4">
                     <button
                         onClick={() => router.back()}
-                        className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                        className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
                         style={{
                             background: "var(--c-elevated)",
                             border: "1px solid var(--c-border)",
@@ -365,7 +394,7 @@ export default function SettingsPage() {
                     {syncState === "error" && (
                         <button
                             onClick={() => void retrySync()}
-                            className="px-2.5 py-1 rounded-full text-xs font-semibold active:scale-95 transition-transform"
+                            className="h-11 px-3 rounded-full text-xs font-semibold active:scale-95 transition-transform"
                             style={{
                                 background: "rgba(0,122,255,0.14)",
                                 color: "var(--c-toss-blue)",
@@ -431,7 +460,7 @@ export default function SettingsPage() {
                         <button
                             onClick={() => void handleClaimLegacyRecords()}
                             disabled={claiming || unclaimedCount <= 0}
-                            className="px-3 py-2 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
+                            className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
                             style={{
                                 background:
                                     claiming || unclaimedCount <= 0
@@ -615,7 +644,7 @@ export default function SettingsPage() {
                         </p>
                         <button
                             onClick={handleResetRunTuningDefaults}
-                            className="px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
+                            className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
                             style={{
                                 background: "var(--c-elevated)",
                                 color: "var(--c-text-2)",
@@ -716,32 +745,76 @@ export default function SettingsPage() {
                     >
                         실패 누적 {exhaustedCount}건은 수동 재시도 또는 삭제할
                         수 있어요.
+                        {blockedCount > 0
+                            ? ` 자동 재시도 ${formatRetryTime(nextRetryAt)} (${blockedCount}건)`
+                            : ""}
                     </p>
+                    {!isOnline && (
+                        <p
+                            style={{
+                                fontSize: 12,
+                                color: "#ff9f0a",
+                                marginBottom: 10,
+                            }}
+                        >
+                            오프라인 상태에서는 동기화가 대기됩니다.
+                        </p>
+                    )}
                     <button
-                        onClick={() => void syncNow()}
-                        className="px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+                        onClick={() =>
+                            void syncNow(exhaustedCount > 0)
+                        }
+                        className="h-11 px-3 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
                         style={{
                             background: syncing
                                 ? "var(--c-elevated)"
-                                : "var(--c-toss-blue)",
-                            color: syncing ? "var(--c-text-3)" : "#fff",
-                            border: "1px solid var(--c-border)",
+                                : exhaustedCount > 0
+                                  ? "rgba(255,159,10,0.12)"
+                                  : "var(--c-toss-blue)",
+                            color: syncing
+                                ? "var(--c-text-3)"
+                                : exhaustedCount > 0
+                                  ? "#ff9f0a"
+                                  : "#fff",
+                            border:
+                                exhaustedCount > 0
+                                    ? "1px solid rgba(255,159,10,0.3)"
+                                    : "1px solid var(--c-border)",
                         }}
-                        disabled={syncing}
+                        disabled={syncing || !isOnline}
                     >
-                        {syncing ? "동기화 중..." : "지금 동기화"}
+                        {syncing
+                            ? "동기화 중..."
+                            : exhaustedCount > 0
+                              ? "강제 동기화"
+                              : "지금 동기화"}
                     </button>
+
+                    {exhaustedCount > 0 && (
+                        <button
+                            onClick={() => void syncNow(true)}
+                            className="ml-2 h-11 px-3 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+                            style={{
+                                background: "rgba(255,159,10,0.12)",
+                                color: "#ff9f0a",
+                                border: "1px solid rgba(255,159,10,0.3)",
+                            }}
+                            disabled={syncing || !isOnline}
+                        >
+                            강제 동기화
+                        </button>
+                    )}
 
                     {exhaustedItems.length > 1 && (
                         <button
                             onClick={() => void handleRetryAllExhausted()}
-                            className="ml-2 px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+                            className="ml-2 h-11 px-3 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
                             style={{
                                 background: "rgba(0,122,255,0.12)",
                                 color: "var(--c-toss-blue)",
                                 border: "1px solid rgba(0,122,255,0.3)",
                             }}
-                            disabled={syncing}
+                            disabled={syncing || !isOnline}
                         >
                             실패 전체 재시도
                         </button>
@@ -829,7 +902,7 @@ export default function SettingsPage() {
                                                     item.queueId,
                                                 )
                                             }
-                                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
+                                            className="h-11 px-3 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
                                             style={{
                                                 background:
                                                     "rgba(0,122,255,0.12)",
@@ -845,7 +918,7 @@ export default function SettingsPage() {
                                                     item.queueId,
                                                 )
                                             }
-                                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
+                                            className="h-11 px-3 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
                                             style={{
                                                 background:
                                                     "rgba(255,69,58,0.12)",

@@ -107,7 +107,7 @@ export default async function HistoryPage() {
                 <div className="flex items-center gap-2 mb-4">
                     <Link
                         href="/"
-                        className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                        className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
                         style={{
                             background: "var(--c-elevated)",
                             border: "1px solid var(--c-border)",

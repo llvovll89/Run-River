@@ -15,6 +15,7 @@ import {
     getQueueSummary,
     markRetry,
     resetRetry,
+    resetAllExhaustedRetries,
     RETRY_EXHAUSTED_AT,
 } from "@/lib/offlineQueue";
 
@@ -30,7 +31,7 @@ interface OfflineSyncContextValue {
     lastSyncedAt: number | null;
     lastError: string | null;
     nextRetryAt: number | null;
-    syncNow: () => Promise<void>;
+    syncNow: (force?: boolean) => Promise<void>;
 }
 
 const OfflineSyncContext = createContext<OfflineSyncContextValue | null>(null);
@@ -53,7 +54,7 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
         setNextRetryAt(summary.nextRetryAt);
     }, []);
 
-    const syncNow = useCallback(async () => {
+    const syncNow = useCallback(async (force = false) => {
         if (syncInFlightRef.current || !navigator.onLine) {
             refreshSummary();
             return;
@@ -67,11 +68,18 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
         try {
             const {saveRunningRecord} = await getSupabaseSyncApi();
             const now = Date.now();
+
+            if (force) {
+                resetAllExhaustedRetries();
+            }
+
             const queue = getQueue();
 
             for (const item of queue) {
-                if (item.nextRetryAt === RETRY_EXHAUSTED_AT) continue;
-                if (item.nextRetryAt > now) continue;
+                if (!force) {
+                    if (item.nextRetryAt === RETRY_EXHAUSTED_AT) continue;
+                    if (item.nextRetryAt > now) continue;
+                }
 
                 try {
                     await saveRunningRecord(item.record);
@@ -82,7 +90,8 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
                     latestError =
                         e instanceof Error ? e.message : "동기화 실패";
                     markRetry(item.queueId, latestError);
-                    break;
+                    // 한 건 실패해도 나머지 가능한 항목은 계속 동기화한다.
+                    continue;
                 }
             }
         } finally {

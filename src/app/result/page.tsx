@@ -70,6 +70,23 @@ interface RunResult {
     intervalTotalRestSeconds?: number;
 }
 
+function isValidRunResult(value: unknown): value is RunResult {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Partial<RunResult>;
+    const hasDistance =
+        typeof candidate.distance_km === "number" &&
+        Number.isFinite(candidate.distance_km);
+    const hasDuration =
+        typeof candidate.duration_seconds === "number" &&
+        Number.isFinite(candidate.duration_seconds);
+    const hasPace =
+        typeof candidate.pace === "number" && Number.isFinite(candidate.pace);
+    const hasActivity =
+        candidate.activity_type === "running" ||
+        candidate.activity_type === "walking";
+    return hasDistance && hasDuration && hasPace && hasActivity;
+}
+
 interface AltitudePoint {
     x: number;
     altitude: number;
@@ -508,7 +525,17 @@ export default function ResultPage() {
         "distance",
     );
     const [splitMode, setSplitMode] = useState<"distance" | "time">("distance");
-    const {pendingCount, syncing, lastSyncedAt, syncNow} = useOfflineSync();
+    const [isOnline, setIsOnline] = useState(() =>
+        typeof navigator !== "undefined" ? navigator.onLine : true,
+    );
+    const {
+        pendingCount,
+        blockedCount,
+        exhaustedCount,
+        syncing,
+        lastSyncedAt,
+        syncNow,
+    } = useOfflineSync();
 
     const doSave = useCallback((parsed: RunResult) => {
         setSaving(true);
@@ -570,7 +597,19 @@ export default function ResultPage() {
                 return;
             }
 
-            const parsed: RunResult = JSON.parse(raw);
+            let parsed: RunResult;
+            try {
+                const decoded = JSON.parse(raw) as unknown;
+                if (!isValidRunResult(decoded)) {
+                    throw new Error("invalid runResult payload");
+                }
+                parsed = decoded;
+            } catch {
+                sessionStorage.removeItem("runResult");
+                sessionStorage.removeItem("runConfig");
+                router.replace("/");
+                return;
+            }
             if (!mounted) return;
             setResult(parsed);
 
@@ -602,6 +641,17 @@ export default function ResultPage() {
             mounted = false;
         };
     }, [doSave, router]);
+
+    useEffect(() => {
+        const onOnline = () => setIsOnline(true);
+        const onOffline = () => setIsOnline(false);
+        window.addEventListener("online", onOnline);
+        window.addEventListener("offline", onOffline);
+        return () => {
+            window.removeEventListener("online", onOnline);
+            window.removeEventListener("offline", onOffline);
+        };
+    }, []);
 
     const handleDiscard = useCallback(async () => {
         if (!savedId || discarding) return;
@@ -789,7 +839,7 @@ export default function ResultPage() {
                 <div className="flex items-center justify-between mb-4">
                     <button
                         onClick={() => router.push("/")}
-                        className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                        className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
                         style={{
                             background: "var(--c-elevated)",
                             border: "1px solid var(--c-border)",
@@ -845,17 +895,6 @@ export default function ResultPage() {
                                 >
                                     오프라인 저장됨 · 연결 시 자동 업로드
                                 </span>
-                                <button
-                                    onClick={() => void syncNow()}
-                                    className="text-xs font-semibold px-2.5 py-1 rounded-full active:scale-95 transition-transform"
-                                    style={{
-                                        background: "var(--c-elevated)",
-                                        color: "var(--c-text-1)",
-                                        border: "1px solid var(--c-border)",
-                                    }}
-                                >
-                                    {syncing ? "동기화 중" : "지금 동기화"}
-                                </button>
                             </div>
                         ) : saveError ? (
                             <div className="flex items-center gap-2">
@@ -867,7 +906,7 @@ export default function ResultPage() {
                                 </span>
                                 <button
                                     onClick={() => result && doSave(result)}
-                                    className="text-xs font-semibold px-2.5 py-1 rounded-full active:scale-95 transition-transform"
+                                    className="text-xs font-semibold h-11 px-3 rounded-full active:scale-95 transition-transform"
                                     style={{
                                         background: "rgba(255,69,58,0.12)",
                                         color: "var(--c-danger)",
@@ -889,7 +928,7 @@ export default function ResultPage() {
                                     onClick={() =>
                                         router.push("/auth?next=/history")
                                     }
-                                    className="text-xs font-semibold px-2.5 py-1 rounded-full active:scale-95 transition-transform"
+                                    className="text-xs font-semibold h-11 px-3 rounded-full active:scale-95 transition-transform"
                                     style={{
                                         background: "var(--c-elevated)",
                                         color: "var(--c-text-1)",
@@ -949,13 +988,53 @@ export default function ResultPage() {
                     </div>
                 )}
                 {(offlineSaved || pendingCount > 0) && (
-                    <p
-                        className="mt-1"
-                        style={{fontSize: 12, color: "var(--c-text-3)"}}
-                    >
-                        동기화 대기 {pendingCount}건 · 마지막 성공{" "}
-                        {formatSyncAgo(lastSyncedAt)}
-                    </p>
+                    <>
+                        <p
+                            className="mt-1"
+                            style={{fontSize: 12, color: "var(--c-text-3)"}}
+                        >
+                            동기화 대기 {pendingCount}건
+                            {blockedCount > 0 ? ` · 재시도 대기 ${blockedCount}건` : ""}
+                            {exhaustedCount > 0 ? ` · 수동 확인 ${exhaustedCount}건` : ""}
+                            {` · 마지막 성공 ${formatSyncAgo(lastSyncedAt)}`}
+                        </p>
+                        <div className="mt-2 flex items-center gap-2">
+                            <button
+                                onClick={() =>
+                                    void syncNow(exhaustedCount > 0)
+                                }
+                                className="text-xs font-semibold h-11 px-3 rounded-full active:scale-95 transition-transform"
+                                style={{
+                                    background:
+                                        exhaustedCount > 0
+                                            ? "rgba(255,159,10,0.18)"
+                                            : "var(--c-elevated)",
+                                    color:
+                                        exhaustedCount > 0
+                                            ? "#ff9f0a"
+                                            : "var(--c-text-1)",
+                                    border:
+                                        exhaustedCount > 0
+                                            ? "1px solid rgba(255,159,10,0.35)"
+                                            : "1px solid var(--c-border)",
+                                }}
+                                disabled={syncing || !isOnline}
+                            >
+                                {syncing
+                                    ? "동기화 중"
+                                    : exhaustedCount > 0
+                                      ? "강제 동기화"
+                                      : "지금 동기화"}
+                            </button>
+                            {!isOnline && (
+                                <span
+                                    style={{fontSize: 11, color: "#ff9f0a"}}
+                                >
+                                    오프라인
+                                </span>
+                            )}
+                        </div>
+                    </>
                 )}
             </div>
 
@@ -1069,7 +1148,7 @@ export default function ResultPage() {
                                         onClick={() =>
                                             setAltitudeMode("distance")
                                         }
-                                        className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                        className="h-11 px-3 rounded-full text-xs font-semibold"
                                         style={{
                                             background:
                                                 altitudeMode === "distance"
@@ -1089,7 +1168,7 @@ export default function ResultPage() {
                                     </button>
                                     <button
                                         onClick={() => setAltitudeMode("time")}
-                                        className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                        className="h-11 px-3 rounded-full text-xs font-semibold"
                                         style={{
                                             background:
                                                 altitudeMode === "time"
@@ -1265,7 +1344,7 @@ export default function ResultPage() {
                                 <div className="flex items-center gap-1.5">
                                     <button
                                         onClick={() => setSplitMode("distance")}
-                                        className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                        className="h-11 px-3 rounded-full text-xs font-semibold"
                                         style={{
                                             background:
                                                 splitMode === "distance"
@@ -1285,7 +1364,7 @@ export default function ResultPage() {
                                     </button>
                                     <button
                                         onClick={() => setSplitMode("time")}
-                                        className="px-2.5 py-1 rounded-full text-xs font-semibold"
+                                        className="h-11 px-3 rounded-full text-xs font-semibold"
                                         style={{
                                             background:
                                                 splitMode === "time"

@@ -4,7 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "check:env": "node scripts/validate-env.mjs",
+    "verify:deploy": "npm run check:env && npm run build",
+    "build": "cross-env NEXT_DISABLE_PWA=1 next build",
+    "build:pwa": "next build",
+    "build:pwa:debug": "cross-env NEXT_DISABLE_PWA=0 NODE_OPTIONS=--trace-uncaught next build",
     "start": "next start"
   },
   "dependencies": {
@@ -21,6 +25,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^7.0.3",
     "postcss": "^8",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.4",

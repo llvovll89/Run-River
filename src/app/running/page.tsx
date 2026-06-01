@@ -16,11 +16,14 @@ const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
 
 const RUN_RECOVERY_KEY = "runInProgress";
 const RUN_RECOVERY_MAX_AGE_MS = 1000 * 60 * 60 * 6;
+const PACE_COACHING_INTERVAL_MS = 1000 * 120;
 
 interface GapSuggestion {
   gapSeconds: number;
   suggestedDistanceKm: number;
 }
+
+type CompletionReason = "destination" | "distance" | "time" | "interval";
 
 type IntervalPhase = "warmup" | "run" | "rest" | "cooldown";
 
@@ -80,6 +83,7 @@ export default function RunningPage() {
   const [configError, setConfigError] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [arrived, setArrived] = useState(false);
+  const [completionReason, setCompletionReason] = useState<CompletionReason | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const arrivedRef = useRef(false);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -129,6 +133,7 @@ export default function RunningPage() {
     typeof window !== "undefined" ? localStorage.getItem("voiceGuide") !== "off" : true
   );
   const lastAnnouncedKmRef = useRef(0);
+  const lastPaceCoachAtRef = useRef(0);
   const { speak, cancel: cancelSpeak } = useVoiceGuide();
 
   useEffect(() => {
@@ -239,6 +244,8 @@ export default function RunningPage() {
     setUntrackedSeconds(recovery?.untrackedSeconds ?? 0);
     setAdjustedGapCount(recovery?.adjustedGapCount ?? 0);
     setGapSuggestion(null);
+    setArrived(false);
+    setCompletionReason(null);
     lastSplitDistanceRef.current = Math.floor(recovery?.totalDistance ?? 0);
     lastSplitElapsedRef.current = recovery?.elapsed ?? 0;
     lastSplitPaceRef.current = null;
@@ -247,6 +254,7 @@ export default function RunningPage() {
     offRouteSinceRef.current = null;
     lastOffRouteAlertAtRef.current = 0;
     lastAnnouncedKmRef.current = Math.floor((recovery?.totalDistance ?? 0) + (recovery?.adjustedDistanceKm ?? 0));
+    lastPaceCoachAtRef.current = Date.now();
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -464,50 +472,66 @@ export default function RunningPage() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [acquireWakeLock, showToast, config, trackPoints, totalDistance, elapsed, profile.autoApplyGapAdjustment, applyGapAdjustment]);
 
-  // 도착지 도착 감지 (지도 모드)
+  // 완료 감지 우선순위: 목적지 > 거리 목표 > 시간 목표
   useEffect(() => {
-    if (!position || !config?.endPoint || arrivedRef.current) return;
-    if (calcDistance(position, config.endPoint) <= 0.005) {
-      arrivedRef.current = true;
-      setArrived(true);
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("목적지 도착!", {
-          body: "5m 이내 진입",
-          icon: "/icons/icon-192x192.png",
-        });
-      }
-    }
-  }, [position, config]);
+    if (!config || arrivedRef.current) return;
 
-  // 목표 거리 달성 감지 (거리 목표 모드)
-  useEffect(() => {
-    if (!config?.goalDistance || arrivedRef.current) return;
-    if (effectiveDistance >= config.goalDistance) {
-      arrivedRef.current = true;
-      setArrived(true);
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("목표 달성!", {
-          body: `${config.goalDistance}km 완주`,
-          icon: "/icons/icon-192x192.png",
-        });
-      }
-    }
-  }, [effectiveDistance, config]);
+    let reason: CompletionReason | null = null;
+    let title = "";
+    let body = "";
 
-  // 목표 시간 달성 감지 (시간 목표 모드)
-  useEffect(() => {
-    if (!config?.goalTime || arrivedRef.current) return;
-    if (elapsed >= config.goalTime * 60) {
-      arrivedRef.current = true;
-      setArrived(true);
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("시간 목표 달성!", {
-          body: `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`,
-          icon: "/icons/icon-192x192.png",
-        });
-      }
+    if (position && config.endPoint && calcDistance(position, config.endPoint) <= 0.005) {
+      reason = "destination";
+      title = "목적지 도착!";
+      body = "5m 이내 진입";
+    } else if (config.goalDistance && effectiveDistance >= config.goalDistance) {
+      reason = "distance";
+      title = "목표 달성!";
+      body = `${config.goalDistance}km 완주`;
+    } else if (config.goalTime && elapsed >= config.goalTime * 60) {
+      reason = "time";
+      title = "시간 목표 달성!";
+      body = `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`;
     }
-  }, [elapsed, config, effectiveDistance]);
+
+    if (!reason) return;
+
+    arrivedRef.current = true;
+    setCompletionReason(reason);
+    setArrived(true);
+
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        icon: "/icons/icon-192x192.png",
+      });
+    }
+  }, [position, config, effectiveDistance, elapsed]);
+
+  const completionCopy = (() => {
+    if (completionReason === "distance" && config?.goalDistance) {
+      return {
+        title: "목표 달성! 🎉",
+        description: `${config.goalDistance}km 완주`,
+      };
+    }
+    if (completionReason === "time" && config?.goalTime) {
+      return {
+        title: "시간 목표 달성! 🎉",
+        description: `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`,
+      };
+    }
+    if (completionReason === "interval") {
+      return {
+        title: "인터벌 완료! 🎉",
+        description: "예정된 세트를 모두 완료했어요.",
+      };
+    }
+    return {
+      title: "도착!",
+      description: "목적지 5m 이내 진입",
+    };
+  })();
 
   // 경로 이탈 감지: 예상 경로에서 일정 거리 이상 벗어나면 안내
   useEffect(() => {
@@ -706,6 +730,7 @@ export default function RunningPage() {
               setIntervalCountdown(0);
               setArrived(true);
               arrivedRef.current = true;
+              setCompletionReason("interval");
               if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
             }
           } else {
@@ -724,6 +749,7 @@ export default function RunningPage() {
           setIntervalCountdown(0);
           setArrived(true);
           arrivedRef.current = true;
+          setCompletionReason("interval");
           if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
         }
       } else {
@@ -823,12 +849,30 @@ export default function RunningPage() {
       } else {
         speak(`${km}킬로미터 통과. ${trendComment}`);
       }
+      lastPaceCoachAtRef.current = Date.now();
 
       lastSplitDistanceRef.current = effectiveDistance;
       lastSplitElapsedRef.current = elapsed;
       lastSplitPaceRef.current = splitPace > 0 && Number.isFinite(splitPace) ? splitPace : null;
     }
   }, [effectiveDistance, voiceEnabled, isPaused, speak, elapsed]);
+
+  // 음성 코칭: 주기적으로 현재 페이스 존과 가이드를 간단히 안내
+  useEffect(() => {
+    if (!voiceEnabled || isPaused || arrived || !config) return;
+    if (effectiveDistance < 0.3 || elapsed < 90) return;
+
+    const now = Date.now();
+    if (now - lastPaceCoachAtRef.current < PACE_COACHING_INTERVAL_MS) return;
+
+    const currentPace = calcPace(effectiveDistance, elapsed);
+    if (!Number.isFinite(currentPace) || currentPace <= 0) return;
+
+    const zone = getPaceZone(currentPace, config.activityType);
+    const guide = getPaceGuidance(currentPace, config.activityType);
+    lastPaceCoachAtRef.current = now;
+    speak(`현재 페이스 ${zone.label}. ${guide}`);
+  }, [voiceEnabled, isPaused, arrived, config, effectiveDistance, elapsed, speak]);
 
   // voiceEnabled → localStorage
   useEffect(() => {
@@ -866,6 +910,7 @@ export default function RunningPage() {
   const pace = calcPace(effectiveDistance, elapsed);
   const paceZone = getPaceZone(pace, config.activityType);
   const paceGuide = getPaceGuidance(pace, config.activityType);
+  const hasCompletionPriorityHint = Boolean(config.endPoint && (config.goalDistance || config.goalTime));
   const intervalTone = intervalPhase === "run"
     ? "var(--c-toss-blue)"
     : intervalPhase === "rest"
@@ -915,7 +960,7 @@ export default function RunningPage() {
       {!followUser && (
         <button
           onClick={() => setFollowUser(true)}
-          className="absolute z-10 flex items-center gap-1.5 px-3 py-2 rounded-full active:scale-95 transition-transform"
+          className="absolute z-10 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
           style={{
             right: 16,
             bottom: "calc(var(--sab) + 100px)",
@@ -998,7 +1043,8 @@ export default function RunningPage() {
                   background: "rgba(255,255,255,0.18)",
                   border: "1px solid rgba(255,255,255,0.28)",
                   borderRadius: 8,
-                  padding: "2px 10px",
+                  minHeight: 44,
+                  padding: "0 12px",
                   flexShrink: 0,
                   cursor: "pointer",
                 }}
@@ -1014,7 +1060,7 @@ export default function RunningPage() {
       {needsPermission && (
         <button
           onClick={requestCompassPermission}
-          className="absolute z-20 flex items-center gap-1.5 px-3 py-2 rounded-full active:scale-95 transition-transform"
+          className="absolute z-20 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
           style={{
             right: 16,
             bottom: "calc(var(--sab) + 160px)",
@@ -1091,7 +1137,7 @@ export default function RunningPage() {
               <button
                 onClick={() => setVoiceEnabled((prev) => !prev)}
                 aria-label={voiceEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
-                className="w-8 h-8 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
                 style={{
                   background: voiceEnabled ? `${accent}22` : "rgba(255,255,255,0.08)",
                   border: `1px solid ${voiceEnabled ? `${accent}44` : "rgba(255,255,255,0.18)"}`,
@@ -1117,8 +1163,9 @@ export default function RunningPage() {
               <button
                 onClick={() => setTopPanelCollapsed((prev) => !prev)}
                 aria-label={topPanelCollapsed ? "상단 패널 펼치기" : "상단 패널 접기"}
-                className="px-2.5 py-1 rounded-full active:scale-95 transition-transform"
+                className="px-3 py-2 rounded-full active:scale-95 transition-transform"
                 style={{
+                  minHeight: 44,
                   background: "rgba(255,255,255,0.08)",
                   border: "1px solid rgba(255,255,255,0.18)",
                   color: "#d1d4d9",
@@ -1136,6 +1183,18 @@ export default function RunningPage() {
               {!isPaused && (
                 <p className="mb-3" style={{ fontSize: 12, fontWeight: 600, color: paceZone.color }}>
                   {paceGuide}
+                </p>
+              )}
+              {hasCompletionPriorityHint && (
+                <p
+                  className="mb-3"
+                  style={{
+                    fontSize: 11,
+                    color: "#9da1a6",
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  완료 우선순위: 목적지 도착 → 거리 목표 → 시간 목표
                 </p>
               )}
               {currentAltitude !== null && (
@@ -1259,14 +1318,10 @@ export default function RunningPage() {
               className="mb-1 text-center"
               style={{ fontSize: 30, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}
             >
-              {config.goalDistance ? "목표 달성! 🎉" : config.goalTime ? "시간 목표 달성! 🎉" : "도착!"}
+              {completionCopy.title}
             </h2>
             <p className="text-center mb-6" style={{ fontSize: 14, color: "#9da1a6" }}>
-              {config.goalDistance
-                ? `${config.goalDistance}km 완주`
-                : config.goalTime
-                  ? `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`
-                  : "목적지 5m 이내 진입"}
+              {completionCopy.description}
             </p>
             <div className="grid grid-cols-2 gap-2 mb-5">
               <MiniStat label="거리" value={`${effectiveDistance.toFixed(2)}`} unit="km" accent={accent} />
@@ -1274,7 +1329,7 @@ export default function RunningPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => { arrivedRef.current = false; setArrived(false); }}
+                onClick={() => { arrivedRef.current = false; setArrived(false); setCompletionReason(null); }}
                 className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
                 style={{
                   background: "rgba(255,255,255,0.08)",
@@ -1443,7 +1498,7 @@ export default function RunningPage() {
                     setIntervalPhase(next);
                     setIntervalCountdown(0);
                   }}
-                  className="text-xs font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-transform"
+                  className="text-xs font-bold h-11 px-3 rounded-xl active:scale-95 transition-transform"
                   style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}
                 >
                   {intervalPhase === "run" ? "→ 휴식" : "→ 달리기"}

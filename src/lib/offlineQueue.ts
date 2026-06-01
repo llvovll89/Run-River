@@ -2,6 +2,7 @@ import type { LatLng, ActivityType } from "@/types";
 
 const QUEUE_KEY = "pendingRunRecords";
 const MAX_RETRY_COUNT = 5;
+const MAX_QUEUE_ITEMS = 300;
 export const RETRY_EXHAUSTED_AT = Number.MAX_SAFE_INTEGER;
 
 export interface SaveRecordPayload {
@@ -33,10 +34,79 @@ export interface QueueSummary {
   nextRetryAt: number | null;
 }
 
+function isLatLng(value: unknown): value is LatLng {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<LatLng>;
+  return typeof candidate.lat === "number" && typeof candidate.lng === "number";
+}
+
+function isActivityType(value: unknown): value is ActivityType {
+  return value === "running" || value === "walking";
+}
+
+function isSaveRecordPayload(value: unknown): value is SaveRecordPayload {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<SaveRecordPayload>;
+  return (
+    isLatLng(candidate.start_point) &&
+    isLatLng(candidate.end_point) &&
+    typeof candidate.distance_km === "number" &&
+    Number.isFinite(candidate.distance_km) &&
+    typeof candidate.duration_seconds === "number" &&
+    Number.isFinite(candidate.duration_seconds) &&
+    typeof candidate.pace === "number" &&
+    Number.isFinite(candidate.pace) &&
+    isActivityType(candidate.activity_type)
+  );
+}
+
+function isPendingRecord(value: unknown): value is PendingRecord {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PendingRecord>;
+  return (
+    typeof candidate.queueId === "string" &&
+    candidate.queueId.length > 0 &&
+    isSaveRecordPayload(candidate.record) &&
+    typeof candidate.savedAt === "number" &&
+    Number.isFinite(candidate.savedAt) &&
+    typeof candidate.retryCount === "number" &&
+    Number.isFinite(candidate.retryCount) &&
+    typeof candidate.nextRetryAt === "number" &&
+    Number.isFinite(candidate.nextRetryAt) &&
+    (typeof candidate.lastError === "string" || candidate.lastError === null)
+  );
+}
+
+function sanitizeQueue(queue: PendingRecord[]): PendingRecord[] {
+  // Keep newest entries to avoid unbounded localStorage growth.
+  return queue
+    .slice()
+    .sort((a, b) => a.savedAt - b.savedAt)
+    .slice(-MAX_QUEUE_ITEMS);
+}
+
+function writeQueue(queue: PendingRecord[]): void {
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+}
+
 export function getQueue(): PendingRecord[] {
   try {
     const raw = localStorage.getItem(QUEUE_KEY);
-    return raw ? (JSON.parse(raw) as PendingRecord[]) : [];
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      writeQueue([]);
+      return [];
+    }
+
+    const valid = parsed.filter(isPendingRecord);
+    const normalized = sanitizeQueue(valid);
+    if (normalized.length !== parsed.length) {
+      writeQueue(normalized);
+    }
+
+    return normalized;
   } catch {
     return [];
   }
@@ -52,12 +122,12 @@ export function enqueue(record: SaveRecordPayload): void {
     lastError: null,
     nextRetryAt: 0,
   });
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  writeQueue(sanitizeQueue(queue));
 }
 
 export function dequeue(id: string): void {
   const queue = getQueue().filter((item) => item.queueId !== id);
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  writeQueue(queue);
 }
 
 export function markRetry(id: string, errorMessage: string): void {
@@ -81,7 +151,7 @@ export function markRetry(id: string, errorMessage: string): void {
       nextRetryAt: now + backoffMs,
     };
   });
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  writeQueue(queue);
 }
 
 export function resetRetry(id: string): void {
@@ -94,7 +164,7 @@ export function resetRetry(id: string): void {
       nextRetryAt: 0,
     };
   });
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  writeQueue(queue);
 }
 
 export function getQueueSummary(): QueueSummary {
@@ -131,6 +201,6 @@ export function resetAllExhaustedRetries(): number {
       nextRetryAt: 0,
     };
   });
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(next));
+  writeQueue(next);
   return updated;
 }

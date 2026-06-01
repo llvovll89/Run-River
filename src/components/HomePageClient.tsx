@@ -705,7 +705,7 @@ export default function Home() {
                                                         openAuthFor("/");
                                                         setShowMore(false);
                                                     }}
-                                                    className="mt-2 px-2.5 py-1 rounded-full text-xs font-semibold active:scale-95 transition-transform"
+                                                    className="mt-2 h-11 px-3 rounded-full text-xs font-semibold active:scale-95 transition-transform"
                                                     style={{
                                                         background:
                                                             "var(--c-elevated)",
@@ -866,7 +866,7 @@ export default function Home() {
                         <div className="flex items-center justify-end">
                             <button
                                 onClick={dismissReferralBanner}
-                                className="w-6 h-6 rounded-lg flex items-center justify-center"
+                                className="w-11 h-11 rounded-lg flex items-center justify-center"
                                 style={{
                                     color: "var(--c-text-2)",
                                     background: "rgba(255,255,255,0.25)",
@@ -894,7 +894,7 @@ export default function Home() {
                         </p>
                         <button
                             onClick={startReferralChallenge}
-                            className="mt-2 w-full rounded-xl py-2.5 text-sm font-semibold active:scale-[0.98] transition-transform"
+                            className="mt-2 w-full h-11 rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform"
                             style={{
                                 background: "var(--c-toss-blue)",
                                 color: "#fff",
@@ -931,7 +931,7 @@ export default function Home() {
                             </p>
                             <button
                                 onClick={() => setGrowthSummary(getGrowthSummary())}
-                                className="px-2 py-1 rounded-lg text-xs font-semibold"
+                                className="h-11 px-3 rounded-lg text-xs font-semibold"
                                 style={{
                                     background: "var(--c-elevated)",
                                     color: "var(--c-text-2)",
@@ -1089,7 +1089,7 @@ export default function Home() {
                             <button
                                 onClick={handleSearch}
                                 disabled={!search.query.trim()}
-                                className="px-3 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+                                className="h-11 px-3 rounded-xl text-sm font-bold active:scale-95 transition-transform"
                                 style={{
                                     background: search.query.trim()
                                         ? accentVar
@@ -1124,7 +1124,7 @@ export default function Home() {
                                                 pointMode: m,
                                             }))
                                         }
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+                                        className="h-11 flex items-center gap-1.5 px-3 rounded-full text-xs font-bold transition-all active:scale-95"
                                         style={{
                                             background:
                                                 search.pointMode === m
@@ -1474,7 +1474,7 @@ export default function Home() {
                     {!weeklyChallengeOpen ? (
                         <button
                             onClick={() => setWeeklyChallengeOpen(true)}
-                            className="rounded-full pl-2 pr-2.5 py-1.5 flex items-center gap-1.5 self-start"
+                            className="h-11 rounded-full pl-3 pr-3 flex items-center gap-1.5 self-start"
                             style={{
                                 background: "var(--c-elevated)",
                                 border: "1px solid var(--c-border)",
@@ -1678,7 +1678,7 @@ export default function Home() {
                                                     e.stopPropagation();
                                                     deleteSavedRoute(r.id);
                                                 }}
-                                                className="w-5 h-5 rounded-full flex items-center justify-center"
+                                                className="w-11 h-11 rounded-full flex items-center justify-center"
                                                 style={{background: "var(--c-border)", color: "var(--c-text-3)", flexShrink: 0}}
                                             >
                                                 <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
@@ -2215,12 +2215,12 @@ function PointCard({
                             e.stopPropagation();
                             onUseLocation();
                         }}
-                        className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-[10px] font-bold active:scale-95 transition-transform"
+                        className="ml-auto h-11 flex items-center gap-1 px-3 rounded-lg text-xs font-bold active:scale-95 transition-transform"
                         style={{background: `${color}22`, color}}
                     >
                         <svg
-                            width="9"
-                            height="9"
+                            width="11"
+                            height="11"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"

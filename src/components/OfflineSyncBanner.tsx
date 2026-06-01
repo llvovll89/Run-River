@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 
@@ -24,6 +24,9 @@ function formatRetryTime(ts: number | null): string {
 
 export default function OfflineSyncBanner() {
   const pathname = usePathname();
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
   const {
     pendingCount,
     blockedCount,
@@ -34,6 +37,17 @@ export default function OfflineSyncBanner() {
     nextRetryAt,
     syncNow,
   } = useOfflineSync();
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
 
   const shouldShow = pendingCount > 0 || !!lastError;
 
@@ -73,24 +87,45 @@ export default function OfflineSyncBanner() {
           <p style={{ fontSize: 11, color: "#9da1a6", marginTop: 1 }}>
             {statusText} · 마지막 성공 {formatRelativeTime(lastSyncedAt)}
           </p>
+          {!isOnline && (
+            <p style={{ fontSize: 11, color: "#ff9f0a", marginTop: 1 }}>
+              오프라인 상태에서는 동기화가 대기됩니다.
+            </p>
+          )}
           {lastError && (
             <p style={{ fontSize: 11, color: "#ff9f0a", marginTop: 1 }}>
               최근 오류: {lastError}
             </p>
           )}
         </div>
-        <button
-          onClick={() => void syncNow()}
-          disabled={syncing || pendingCount === 0}
-          className="px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
-          style={{
-            background: syncing || pendingCount === 0 ? "rgba(255,255,255,0.12)" : "var(--c-toss-blue)",
-            color: syncing || pendingCount === 0 ? "#9da1a6" : "#fff",
-            border: "1px solid rgba(255,255,255,0.15)",
-          }}
-        >
-          {syncing ? "동기화 중" : "지금 동기화"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {exhaustedCount > 0 && (
+            <button
+              onClick={() => void syncNow(true)}
+              disabled={syncing || !isOnline}
+              className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
+              style={{
+                background: syncing ? "rgba(255,255,255,0.12)" : "rgba(255,159,10,0.22)",
+                color: syncing ? "#9da1a6" : "#ffd18f",
+                border: "1px solid rgba(255,159,10,0.35)",
+              }}
+            >
+              강제 재시도
+            </button>
+          )}
+          <button
+            onClick={() => void syncNow()}
+            disabled={syncing || pendingCount === 0 || !isOnline}
+            className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
+            style={{
+              background: syncing || pendingCount === 0 ? "rgba(255,255,255,0.12)" : "var(--c-toss-blue)",
+              color: syncing || pendingCount === 0 ? "#9da1a6" : "#fff",
+              border: "1px solid rgba(255,255,255,0.15)",
+            }}
+          >
+            {syncing ? "동기화 중" : "지금 동기화"}
+          </button>
+        </div>
       </div>
     </div>
   );

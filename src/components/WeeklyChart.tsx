@@ -101,7 +101,7 @@ export default function WeeklyChart({ records }: Props) {
           </p>
           <button
             onClick={() => { setEditing((e) => !e); setInputVal(String(goal)); }}
-            className="text-xs font-semibold px-2.5 py-1 rounded-full"
+            className="text-xs font-semibold h-11 px-3 rounded-full"
             style={{ background: "var(--c-elevated)", color: "var(--c-text-2)", border: "1px solid var(--c-border)" }}
           >
             {editing ? "취소" : "변경"}
@@ -115,7 +115,7 @@ export default function WeeklyChart({ records }: Props) {
                 <button
                   key={p}
                   onClick={() => saveGoal(p)}
-                  className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
+                  className="flex-1 h-11 rounded-xl text-sm font-bold transition-all"
                   style={{
                     background: goal === p ? accent : "var(--c-elevated)",
                     color: goal === p ? "#fff" : "var(--c-text-2)",
@@ -143,7 +143,7 @@ export default function WeeklyChart({ records }: Props) {
               />
               <button
                 onClick={() => { const n = parseFloat(inputVal); if (!isNaN(n)) saveGoal(n); }}
-                className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
+                className="h-11 px-4 rounded-xl text-sm font-bold text-white"
                 style={{ background: accent }}
               >
                 저장
@@ -188,7 +188,7 @@ export default function WeeklyChart({ records }: Props) {
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className="px-3 py-1.5 text-xs font-semibold transition-all"
+                className="h-11 px-3 text-xs font-semibold transition-all"
                 style={{
                   background: tab === t ? accent : "transparent",
                   color: tab === t ? "#fff" : "var(--c-text-2)",

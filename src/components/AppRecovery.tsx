@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 
 const RECOVERY_FLAG = "rr_recovery_once";
+const RECOVERY_ATTEMPTS_KEY = "rr_recovery_attempts";
+const MAX_RECOVERY_ATTEMPTS = 3;
 
 function shouldRecoverFromMessage(message: string): boolean {
   const normalized = message.toLowerCase();
@@ -20,6 +22,13 @@ async function recoverOnce(reason: string): Promise<void> {
   if (typeof window === "undefined") return;
   if (sessionStorage.getItem(RECOVERY_FLAG) === "1") return;
 
+  const attempts = Number.parseInt(
+    sessionStorage.getItem(RECOVERY_ATTEMPTS_KEY) || "0",
+    10,
+  );
+  if (attempts >= MAX_RECOVERY_ATTEMPTS) return;
+
+  sessionStorage.setItem(RECOVERY_ATTEMPTS_KEY, String(attempts + 1));
   sessionStorage.setItem(RECOVERY_FLAG, "1");
 
   try {
@@ -44,6 +53,14 @@ async function recoverOnce(reason: string): Promise<void> {
 
 export default function AppRecovery() {
   useEffect(() => {
+    const bootUrl = new URL(window.location.href);
+    const fromRecovery = bootUrl.searchParams.has("recover");
+
+    if (!fromRecovery) {
+      sessionStorage.removeItem(RECOVERY_FLAG);
+      sessionStorage.removeItem(RECOVERY_ATTEMPTS_KEY);
+    }
+
     const onWindowError = (event: ErrorEvent) => {
       const message = event.message || event.error?.message || "";
       if (!shouldRecoverFromMessage(message)) return;
@@ -64,10 +81,11 @@ export default function AppRecovery() {
     window.addEventListener("error", onWindowError);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
 
-    // 정상 부팅이 완료되면 다음 장애 대비를 위해 플래그를 해제한다.
+    // 정상 부팅이 일정 시간 유지되면 다음 장애 대비를 위해 상태를 초기화한다.
     const clearFlag = window.setTimeout(() => {
       sessionStorage.removeItem(RECOVERY_FLAG);
-    }, 4000);
+      sessionStorage.removeItem(RECOVERY_ATTEMPTS_KEY);
+    }, 10000);
 
     return () => {
       window.removeEventListener("error", onWindowError);

@@ -29,7 +29,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
         <button
           onClick={() => setConfirm(false)}
           disabled={isPending}
-          className="text-xs font-semibold px-2.5 py-1.5 rounded-xl active:scale-95 transition-transform"
+          className="text-xs font-semibold h-11 px-3 rounded-xl active:scale-95 transition-transform"
           style={{
             background: "var(--c-elevated)",
             border: "1px solid var(--c-border)",
@@ -41,7 +41,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
         <button
           onClick={handleDelete}
           disabled={isPending}
-          className="text-xs font-semibold px-2.5 py-1.5 rounded-xl active:scale-95 transition-transform"
+          className="text-xs font-semibold h-11 px-3 rounded-xl active:scale-95 transition-transform"
           style={{
             background: isPending ? "var(--c-elevated)" : "var(--c-danger)",
             color: isPending ? "var(--c-text-3)" : "#fff",
@@ -56,7 +56,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
   return (
     <button
       onClick={() => setConfirm(true)}
-      className="w-8 h-8 flex items-center justify-center rounded-xl active:scale-95 transition-transform"
+      className="w-11 h-11 flex items-center justify-center rounded-xl active:scale-95 transition-transform"
       style={{
         background: "var(--c-elevated)",
         border: "1px solid var(--c-border)",

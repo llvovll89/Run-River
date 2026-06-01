@@ -256,6 +256,51 @@ html, body {
   }
 }
 
+/* iOS-like controls in dark mode */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select,
+[data-theme="dark"] button {
+  border-radius: 14px;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background: var(--c-control-bg);
+  border: 1px solid var(--c-control-border);
+  box-shadow: var(--c-control-shadow);
+  color: var(--c-text-1);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--c-text-3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) input,
+  :root:not([data-theme]) textarea,
+  :root:not([data-theme]) select,
+  :root:not([data-theme]) button {
+    border-radius: 14px;
+  }
+
+  :root:not([data-theme]) input,
+  :root:not([data-theme]) textarea,
+  :root:not([data-theme]) select {
+    background: var(--c-control-bg);
+    border: 1px solid var(--c-control-border);
+    box-shadow: var(--c-control-shadow);
+    color: var(--c-text-1);
+  }
+
+  :root:not([data-theme]) input::placeholder,
+  :root:not([data-theme]) textarea::placeholder {
+    color: var(--c-text-3);
+  }
+}
+
 /* Animations */
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }
@@ -287,15 +332,14 @@ html, body {
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
-[data-theme="light"] .tabbar,
+[data-theme="light"] .tabbar {
+  background: rgba(255,255,255,0.92);
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .tabbar {
     background: rgba(255,255,255,0.92);
     border-top: 1px solid rgba(0,0,0,0.08);
   }
-}
-
-[data-theme="light"] .tabbar {
-  background: rgba(255,255,255,0.92);
-  border-top: 1px solid rgba(0,0,0,0.08);
 }
