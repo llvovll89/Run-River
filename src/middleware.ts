@@ -18,6 +18,14 @@ function isAuthRequiredRoute(pathname: string) {
 
 export async function middleware(request: NextRequest) {
     const {pathname} = request.nextUrl;
+
+    // Public routes should not block on auth/session network calls.
+    // This prevents full-site slowdowns/timeouts when auth backend is degraded.
+    const needsSessionCheck = isAuthRequiredRoute(pathname) || pathname === "/auth";
+    if (!needsSessionCheck) {
+        return NextResponse.next();
+    }
+
     const {response, user} = await updateSession(request);
 
     if (!user && isAuthRequiredRoute(pathname)) {
