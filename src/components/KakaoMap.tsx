@@ -11,12 +11,12 @@ function getHeadingDeltaDeg(a: number, b: number): number {
   return diff > 180 ? 360 - diff : diff;
 }
 
-// 출발 마커 — 에메랄드 그라디언트 핀, 플레이 아이콘
-const _startSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><linearGradient id="sg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#059669"/></linearGradient><radialGradient id="shl" cx="38%" cy="30%" r="60%"><stop offset="0%" stop-color="white" stop-opacity="0.38"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient><filter id="ssf" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#064e3b" flood-opacity="0.5"/></filter></defs><g filter="url(#ssf)"><circle cx="26" cy="22" r="20" fill="url(#sg)"/><circle cx="26" cy="22" r="20" fill="url(#shl)"/><polygon points="20,41 26,54 32,41" fill="url(#sg)"/><circle cx="26" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2"/></g><polygon points="22,15 22,23 30,19" fill="white" opacity="0.92"/><text x="26" y="32.5" text-anchor="middle" fill="white" font-size="9.5" font-weight="800" font-family="-apple-system,BlinkMacSystemFont,sans-serif">출발</text></svg>';
+// 출발 마커 — 초록 원형 뱃지, 러너 아이콘 (미니멀 배지 스타일)
+const _startSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><defs><linearGradient id="sg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#059669"/></linearGradient><filter id="ssf" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#064e3b" flood-opacity="0.45"/></filter></defs><g filter="url(#ssf)"><circle cx="22" cy="22" r="18" fill="url(#sg)"/><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2.5"/></g><g transform="translate(14,12) scale(0.667)" fill="white"><path d="M13.49,5.48c1.1,0,2-0.9,2-2s-0.9-2-2-2s-2,0.9-2,2S12.39,5.48,13.49,5.48z M9.89,19.38l1-4.4l2.1,2v6h2v-7.5l-2.1-2l0.6-3c1.3,1.5,3.3,2.5,5.5,2.5v-2c-1.9,0-3.5-1-4.3-2.4l-1-1.6c-0.4-0.6-1-1-1.7-1c-0.3,0-0.5,0.1-0.8,0.1l-5.2,2.2v4.7h2v-3.4l1.8-0.7l-1.6,8.1l-4.9-1l-0.4,2L9.89,19.38z"/></g></svg>';
 const START_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_startSvg)}`;
 
-// 도착 마커 — 앰버→오렌지 그라디언트 핀, 체크 아이콘
-const _endSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="62"><defs><linearGradient id="eg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#fcd34d"/><stop offset="100%" stop-color="#f97316"/></linearGradient><radialGradient id="ehl" cx="38%" cy="30%" r="60%"><stop offset="0%" stop-color="white" stop-opacity="0.38"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient><filter id="esf" x="-80%" y="-80%" width="260%" height="260%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#7c2d12" flood-opacity="0.5"/></filter></defs><g filter="url(#esf)"><circle cx="26" cy="22" r="20" fill="url(#eg)"/><circle cx="26" cy="22" r="20" fill="url(#ehl)"/><polygon points="20,41 26,54 32,41" fill="url(#eg)"/><circle cx="26" cy="22" r="20" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2"/></g><path d="M19,21 L23.5,26.5 L33,15" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"/><text x="26" y="35" text-anchor="middle" fill="white" font-size="9.5" font-weight="800" font-family="-apple-system,BlinkMacSystemFont,sans-serif">도착</text></svg>';
+// 도착 마커 — 오렌지 원형 뱃지, 깃발 아이콘 (미니멀 배지 스타일)
+const _endSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><defs><linearGradient id="eg" x1="20%" y1="0%" x2="80%" y2="100%"><stop offset="0%" stop-color="#fcd34d"/><stop offset="100%" stop-color="#f97316"/></linearGradient><filter id="esf" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#7c2d12" flood-opacity="0.45"/></filter></defs><g filter="url(#esf)"><circle cx="22" cy="22" r="18" fill="url(#eg)"/><circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2.5"/></g><g transform="translate(10.75,8.75) scale(0.9)" fill="white"><path d="M14.4,6L14,4H5v17h2v-7h5.6l0.4,2h7V6H14.4z"/></g></svg>';
 const END_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_endSvg)}`;
 
 function buildCurrentMarkerHTML(heading: number | null): string {
@@ -176,7 +176,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       startMarkerRef.current.setPosition(latlng);
       return;
     }
-    const startImage = new kakao.maps.MarkerImage(START_MARKER_SRC, new kakao.maps.Size(52, 62), { offset: new kakao.maps.Point(26, 60) });
+    const startImage = new kakao.maps.MarkerImage(START_MARKER_SRC, new kakao.maps.Size(44, 44), { offset: new kakao.maps.Point(22, 22) });
     const startM = new kakao.maps.Marker({ position: latlng, image: startImage, draggable: true, map: mapInstanceRef.current });
     kakao.maps.event.addListener(startM, "dragend", () => {
       const pos = startM.getPosition();
@@ -197,7 +197,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     if (endMarkerRef.current) {
       endMarkerRef.current.setPosition(latlng);
     } else {
-      const endImage = new kakao.maps.MarkerImage(END_MARKER_SRC, new kakao.maps.Size(52, 62), { offset: new kakao.maps.Point(26, 60) });
+      const endImage = new kakao.maps.MarkerImage(END_MARKER_SRC, new kakao.maps.Size(44, 44), { offset: new kakao.maps.Point(22, 22) });
       const endM = new kakao.maps.Marker({ position: latlng, image: endImage, draggable: true, map: mapInstanceRef.current });
       kakao.maps.event.addListener(endM, "dragend", () => {
         const pos = endM.getPosition();

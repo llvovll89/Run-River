@@ -248,7 +248,19 @@ export default function Home() {
         } else if (mode === "end") {
             setEndPoint(latlng);
             setMode(null);
+        } else {
+            // 출발/도착이 이미 둘 다 찍힌 상태 — 다시 탭하면 새 출발점부터 재선택
+            setStartPoint(latlng);
+            setEndPoint(null);
+            setMode("end");
         }
+    }
+
+    function resetPoints() {
+        setStartPoint(null);
+        setEndPoint(null);
+        setMode("start");
+        setAddresses({start: "", end: ""});
     }
 
     function handleStartPointChange(latlng: LatLng) {
@@ -1724,23 +1736,44 @@ export default function Home() {
                                     onClick={() => openSearchFor("end")}
                                 />
                             </div>
-                            {startPoint && endPoint && (
-                                <button
-                                    onClick={saveCurrentRoute}
-                                    className="w-full py-2 rounded-2xl flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
-                                    style={{
-                                        background: "var(--c-elevated)",
-                                        border: "1px solid var(--c-border)",
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        color: "var(--c-text-2)",
-                                    }}
-                                >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-                                    </svg>
-                                    이 경로 저장
-                                </button>
+                            {(startPoint || endPoint) && (
+                                <div className="flex gap-2">
+                                    {startPoint && endPoint && (
+                                        <button
+                                            onClick={saveCurrentRoute}
+                                            className="flex-1 py-2 rounded-2xl flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+                                            style={{
+                                                background: "var(--c-elevated)",
+                                                border: "1px solid var(--c-border)",
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                color: "var(--c-text-2)",
+                                            }}
+                                        >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                                            </svg>
+                                            이 경로 저장
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={resetPoints}
+                                        className={`py-2 rounded-2xl flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform ${startPoint && endPoint ? "px-4" : "flex-1"}`}
+                                        style={{
+                                            background: "var(--c-elevated)",
+                                            border: "1px solid var(--c-border)",
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            color: "var(--c-danger)",
+                                        }}
+                                    >
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+                                            <path d="M3 3v5h5" />
+                                        </svg>
+                                        초기화
+                                    </button>
+                                </div>
                             )}
                             {(routeDistLabel || route.loading) && (
                                 <div
