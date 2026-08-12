@@ -67,18 +67,28 @@ export default function SettingsPage() {
     const [autoPauseResumeSpeed, setAutoPauseResumeSpeed] = useState("0.90");
     const [autoPauseStillnessSec, setAutoPauseStillnessSec] = useState("4.5");
     const [autoPauseMinMoveMeters, setAutoPauseMinMoveMeters] = useState("0.3");
-    const [offRouteThresholdMeters, setOffRouteThresholdMeters] = useState("60");
+    const [offRouteThresholdMeters, setOffRouteThresholdMeters] =
+        useState("60");
     const [offRouteSustainSec, setOffRouteSustainSec] = useState("10");
-    const [offRouteAlertCooldownSec, setOffRouteAlertCooldownSec] = useState("90");
+    const [offRouteAlertCooldownSec, setOffRouteAlertCooldownSec] =
+        useState("90");
 
     const applyTuningInputs = (source: typeof DEFAULT_RUN_TUNING) => {
         setAutoPauseStopSpeed(source.autoPauseStopSpeedMs.toFixed(2));
         setAutoPauseResumeSpeed(source.autoPauseResumeSpeedMs.toFixed(2));
-        setAutoPauseStillnessSec((source.autoPauseStillnessMs / 1000).toFixed(1));
-        setAutoPauseMinMoveMeters((source.autoPauseMinMoveKm * 1000).toFixed(1));
-        setOffRouteThresholdMeters((source.offRouteThresholdKm * 1000).toFixed(0));
+        setAutoPauseStillnessSec(
+            (source.autoPauseStillnessMs / 1000).toFixed(1),
+        );
+        setAutoPauseMinMoveMeters(
+            (source.autoPauseMinMoveKm * 1000).toFixed(1),
+        );
+        setOffRouteThresholdMeters(
+            (source.offRouteThresholdKm * 1000).toFixed(0),
+        );
         setOffRouteSustainSec((source.offRouteSustainMs / 1000).toFixed(0));
-        setOffRouteAlertCooldownSec((source.offRouteAlertCooldownMs / 1000).toFixed(0));
+        setOffRouteAlertCooldownSec(
+            (source.offRouteAlertCooldownMs / 1000).toFixed(0),
+        );
     };
 
     useEffect(() => {
@@ -272,7 +282,11 @@ export default function SettingsPage() {
             setError("이동 감지 거리는 0.1~2.0m 사이로 입력해주세요.");
             return;
         }
-        if (!routeThresholdMeters || routeThresholdMeters < 20 || routeThresholdMeters > 200) {
+        if (
+            !routeThresholdMeters ||
+            routeThresholdMeters < 20 ||
+            routeThresholdMeters > 200
+        ) {
             setError("경로 이탈 감지 거리는 20~200m 사이로 입력해주세요.");
             return;
         }
@@ -280,7 +294,11 @@ export default function SettingsPage() {
             setError("이탈 지속 시간은 3~30초 사이로 입력해주세요.");
             return;
         }
-        if (!routeCooldownSec || routeCooldownSec < 10 || routeCooldownSec > 300) {
+        if (
+            !routeCooldownSec ||
+            routeCooldownSec < 10 ||
+            routeCooldownSec > 300
+        ) {
             setError("이탈 알림 간격은 10~300초 사이로 입력해주세요.");
             return;
         }
@@ -672,6 +690,7 @@ export default function SettingsPage() {
                             value={autoPauseStopSpeed}
                             onChange={setAutoPauseStopSpeed}
                             placeholder="0.45"
+                            hint="범위: 0.20 – 1.20 m/s"
                         />
                         <ProfileField
                             label="자동 재개 속도"
@@ -679,6 +698,7 @@ export default function SettingsPage() {
                             value={autoPauseResumeSpeed}
                             onChange={setAutoPauseResumeSpeed}
                             placeholder="0.90"
+                            hint="범위: 0.30 – 2.00 m/s"
                         />
                         <ProfileField
                             label="정지 판정 시간"
@@ -686,6 +706,7 @@ export default function SettingsPage() {
                             value={autoPauseStillnessSec}
                             onChange={setAutoPauseStillnessSec}
                             placeholder="4.5"
+                            hint="범위: 2.0 – 12.0 초"
                         />
                         <ProfileField
                             label="이동 감지 거리"
@@ -693,6 +714,7 @@ export default function SettingsPage() {
                             value={autoPauseMinMoveMeters}
                             onChange={setAutoPauseMinMoveMeters}
                             placeholder="0.3"
+                            hint="범위: 0.1 – 2.0 m"
                         />
                         <ProfileField
                             label="경로 이탈 감지"
@@ -700,6 +722,7 @@ export default function SettingsPage() {
                             value={offRouteThresholdMeters}
                             onChange={setOffRouteThresholdMeters}
                             placeholder="60"
+                            hint="범위: 20 – 200 m"
                         />
                         <ProfileField
                             label="이탈 지속 시간"
@@ -707,6 +730,7 @@ export default function SettingsPage() {
                             value={offRouteSustainSec}
                             onChange={setOffRouteSustainSec}
                             placeholder="10"
+                            hint="범위: 3 – 30 초"
                         />
                         <ProfileField
                             label="이탈 알림 간격"
@@ -714,6 +738,7 @@ export default function SettingsPage() {
                             value={offRouteAlertCooldownSec}
                             onChange={setOffRouteAlertCooldownSec}
                             placeholder="90"
+                            hint="범위: 10 – 300 초"
                         />
                     </div>
                 </div>
@@ -761,9 +786,7 @@ export default function SettingsPage() {
                         </p>
                     )}
                     <button
-                        onClick={() =>
-                            void syncNow(exhaustedCount > 0)
-                        }
+                        onClick={() => void syncNow(exhaustedCount > 0)}
                         className="h-11 px-3 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
                         style={{
                             background: syncing
@@ -976,46 +999,58 @@ function ProfileField({
     value,
     onChange,
     placeholder,
+    hint,
 }: {
     label: string;
     unit: string;
     value: string;
     onChange: (v: string) => void;
     placeholder: string;
+    hint?: string;
 }) {
     return (
         <div
-            className="flex items-center justify-between px-4 py-4 rounded-2xl"
+            className="px-4 rounded-2xl"
             style={{
                 background: "var(--c-surface)",
                 border: "1px solid var(--c-border)",
             }}
         >
-            <span
-                className="font-semibold"
-                style={{fontSize: 15, color: "var(--c-text-1)"}}
-            >
-                {label}
-            </span>
-            <div className="flex items-center gap-2">
-                <input
-                    type="number"
-                    inputMode="numeric"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder={placeholder}
-                    className="text-right font-bold outline-none bg-transparent"
-                    style={{
-                        fontSize: 18,
-                        width: 72,
-                        color: "var(--c-text-1)",
-                        caretColor: "var(--c-toss-blue)",
-                    }}
-                />
-                <span style={{fontSize: 13, color: "var(--c-text-3)"}}>
-                    {unit}
+            <div className="flex items-center justify-between py-4">
+                <span
+                    className="font-semibold"
+                    style={{fontSize: 15, color: "var(--c-text-1)"}}
+                >
+                    {label}
                 </span>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="number"
+                        inputMode="numeric"
+                        value={value}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={placeholder}
+                        className="text-right font-bold outline-none bg-transparent"
+                        style={{
+                            fontSize: 18,
+                            width: 72,
+                            color: "var(--c-text-1)",
+                            caretColor: "var(--c-toss-blue)",
+                        }}
+                    />
+                    <span style={{fontSize: 13, color: "var(--c-text-3)"}}>
+                        {unit}
+                    </span>
+                </div>
             </div>
+            {hint && (
+                <p
+                    className="pb-3"
+                    style={{fontSize: 11, color: "var(--c-text-3)"}}
+                >
+                    {hint}
+                </p>
+            )}
         </div>
     );
 }

@@ -50,3 +50,22 @@ export async function getRunningHistoryServer(): Promise<RunningRecord[]> {
     if (error) throw error;
     return (data ?? []) as RunningRecord[];
 }
+
+// 비로그인/에러 시 기본값 70 반환
+export async function getProfileWeightServer(): Promise<number> {
+    try {
+        const supabase = await getSupabaseServerClient();
+        const {
+            data: {user},
+        } = await supabase.auth.getUser();
+        if (!user) return 70;
+        const {data} = await supabase
+            .from("user_profiles")
+            .select("weight")
+            .eq("user_id", user.id)
+            .single();
+        return (data?.weight as number | null) ?? 70;
+    } catch {
+        return 70;
+    }
+}

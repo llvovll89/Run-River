@@ -1,401 +1,578 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import {useEffect, useState, useRef, useCallback} from "react";
+import {useRouter} from "next/navigation";
 import dynamic from "next/dynamic";
-import { useGeolocation, calcDistance } from "@/hooks/useGeolocation";
-import { useUserProfile } from "@/hooks/useUserProfile";
-import { useCompass } from "@/hooks/useCompass";
-import { useNotification } from "@/hooks/useNotification";
-import { formatDuration, formatPace, calcPace, getPaceZone, getPaceGuidance } from "@/lib/utils";
-import type { LatLng, ActivityType, TrackPoint, RunConfig, RunRecoverySnapshot } from "@/types";
-import { useVoiceGuide } from "@/hooks/useVoiceGuide";
-import { DEFAULT_RUN_TUNING, loadRunTuning, normalizeRunTuning, type RunTuning } from "@/lib/runTuning";
+import {useGeolocation, calcDistance} from "@/hooks/useGeolocation";
+import {useUserProfile} from "@/hooks/useUserProfile";
+import {useCompass} from "@/hooks/useCompass";
+import {useNotification} from "@/hooks/useNotification";
+import {
+    formatDuration,
+    formatPace,
+    calcPace,
+    getPaceZone,
+    getPaceGuidance,
+} from "@/lib/utils";
+import type {
+    LatLng,
+    ActivityType,
+    TrackPoint,
+    RunConfig,
+    RunRecoverySnapshot,
+} from "@/types";
+import {useVoiceGuide} from "@/hooks/useVoiceGuide";
+import {
+    DEFAULT_RUN_TUNING,
+    loadRunTuning,
+    normalizeRunTuning,
+    type RunTuning,
+} from "@/lib/runTuning";
 
-const KakaoMap = dynamic(() => import("@/components/KakaoMap"), { ssr: false });
+const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
 const RUN_RECOVERY_KEY = "runInProgress";
 const RUN_RECOVERY_MAX_AGE_MS = 1000 * 60 * 60 * 6;
 const PACE_COACHING_INTERVAL_MS = 1000 * 120;
 
 interface GapSuggestion {
-  gapSeconds: number;
-  suggestedDistanceKm: number;
+    gapSeconds: number;
+    suggestedDistanceKm: number;
 }
 
 type CompletionReason = "destination" | "distance" | "time" | "interval";
 
 type IntervalPhase = "warmup" | "run" | "rest" | "cooldown";
 
-function estimateGapDistanceKm(trackPoints: TrackPoint[], totalDistance: number, elapsed: number, gapSeconds: number, activityType: ActivityType): number {
-  if (gapSeconds <= 0) return 0;
+function estimateGapDistanceKm(
+    trackPoints: TrackPoint[],
+    totalDistance: number,
+    elapsed: number,
+    gapSeconds: number,
+    activityType: ActivityType,
+): number {
+    if (gapSeconds <= 0) return 0;
 
-  const recentPoints = trackPoints.slice(-8);
-  let speedKmPerSec = 0;
-  const defaultSpeedKmh = activityType === "running" ? 12 : 5;
+    const recentPoints = trackPoints.slice(-8);
+    let speedKmPerSec = 0;
+    const defaultSpeedKmh = activityType === "running" ? 12 : 5;
 
-  if (recentPoints.length >= 2) {
-    let weightedSpeed = 0;
-    let weightSum = 0;
-    for (let i = 1; i < recentPoints.length; i += 1) {
-      const prev = recentPoints[i - 1];
-      const curr = recentPoints[i];
-      const segDistance = Math.max(0, curr.distance_km - prev.distance_km);
-      const segSeconds = Math.max(0, curr.elapsed_seconds - prev.elapsed_seconds);
-      if (segDistance <= 0 || segSeconds <= 0) continue;
-      const segSpeed = segDistance / segSeconds;
-      const weight = i;
-      weightedSpeed += segSpeed * weight;
-      weightSum += weight;
+    if (recentPoints.length >= 2) {
+        let weightedSpeed = 0;
+        let weightSum = 0;
+        for (let i = 1; i < recentPoints.length; i += 1) {
+            const prev = recentPoints[i - 1];
+            const curr = recentPoints[i];
+            const segDistance = Math.max(
+                0,
+                curr.distance_km - prev.distance_km,
+            );
+            const segSeconds = Math.max(
+                0,
+                curr.elapsed_seconds - prev.elapsed_seconds,
+            );
+            if (segDistance <= 0 || segSeconds <= 0) continue;
+            const segSpeed = segDistance / segSeconds;
+            const weight = i;
+            weightedSpeed += segSpeed * weight;
+            weightSum += weight;
+        }
+        if (weightSum > 0) {
+            speedKmPerSec = weightedSpeed / weightSum;
+        }
     }
-    if (weightSum > 0) {
-      speedKmPerSec = weightedSpeed / weightSum;
+
+    if (speedKmPerSec <= 0 && totalDistance > 0 && elapsed > 0) {
+        speedKmPerSec = totalDistance / elapsed;
     }
-  }
 
-  if (speedKmPerSec <= 0 && totalDistance > 0 && elapsed > 0) {
-    speedKmPerSec = totalDistance / elapsed;
-  }
+    if (speedKmPerSec <= 0) {
+        speedKmPerSec = defaultSpeedKmh / 3600;
+    }
 
-  if (speedKmPerSec <= 0) {
-    speedKmPerSec = defaultSpeedKmh / 3600;
-  }
+    const maxSpeedKmh = activityType === "running" ? 25 : 9;
+    const maxDistanceKm = (maxSpeedKmh / 3600) * gapSeconds;
+    const estimated = speedKmPerSec * gapSeconds;
 
-  const maxSpeedKmh = activityType === "running" ? 25 : 9;
-  const maxDistanceKm = (maxSpeedKmh / 3600) * gapSeconds;
-  const estimated = speedKmPerSec * gapSeconds;
-
-  return Math.max(0, Math.min(maxDistanceKm, estimated));
+    return Math.max(0, Math.min(maxDistanceKm, estimated));
 }
 
-function calcMinDistanceToPathKm(point: LatLng, routePath: LatLng[]): number {
-  let minDistance = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < routePath.length; i += 1) {
-    const d = calcDistance(point, routePath[i]);
-    if (d < minDistance) minDistance = d;
-  }
-  return minDistance;
+function calcMinDistanceToPathKm(
+    point: LatLng,
+    routePath: LatLng[],
+    hintRef?: {current: number},
+): number {
+    const len = routePath.length;
+    if (hintRef && len > 0) {
+        const start = Math.max(0, hintRef.current - 3);
+        const end = Math.min(len - 1, hintRef.current + 20);
+        let minDist = Number.POSITIVE_INFINITY;
+        let minIdx = hintRef.current;
+        for (let i = start; i <= end; i += 1) {
+            const d = calcDistance(point, routePath[i]);
+            if (d < minDist) {
+                minDist = d;
+                minIdx = i;
+            }
+        }
+        // 윈도우가 경로를 놓쳤을 때 전체 재탐색
+        if (minDist > 0.1) {
+            for (let i = 0; i < len; i += 1) {
+                const d = calcDistance(point, routePath[i]);
+                if (d < minDist) {
+                    minDist = d;
+                    minIdx = i;
+                }
+            }
+        }
+        hintRef.current = minIdx;
+        return minDist;
+    }
+    let minDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < len; i += 1) {
+        const d = calcDistance(point, routePath[i]);
+        if (d < minDistance) minDistance = d;
+    }
+    return minDistance;
 }
 
 export default function RunningPage() {
-  const router = useRouter();
-  const [config, setConfig] = useState<RunConfig | null>(null);
-  const [configError, setConfigError] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [arrived, setArrived] = useState(false);
-  const [completionReason, setCompletionReason] = useState<CompletionReason | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const arrivedRef = useRef(false);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const baseElapsedRef = useRef<number>(0);
-  const isPausedRef = useRef(false);
-  const isPausingRef = useRef(false);
-  const frozenPositionRef = useRef<typeof position>(null);
+    const router = useRouter();
+    const [config, setConfig] = useState<RunConfig | null>(null);
+    const [configError, setConfigError] = useState(false);
+    const [elapsed, setElapsed] = useState(0);
+    const [arrived, setArrived] = useState(false);
+    const [completionReason, setCompletionReason] =
+        useState<CompletionReason | null>(null);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const arrivedRef = useRef(false);
+    const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+    const startTimeRef = useRef<number>(0);
+    const baseElapsedRef = useRef<number>(0);
+    const isPausedRef = useRef(false);
+    const isPausingRef = useRef(false);
+    const frozenPositionRef = useRef<typeof position>(null);
 
-  const { permission, requestPermission } = useNotification();
-  const { profile } = useUserProfile();
-  const {
-    position,
-    error: gpsError,
-    startTracking,
-    stopTracking,
-    pauseTracking,
-    resumeTracking,
-    pathPoints,
-    trackPoints,
-    totalDistance,
-    speed,
-    isTracking,
-    currentAltitude,
-    startAltitude,
-    endAltitude,
-    elevationGain,
-    elevationLoss,
-  } =
-    useGeolocation();
+    const {permission, requestPermission} = useNotification();
+    const {profile} = useUserProfile();
+    const {
+        position,
+        error: gpsError,
+        startTracking,
+        stopTracking,
+        pauseTracking,
+        resumeTracking,
+        pathPoints,
+        trackPoints,
+        totalDistance,
+        speed,
+        isTracking,
+        currentAltitude,
+        startAltitude,
+        endAltitude,
+        elevationGain,
+        elevationLoss,
+    } = useGeolocation();
 
-  const [isPaused, setIsPaused] = useState(false);
-  const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
-  const [followUser, setFollowUser] = useState(true);
-  const [toast, setToast] = useState<{ msg: string; undoFn?: () => void } | null>(null);
-  const [isOnline, setIsOnline] = useState(() => typeof navigator !== "undefined" ? navigator.onLine : true);
-  const [pendingRecovery, setPendingRecovery] = useState<RunRecoverySnapshot | null>(null);
-  const [gapSuggestion, setGapSuggestion] = useState<GapSuggestion | null>(null);
-  const [adjustedDistanceKm, setAdjustedDistanceKm] = useState(0);
-  const [untrackedSeconds, setUntrackedSeconds] = useState(0);
-  const [adjustedGapCount, setAdjustedGapCount] = useState(0);
-  const [runTuning, setRunTuning] = useState<RunTuning>(DEFAULT_RUN_TUNING);
-  const hiddenAtRef = useRef<number | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [voiceEnabled, setVoiceEnabled] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("voiceGuide") !== "off" : true
-  );
-  const lastAnnouncedKmRef = useRef(0);
-  const lastPaceCoachAtRef = useRef(0);
-  const { speak, cancel: cancelSpeak } = useVoiceGuide();
+    const [isPaused, setIsPaused] = useState(false);
+    const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
+    const [followUser, setFollowUser] = useState(true);
+    const [toast, setToast] = useState<{
+        msg: string;
+        undoFn?: () => void;
+    } | null>(null);
+    const [isOnline, setIsOnline] = useState(() =>
+        typeof navigator !== "undefined" ? navigator.onLine : true,
+    );
+    const [pendingRecovery, setPendingRecovery] =
+        useState<RunRecoverySnapshot | null>(null);
+    const [gapSuggestion, setGapSuggestion] = useState<GapSuggestion | null>(
+        null,
+    );
+    const [adjustedDistanceKm, setAdjustedDistanceKm] = useState(0);
+    const [untrackedSeconds, setUntrackedSeconds] = useState(0);
+    const [adjustedGapCount, setAdjustedGapCount] = useState(0);
+    const [runTuning, setRunTuning] = useState<RunTuning>(DEFAULT_RUN_TUNING);
+    const hiddenAtRef = useRef<number | null>(null);
+    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autoPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null,
+    );
+    const [voiceEnabled, setVoiceEnabled] = useState(() =>
+        typeof window !== "undefined"
+            ? localStorage.getItem("voiceGuide") !== "off"
+            : true,
+    );
+    const lastAnnouncedKmRef = useRef(0);
+    const lastPaceCoachAtRef = useRef(0);
+    const {speak, cancel: cancelSpeak} = useVoiceGuide();
 
-  useEffect(() => {
-    if (profile.runTuning) {
-      setRunTuning(normalizeRunTuning(profile.runTuning));
-      return;
-    }
-    setRunTuning(loadRunTuning());
-  }, [profile.runTuning]);
-
-  // 인터벌 트레이닝 state
-  const [intervalPhase, setIntervalPhase] = useState<IntervalPhase>("run");
-  const [intervalSet, setIntervalSet] = useState(1);
-  const [intervalCountdown, setIntervalCountdown] = useState(0);
-  const intervalPhaseRef = useRef<IntervalPhase>("run");
-  const intervalSetRef = useRef(1);
-  const intervalCountdownRef = useRef(0);
-  const intervalRunSecondsRef = useRef(0);
-  const intervalRestSecondsRef = useRef(0);
-  const intervalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const lastSplitDistanceRef = useRef(0);
-  const lastSplitElapsedRef = useRef(0);
-  const lastSplitPaceRef = useRef<number | null>(null);
-
-  const stillnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const speedSamplesRef = useRef<number[]>([]);
-  const lastAutoPauseDistanceRef = useRef(0);
-
-  const offRouteSinceRef = useRef<number | null>(null);
-  const lastOffRouteAlertAtRef = useRef(0);
-
-  const effectiveDistance = totalDistance + adjustedDistanceKm;
-
-  const showToast = useCallback((msg: string, undoFn?: () => void) => {
-    setToast({ msg, undoFn });
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 4000);
-  }, []);
-
-  const applyGapAdjustment = useCallback((suggestion: GapSuggestion, isAuto = false) => {
-    setAdjustedDistanceKm((prev) => prev + suggestion.suggestedDistanceKm);
-    setUntrackedSeconds((prev) => prev + suggestion.gapSeconds);
-    setAdjustedGapCount((prev) => prev + 1);
-    const undoFn = () => {
-      setAdjustedDistanceKm((prev) => prev - suggestion.suggestedDistanceKm);
-      setUntrackedSeconds((prev) => prev - suggestion.gapSeconds);
-      setAdjustedGapCount((prev) => prev - 1);
-      showToast("공백 보정을 취소했어요.");
-    };
-    const prefix = isAuto ? "GPS 신호 끊김" : "공백 보정";
-    showToast(`${prefix} ${suggestion.gapSeconds}초 → +${suggestion.suggestedDistanceKm.toFixed(2)}km`, undoFn);
-  }, [showToast]);
-
-  const saveRecoverySnapshot = useCallback((payload: Omit<RunRecoverySnapshot, "version" | "updatedAt">) => {
-    try {
-      const snapshot: RunRecoverySnapshot = {
-        version: 1,
-        updatedAt: Date.now(),
-        ...payload,
-      };
-      sessionStorage.setItem(RUN_RECOVERY_KEY, JSON.stringify(snapshot));
-    } catch {
-      // Safari private mode 등 저장 실패는 무시
-    }
-  }, []);
-
-  const clearRecoverySnapshot = useCallback(() => {
-    sessionStorage.removeItem(RUN_RECOVERY_KEY);
-  }, []);
-
-  const acquireWakeLock = useCallback(async () => {
-    if (!("wakeLock" in navigator)) return;
-    try {
-      wakeLockRef.current = await navigator.wakeLock.request("screen");
-    } catch {
-      // 배터리 부족 등 — 무시
-    }
-  }, []);
-
-  const beginSession = useCallback((
-    nextConfig: RunConfig,
-    recovery?: Pick<RunRecoverySnapshot, "elapsed" | "isPaused" | "pathPoints" | "trackPoints" | "totalDistance" | "currentAltitude" | "startAltitude" | "endAltitude" | "elevationGain" | "elevationLoss" | "adjustedDistanceKm" | "untrackedSeconds" | "adjustedGapCount">
-  ) => {
-    setConfig(nextConfig);
-    requestPermission();
-    startTracking({
-      activityType: nextConfig.activityType,
-      restore: recovery
-        ? {
-          pathPoints: recovery.pathPoints,
-          trackPoints: recovery.trackPoints,
-          totalDistance: recovery.totalDistance,
-          currentAltitude: recovery.currentAltitude,
-          startAltitude: recovery.startAltitude,
-          endAltitude: recovery.endAltitude,
-          elevationGain: recovery.elevationGain,
-          elevationLoss: recovery.elevationLoss,
-        }
-        : undefined,
-    });
-    void acquireWakeLock();
-
-    startTimeRef.current = Date.now();
-    baseElapsedRef.current = recovery?.elapsed ?? 0;
-    setElapsed(recovery?.elapsed ?? 0);
-    setAdjustedDistanceKm(recovery?.adjustedDistanceKm ?? 0);
-    setUntrackedSeconds(recovery?.untrackedSeconds ?? 0);
-    setAdjustedGapCount(recovery?.adjustedGapCount ?? 0);
-    setGapSuggestion(null);
-    setArrived(false);
-    setCompletionReason(null);
-    lastSplitDistanceRef.current = Math.floor(recovery?.totalDistance ?? 0);
-    lastSplitElapsedRef.current = recovery?.elapsed ?? 0;
-    lastSplitPaceRef.current = null;
-    speedSamplesRef.current = [];
-    lastAutoPauseDistanceRef.current = recovery?.totalDistance ?? 0;
-    offRouteSinceRef.current = null;
-    lastOffRouteAlertAtRef.current = 0;
-    lastAnnouncedKmRef.current = Math.floor((recovery?.totalDistance ?? 0) + (recovery?.adjustedDistanceKm ?? 0));
-    lastPaceCoachAtRef.current = Date.now();
-
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (recovery?.isPaused) {
-      pauseTracking();
-      isPausedRef.current = true;
-      setIsPaused(true);
-    } else {
-      isPausedRef.current = false;
-      setIsPaused(false);
-      timerRef.current = setInterval(() => {
-        setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
-      }, 1000);
-    }
-  }, [requestPermission, startTracking, acquireWakeLock, pauseTracking]);
-
-  const { heading, needsPermission, requestPermission: requestCompassPermission } = useCompass();
-
-  void permission;
-
-  // GPS 오류 토스트
-  useEffect(() => {
-    if (gpsError) showToast(`GPS 오류: ${gpsError}`);
-  }, [gpsError, showToast]);
-
-  useEffect(() => {
-    let parsedConfig: RunConfig | null = null;
-
-    const raw = sessionStorage.getItem("runConfig");
-    if (raw) {
-      try {
-        parsedConfig = JSON.parse(raw) as RunConfig;
-        beginSession(parsedConfig);
-      } catch {
-        sessionStorage.removeItem("runConfig");
-        showToast("설정 데이터가 손상되었습니다. 다시 설정해주세요.");
-        router.replace("/");
-        return;
-      }
-    } else {
-      const rawRecovery = sessionStorage.getItem(RUN_RECOVERY_KEY);
-      if (rawRecovery) {
-        try {
-          const parsedRecovery = JSON.parse(rawRecovery) as Partial<RunRecoverySnapshot>;
-          const hasRequiredFields =
-            parsedRecovery.version === 1 &&
-            typeof parsedRecovery.updatedAt === "number" &&
-            parsedRecovery.config !== undefined &&
-            typeof parsedRecovery.elapsed === "number" &&
-            typeof parsedRecovery.isPaused === "boolean" &&
-            typeof parsedRecovery.totalDistance === "number" &&
-            Array.isArray(parsedRecovery.pathPoints);
-          const updatedAt = typeof parsedRecovery.updatedAt === "number" ? parsedRecovery.updatedAt : null;
-          const isFresh = hasRequiredFields && updatedAt !== null && Date.now() - updatedAt <= RUN_RECOVERY_MAX_AGE_MS;
-          if (isFresh) {
-            const normalizedRecovery: RunRecoverySnapshot = {
-              ...parsedRecovery,
-              currentAltitude: parsedRecovery.currentAltitude ?? null,
-              startAltitude: parsedRecovery.startAltitude ?? null,
-              endAltitude: parsedRecovery.endAltitude ?? null,
-              elevationGain: parsedRecovery.elevationGain ?? 0,
-              elevationLoss: parsedRecovery.elevationLoss ?? 0,
-              trackPoints: parsedRecovery.trackPoints ?? [],
-              adjustedDistanceKm: parsedRecovery.adjustedDistanceKm ?? 0,
-              untrackedSeconds: parsedRecovery.untrackedSeconds ?? 0,
-              adjustedGapCount: parsedRecovery.adjustedGapCount ?? 0,
-            } as RunRecoverySnapshot;
-            setConfig(normalizedRecovery.config);
-            setPendingRecovery(normalizedRecovery);
+    useEffect(() => {
+        if (profile.runTuning) {
+            setRunTuning(normalizeRunTuning(profile.runTuning));
             return;
-          }
-        } catch {
-          clearRecoverySnapshot();
         }
-      }
-    }
+        setRunTuning(loadRunTuning());
+    }, [profile.runTuning]);
 
-    if (!parsedConfig && !raw) {
-      setConfigError(true);
-      setTimeout(() => router.replace("/"), 2000);
-      return;
-    }
+    // 인터벌 트레이닝 state
+    const [intervalPhase, setIntervalPhase] = useState<IntervalPhase>("run");
+    const [intervalSet, setIntervalSet] = useState(1);
+    const [intervalCountdown, setIntervalCountdown] = useState(0);
+    const intervalPhaseRef = useRef<IntervalPhase>("run");
+    const intervalSetRef = useRef(1);
+    const intervalCountdownRef = useRef(0);
+    const intervalRunSecondsRef = useRef(0);
+    const intervalRestSecondsRef = useRef(0);
+    const intervalTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+        null,
+    );
 
-    // iOS는 Wake Lock 미지원 → 화면 꺼지면 GPS 중단됨 안내
-    if (!("wakeLock" in navigator)) {
-      setTimeout(() => showToast("화면이 꺼지면 GPS 추적이 중단돼요. 화면을 켜두세요."), 1500);
-    }
+    const lastSplitDistanceRef = useRef(0);
+    const lastSplitElapsedRef = useRef(0);
+    const lastSplitPaceRef = useRef<number | null>(null);
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      if (stillnessTimerRef.current) clearTimeout(stillnessTimerRef.current);
-      if (intervalTimerRef.current) clearInterval(intervalTimerRef.current);
-      stopTracking();
-      wakeLockRef.current?.release();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beginSession, clearRecoverySnapshot, router, showToast, stopTracking]);
+    const stillnessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null,
+    );
+    const speedSamplesRef = useRef<number[]>([]);
+    const lastAutoPauseDistanceRef = useRef(0);
 
-  const handleResumeRecoveredSession = useCallback(() => {
-    if (!pendingRecovery) return;
-    setPendingRecovery(null);
-    beginSession(pendingRecovery.config, {
-      elapsed: pendingRecovery.elapsed,
-      isPaused: pendingRecovery.isPaused,
-      pathPoints: pendingRecovery.pathPoints,
-      trackPoints: pendingRecovery.trackPoints,
-      totalDistance: pendingRecovery.totalDistance,
-      currentAltitude: pendingRecovery.currentAltitude,
-      startAltitude: pendingRecovery.startAltitude,
-      endAltitude: pendingRecovery.endAltitude,
-      elevationGain: pendingRecovery.elevationGain,
-      elevationLoss: pendingRecovery.elevationLoss,
-      adjustedDistanceKm: pendingRecovery.adjustedDistanceKm ?? 0,
-      untrackedSeconds: pendingRecovery.untrackedSeconds ?? 0,
-      adjustedGapCount: pendingRecovery.adjustedGapCount ?? 0,
-    });
-    showToast("이전 러닝 세션을 복구했어요.");
-  }, [pendingRecovery, beginSession, showToast]);
+    const offRouteSinceRef = useRef<number | null>(null);
+    const nearestRouteIdxRef = useRef(0);
 
-  const handleDiscardRecoveredSession = useCallback(() => {
-    clearRecoverySnapshot();
-    sessionStorage.removeItem("runConfig");
-    setPendingRecovery(null);
-    router.replace("/");
-  }, [clearRecoverySnapshot, router]);
+    // config(경로) 교체 시 힌트 인덱스 리셋
+    useEffect(() => {
+        nearestRouteIdxRef.current = 0;
+    }, [config]);
+    const lastOffRouteAlertAtRef = useRef(0);
 
-  useEffect(() => {
-    if (!config || arrived || pendingRecovery) return;
+    const effectiveDistance = totalDistance + adjustedDistanceKm;
 
-    const persist = () => {
-      const liveElapsed = Math.floor(
-        baseElapsedRef.current + (isPausedRef.current ? 0 : (Date.now() - startTimeRef.current) / 1000)
-      );
-      saveRecoverySnapshot({
+    const showToast = useCallback((msg: string, undoFn?: () => void) => {
+        setToast({msg, undoFn});
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+    }, []);
+
+    const applyGapAdjustment = useCallback(
+        (suggestion: GapSuggestion, isAuto = false) => {
+            setAdjustedDistanceKm(
+                (prev) => prev + suggestion.suggestedDistanceKm,
+            );
+            setUntrackedSeconds((prev) => prev + suggestion.gapSeconds);
+            setAdjustedGapCount((prev) => prev + 1);
+            const undoFn = () => {
+                setAdjustedDistanceKm(
+                    (prev) => prev - suggestion.suggestedDistanceKm,
+                );
+                setUntrackedSeconds((prev) => prev - suggestion.gapSeconds);
+                setAdjustedGapCount((prev) => prev - 1);
+                showToast("공백 보정을 취소했어요.");
+            };
+            const prefix = isAuto ? "GPS 신호 끊김" : "공백 보정";
+            showToast(
+                `${prefix} ${suggestion.gapSeconds}초 → +${suggestion.suggestedDistanceKm.toFixed(2)}km`,
+                undoFn,
+            );
+        },
+        [showToast],
+    );
+
+    const saveRecoverySnapshot = useCallback(
+        (payload: Omit<RunRecoverySnapshot, "version" | "updatedAt">) => {
+            try {
+                const snapshot: RunRecoverySnapshot = {
+                    version: 1,
+                    updatedAt: Date.now(),
+                    ...payload,
+                };
+                sessionStorage.setItem(
+                    RUN_RECOVERY_KEY,
+                    JSON.stringify(snapshot),
+                );
+            } catch {
+                // Safari private mode 등 저장 실패는 무시
+            }
+        },
+        [],
+    );
+
+    const clearRecoverySnapshot = useCallback(() => {
+        sessionStorage.removeItem(RUN_RECOVERY_KEY);
+    }, []);
+
+    const acquireWakeLock = useCallback(async () => {
+        if (!("wakeLock" in navigator)) return;
+        try {
+            wakeLockRef.current = await navigator.wakeLock.request("screen");
+        } catch {
+            // 배터리 부족 등 — 무시
+        }
+    }, []);
+
+    const beginSession = useCallback(
+        (
+            nextConfig: RunConfig,
+            recovery?: Pick<
+                RunRecoverySnapshot,
+                | "elapsed"
+                | "isPaused"
+                | "pathPoints"
+                | "trackPoints"
+                | "totalDistance"
+                | "currentAltitude"
+                | "startAltitude"
+                | "endAltitude"
+                | "elevationGain"
+                | "elevationLoss"
+                | "adjustedDistanceKm"
+                | "untrackedSeconds"
+                | "adjustedGapCount"
+            >,
+        ) => {
+            setConfig(nextConfig);
+            requestPermission();
+            startTracking({
+                activityType: nextConfig.activityType,
+                restore: recovery
+                    ? {
+                          pathPoints: recovery.pathPoints,
+                          trackPoints: recovery.trackPoints,
+                          totalDistance: recovery.totalDistance,
+                          currentAltitude: recovery.currentAltitude,
+                          startAltitude: recovery.startAltitude,
+                          endAltitude: recovery.endAltitude,
+                          elevationGain: recovery.elevationGain,
+                          elevationLoss: recovery.elevationLoss,
+                      }
+                    : undefined,
+            });
+            void acquireWakeLock();
+
+            startTimeRef.current = Date.now();
+            baseElapsedRef.current = recovery?.elapsed ?? 0;
+            setElapsed(recovery?.elapsed ?? 0);
+            setAdjustedDistanceKm(recovery?.adjustedDistanceKm ?? 0);
+            setUntrackedSeconds(recovery?.untrackedSeconds ?? 0);
+            setAdjustedGapCount(recovery?.adjustedGapCount ?? 0);
+            setGapSuggestion(null);
+            setArrived(false);
+            setCompletionReason(null);
+            lastSplitDistanceRef.current = Math.floor(
+                recovery?.totalDistance ?? 0,
+            );
+            lastSplitElapsedRef.current = recovery?.elapsed ?? 0;
+            lastSplitPaceRef.current = null;
+            speedSamplesRef.current = [];
+            lastAutoPauseDistanceRef.current = recovery?.totalDistance ?? 0;
+            offRouteSinceRef.current = null;
+            lastOffRouteAlertAtRef.current = 0;
+            lastAnnouncedKmRef.current = Math.floor(
+                (recovery?.totalDistance ?? 0) +
+                    (recovery?.adjustedDistanceKm ?? 0),
+            );
+            lastPaceCoachAtRef.current = Date.now();
+
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+
+            if (recovery?.isPaused) {
+                pauseTracking();
+                isPausedRef.current = true;
+                setIsPaused(true);
+            } else {
+                isPausedRef.current = false;
+                setIsPaused(false);
+                timerRef.current = setInterval(() => {
+                    setElapsed(
+                        Math.floor(
+                            baseElapsedRef.current +
+                                (Date.now() - startTimeRef.current) / 1000,
+                        ),
+                    );
+                }, 1000);
+            }
+        },
+        [requestPermission, startTracking, acquireWakeLock, pauseTracking],
+    );
+
+    const {
+        heading,
+        needsPermission,
+        requestPermission: requestCompassPermission,
+    } = useCompass();
+
+    void permission;
+
+    // GPS 오류 토스트
+    useEffect(() => {
+        if (gpsError) showToast(`GPS 오류: ${gpsError}`);
+    }, [gpsError, showToast]);
+
+    useEffect(() => {
+        let parsedConfig: RunConfig | null = null;
+
+        const raw = sessionStorage.getItem("runConfig");
+        if (raw) {
+            try {
+                parsedConfig = JSON.parse(raw) as RunConfig;
+                beginSession(parsedConfig);
+            } catch {
+                sessionStorage.removeItem("runConfig");
+                showToast("설정 데이터가 손상되었습니다. 다시 설정해주세요.");
+                router.replace("/");
+                return;
+            }
+        } else {
+            const rawRecovery = sessionStorage.getItem(RUN_RECOVERY_KEY);
+            if (rawRecovery) {
+                try {
+                    const parsedRecovery = JSON.parse(
+                        rawRecovery,
+                    ) as Partial<RunRecoverySnapshot>;
+                    const hasRequiredFields =
+                        parsedRecovery.version === 1 &&
+                        typeof parsedRecovery.updatedAt === "number" &&
+                        parsedRecovery.config !== undefined &&
+                        typeof parsedRecovery.elapsed === "number" &&
+                        typeof parsedRecovery.isPaused === "boolean" &&
+                        typeof parsedRecovery.totalDistance === "number" &&
+                        Array.isArray(parsedRecovery.pathPoints);
+                    const updatedAt =
+                        typeof parsedRecovery.updatedAt === "number"
+                            ? parsedRecovery.updatedAt
+                            : null;
+                    const isFresh =
+                        hasRequiredFields &&
+                        updatedAt !== null &&
+                        Date.now() - updatedAt <= RUN_RECOVERY_MAX_AGE_MS;
+                    if (isFresh) {
+                        const normalizedRecovery: RunRecoverySnapshot = {
+                            ...parsedRecovery,
+                            currentAltitude:
+                                parsedRecovery.currentAltitude ?? null,
+                            startAltitude: parsedRecovery.startAltitude ?? null,
+                            endAltitude: parsedRecovery.endAltitude ?? null,
+                            elevationGain: parsedRecovery.elevationGain ?? 0,
+                            elevationLoss: parsedRecovery.elevationLoss ?? 0,
+                            trackPoints: parsedRecovery.trackPoints ?? [],
+                            adjustedDistanceKm:
+                                parsedRecovery.adjustedDistanceKm ?? 0,
+                            untrackedSeconds:
+                                parsedRecovery.untrackedSeconds ?? 0,
+                            adjustedGapCount:
+                                parsedRecovery.adjustedGapCount ?? 0,
+                        } as RunRecoverySnapshot;
+                        setConfig(normalizedRecovery.config);
+                        setPendingRecovery(normalizedRecovery);
+                        return;
+                    }
+                } catch {
+                    clearRecoverySnapshot();
+                }
+            }
+        }
+
+        if (!parsedConfig && !raw) {
+            setConfigError(true);
+            setTimeout(() => router.replace("/"), 2000);
+            return;
+        }
+
+        // iOS는 Wake Lock 미지원 → 화면 꺼지면 GPS 중단됨 안내
+        if (!("wakeLock" in navigator)) {
+            setTimeout(
+                () =>
+                    showToast(
+                        "화면이 꺼지면 GPS 추적이 중단돼요. 화면을 켜두세요.",
+                    ),
+                1500,
+            );
+        }
+
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            if (stillnessTimerRef.current)
+                clearTimeout(stillnessTimerRef.current);
+            if (intervalTimerRef.current)
+                clearInterval(intervalTimerRef.current);
+            stopTracking();
+            wakeLockRef.current?.release();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [beginSession, clearRecoverySnapshot, router, showToast, stopTracking]);
+
+    const handleResumeRecoveredSession = useCallback(() => {
+        if (!pendingRecovery) return;
+        setPendingRecovery(null);
+        beginSession(pendingRecovery.config, {
+            elapsed: pendingRecovery.elapsed,
+            isPaused: pendingRecovery.isPaused,
+            pathPoints: pendingRecovery.pathPoints,
+            trackPoints: pendingRecovery.trackPoints,
+            totalDistance: pendingRecovery.totalDistance,
+            currentAltitude: pendingRecovery.currentAltitude,
+            startAltitude: pendingRecovery.startAltitude,
+            endAltitude: pendingRecovery.endAltitude,
+            elevationGain: pendingRecovery.elevationGain,
+            elevationLoss: pendingRecovery.elevationLoss,
+            adjustedDistanceKm: pendingRecovery.adjustedDistanceKm ?? 0,
+            untrackedSeconds: pendingRecovery.untrackedSeconds ?? 0,
+            adjustedGapCount: pendingRecovery.adjustedGapCount ?? 0,
+        });
+        showToast("이전 러닝 세션을 복구했어요.");
+    }, [pendingRecovery, beginSession, showToast]);
+
+    const handleDiscardRecoveredSession = useCallback(() => {
+        clearRecoverySnapshot();
+        sessionStorage.removeItem("runConfig");
+        setPendingRecovery(null);
+        router.replace("/");
+    }, [clearRecoverySnapshot, router]);
+
+    useEffect(() => {
+        if (!config || arrived || pendingRecovery) return;
+
+        const persist = () => {
+            const liveElapsed = Math.floor(
+                baseElapsedRef.current +
+                    (isPausedRef.current
+                        ? 0
+                        : (Date.now() - startTimeRef.current) / 1000),
+            );
+            saveRecoverySnapshot({
+                config,
+                elapsed: liveElapsed,
+                isPaused: isPausedRef.current,
+                totalDistance,
+                pathPoints,
+                trackPoints,
+                currentAltitude,
+                startAltitude,
+                endAltitude,
+                elevationGain,
+                elevationLoss,
+                adjustedDistanceKm,
+                untrackedSeconds,
+                adjustedGapCount,
+            });
+        };
+
+        persist();
+        const saveTimer = setInterval(persist, 3000);
+        const onPageHide = () => persist();
+        window.addEventListener("pagehide", onPageHide);
+
+        return () => {
+            clearInterval(saveTimer);
+            window.removeEventListener("pagehide", onPageHide);
+        };
+    }, [
         config,
-        elapsed: liveElapsed,
-        isPaused: isPausedRef.current,
         totalDistance,
         pathPoints,
         trackPoints,
@@ -407,1195 +584,1716 @@ export default function RunningPage() {
         adjustedDistanceKm,
         untrackedSeconds,
         adjustedGapCount,
-      });
-    };
+        arrived,
+        pendingRecovery,
+        saveRecoverySnapshot,
+    ]);
 
-    persist();
-    const saveTimer = setInterval(persist, 3000);
-    const onPageHide = () => persist();
-    window.addEventListener("pagehide", onPageHide);
+    // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득 + 중단 시간 안내
+    useEffect(() => {
+        const onVisibility = () => {
+            if (document.visibilityState === "hidden") {
+                hiddenAtRef.current = Date.now();
+            } else if (document.visibilityState === "visible") {
+                if (!isPausedRef.current) acquireWakeLock();
+                if (hiddenAtRef.current) {
+                    const secs = Math.round(
+                        (Date.now() - hiddenAtRef.current) / 1000,
+                    );
+                    hiddenAtRef.current = null;
+                    if (secs >= 3) {
+                        showToast(
+                            `화면이 ${secs}초 꺼져 있었어요. 이 구간은 추적되지 않았어요.`,
+                        );
+                        if (!isPausedRef.current && config) {
+                            const suggestedDistanceKm = estimateGapDistanceKm(
+                                trackPoints,
+                                totalDistance,
+                                elapsed,
+                                secs,
+                                config.activityType,
+                            );
+                            const suggestion = {
+                                gapSeconds: secs,
+                                suggestedDistanceKm,
+                            };
+                            if (profile.autoApplyGapAdjustment) {
+                                applyGapAdjustment(suggestion, true);
+                            } else {
+                                setGapSuggestion(suggestion);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+        return () =>
+            document.removeEventListener("visibilitychange", onVisibility);
+    }, [
+        acquireWakeLock,
+        showToast,
+        config,
+        trackPoints,
+        totalDistance,
+        elapsed,
+        profile.autoApplyGapAdjustment,
+        applyGapAdjustment,
+    ]);
 
-    return () => {
-      clearInterval(saveTimer);
-      window.removeEventListener("pagehide", onPageHide);
-    };
-  }, [
-    config,
-    totalDistance,
-    pathPoints,
-    trackPoints,
-    currentAltitude,
-    startAltitude,
-    endAltitude,
-    elevationGain,
-    elevationLoss,
-    adjustedDistanceKm,
-    untrackedSeconds,
-    adjustedGapCount,
-    arrived,
-    pendingRecovery,
-    saveRecoverySnapshot,
-  ]);
+    // 완료 감지 우선순위: 목적지 > 거리 목표 > 시간 목표
+    useEffect(() => {
+        if (!config || arrivedRef.current) return;
 
-  // Wake Lock은 페이지 숨김 시 자동 해제됨 → 복귀 시 재획득 + 중단 시간 안내
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenAtRef.current = Date.now();
-      } else if (document.visibilityState === "visible") {
-        if (!isPausedRef.current) acquireWakeLock();
-        if (hiddenAtRef.current) {
-          const secs = Math.round((Date.now() - hiddenAtRef.current) / 1000);
-          hiddenAtRef.current = null;
-          if (secs >= 3) {
-            showToast(`화면이 ${secs}초 꺼져 있었어요. 이 구간은 추적되지 않았어요.`);
-            if (!isPausedRef.current && config) {
-              const suggestedDistanceKm = estimateGapDistanceKm(
+        let reason: CompletionReason | null = null;
+        let title = "";
+        let body = "";
+
+        if (
+            position &&
+            config.endPoint &&
+            calcDistance(position, config.endPoint) <= 0.005
+        ) {
+            reason = "destination";
+            title = "목적지 도착!";
+            body = "5m 이내 진입";
+        } else if (
+            config.goalDistance &&
+            effectiveDistance >= config.goalDistance
+        ) {
+            reason = "distance";
+            title = "목표 달성!";
+            body = `${config.goalDistance}km 완주`;
+        } else if (config.goalTime && elapsed >= config.goalTime * 60) {
+            reason = "time";
+            title = "시간 목표 달성!";
+            body = `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`;
+        }
+
+        if (!reason) return;
+
+        arrivedRef.current = true;
+        setCompletionReason(reason);
+        setArrived(true);
+
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification(title, {
+                body,
+                icon: "/icons/icon-192x192.png",
+            });
+        }
+    }, [position, config, effectiveDistance, elapsed]);
+
+    const completionCopy = (() => {
+        if (completionReason === "distance" && config?.goalDistance) {
+            return {
+                title: "목표 달성! 🎉",
+                description: `${config.goalDistance}km 완주`,
+            };
+        }
+        if (completionReason === "time" && config?.goalTime) {
+            return {
+                title: "시간 목표 달성! 🎉",
+                description: `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`,
+            };
+        }
+        if (completionReason === "interval") {
+            return {
+                title: "인터벌 완료! 🎉",
+                description: "예정된 세트를 모두 완료했어요.",
+            };
+        }
+        return {
+            title: "도착!",
+            description: "목적지 5m 이내 진입",
+        };
+    })();
+
+    // 경로 이탈 감지: 예상 경로에서 일정 거리 이상 벗어나면 안내
+    useEffect(() => {
+        if (!position || !config?.routePath || config.routePath.length < 2)
+            return;
+        if (isPaused || arrived) {
+            offRouteSinceRef.current = null;
+            return;
+        }
+
+        const OFF_ROUTE_THRESHOLD_KM = runTuning.offRouteThresholdKm;
+        const OFF_ROUTE_SUSTAIN_MS = runTuning.offRouteSustainMs;
+        const ALERT_COOLDOWN_MS = runTuning.offRouteAlertCooldownMs;
+        const now = Date.now();
+
+        const minDistanceToRoute = calcMinDistanceToPathKm(
+            position,
+            config.routePath,
+            nearestRouteIdxRef,
+        );
+        const isOffRoute = minDistanceToRoute >= OFF_ROUTE_THRESHOLD_KM;
+
+        if (!isOffRoute) {
+            offRouteSinceRef.current = null;
+            return;
+        }
+
+        if (offRouteSinceRef.current === null) {
+            offRouteSinceRef.current = now;
+            return;
+        }
+
+        const sustained =
+            now - offRouteSinceRef.current >= OFF_ROUTE_SUSTAIN_MS;
+        const canAlert =
+            now - lastOffRouteAlertAtRef.current >= ALERT_COOLDOWN_MS;
+
+        if (sustained && canAlert) {
+            lastOffRouteAlertAtRef.current = now;
+            showToast("경로에서 벗어났을 수 있어요. 지도를 확인해 주세요.");
+        }
+    }, [position, config, isPaused, arrived, showToast, runTuning]);
+
+    const handleFinish = useCallback(() => {
+        if (!config) return;
+        cancelSpeak();
+        stopTracking();
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+        if (stillnessTimerRef.current) {
+            clearTimeout(stillnessTimerRef.current);
+            stillnessTimerRef.current = null;
+        }
+        wakeLockRef.current?.release();
+        const finalElapsed = Math.floor(
+            baseElapsedRef.current +
+                (isPausedRef.current
+                    ? 0
+                    : (Date.now() - startTimeRef.current) / 1000),
+        );
+        sessionStorage.setItem(
+            "runResult",
+            JSON.stringify({
+                startPoint: config.startPoint,
+                endPoint: config.endPoint,
+                distance_km: effectiveDistance,
+                gps_distance_km_raw: totalDistance,
+                gap_adjustment_distance_km: adjustedDistanceKm,
+                gap_adjustment_seconds: untrackedSeconds,
+                gap_adjustment_count: adjustedGapCount,
+                gap_adjustment_auto_enabled: profile.autoApplyGapAdjustment,
+                duration_seconds: finalElapsed,
+                pace: calcPace(effectiveDistance, finalElapsed),
+                activity_type: config.activityType,
+                pathPoints,
                 trackPoints,
-                totalDistance,
-                elapsed,
-                secs,
-                config.activityType,
-              );
-              const suggestion = { gapSeconds: secs, suggestedDistanceKm };
-              if (profile.autoApplyGapAdjustment) {
-                applyGapAdjustment(suggestion, true);
-              } else {
-                setGapSuggestion(suggestion);
-              }
+                altitude_start_m: startAltitude,
+                altitude_end_m: endAltitude,
+                elevation_gain_m: elevationGain,
+                elevation_loss_m: elevationLoss,
+                ...(config.intervalPreset && {
+                    intervalPreset: config.intervalPreset,
+                    intervalCompletedSets: intervalSetRef.current,
+                    intervalTotalRunSeconds: intervalRunSecondsRef.current,
+                    intervalTotalRestSeconds: intervalRestSecondsRef.current,
+                }),
+            }),
+        );
+        clearRecoverySnapshot();
+        sessionStorage.removeItem("runConfig");
+        router.push("/result");
+    }, [
+        config,
+        effectiveDistance,
+        totalDistance,
+        adjustedDistanceKm,
+        untrackedSeconds,
+        adjustedGapCount,
+        profile.autoApplyGapAdjustment,
+        pathPoints,
+        trackPoints,
+        startAltitude,
+        endAltitude,
+        elevationGain,
+        elevationLoss,
+        stopTracking,
+        router,
+        clearRecoverySnapshot,
+        cancelSpeak,
+    ]);
+
+    const handlePause = useCallback(() => {
+        frozenPositionRef.current = position;
+        pauseTracking();
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+        baseElapsedRef.current += (Date.now() - startTimeRef.current) / 1000;
+        isPausedRef.current = true;
+        isPausingRef.current = false;
+        setIsPaused(true);
+    }, [pauseTracking, position]);
+
+    const handleResume = useCallback(() => {
+        frozenPositionRef.current = null;
+        resumeTracking();
+        startTimeRef.current = Date.now();
+        isPausedRef.current = false;
+        timerRef.current = setInterval(() => {
+            setElapsed(
+                Math.floor(
+                    baseElapsedRef.current +
+                        (Date.now() - startTimeRef.current) / 1000,
+                ),
+            );
+        }, 1000);
+        setIsPaused(false);
+    }, [resumeTracking]);
+
+    const handleApplyGapAdjustment = useCallback(() => {
+        if (!gapSuggestion) return;
+        applyGapAdjustment(gapSuggestion);
+        setGapSuggestion(null);
+    }, [gapSuggestion, applyGapAdjustment]);
+
+    const handleSkipGapAdjustment = useCallback(() => {
+        setGapSuggestion(null);
+    }, []);
+
+    // 인터벌 preset 설정 시 초기화
+    useEffect(() => {
+        if (!config?.intervalPreset) return;
+
+        const preset = config.intervalPreset;
+        const hasWarmup = preset.sets > 0 && (preset.warmupSeconds ?? 0) > 0;
+        const initialPhase: IntervalPhase = hasWarmup ? "warmup" : "run";
+        const initialCountdown = hasWarmup
+            ? (preset.warmupSeconds ?? 0)
+            : preset.sets === 0
+              ? 0
+              : preset.runSeconds;
+
+        intervalCountdownRef.current = initialCountdown;
+        intervalPhaseRef.current = initialPhase;
+        intervalSetRef.current = 1;
+        intervalRunSecondsRef.current = 0;
+        intervalRestSecondsRef.current = 0;
+        setIntervalCountdown(initialCountdown);
+        setIntervalPhase(initialPhase);
+        setIntervalSet(1);
+    }, [config]);
+
+    // 인터벌 tick (pause/tracking 상태에 따라 타이머 on/off)
+    useEffect(() => {
+        if (!config?.intervalPreset || isPaused || !isTracking) {
+            if (intervalTimerRef.current) {
+                clearInterval(intervalTimerRef.current);
+                intervalTimerRef.current = null;
             }
-          }
+            return;
         }
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [acquireWakeLock, showToast, config, trackPoints, totalDistance, elapsed, profile.autoApplyGapAdjustment, applyGapAdjustment]);
+        const preset = config.intervalPreset;
 
-  // 완료 감지 우선순위: 목적지 > 거리 목표 > 시간 목표
-  useEffect(() => {
-    if (!config || arrivedRef.current) return;
+        intervalTimerRef.current = setInterval(() => {
+            if (intervalPhaseRef.current === "run")
+                intervalRunSecondsRef.current += 1;
+            if (intervalPhaseRef.current === "rest")
+                intervalRestSecondsRef.current += 1;
 
-    let reason: CompletionReason | null = null;
-    let title = "";
-    let body = "";
-
-    if (position && config.endPoint && calcDistance(position, config.endPoint) <= 0.005) {
-      reason = "destination";
-      title = "목적지 도착!";
-      body = "5m 이내 진입";
-    } else if (config.goalDistance && effectiveDistance >= config.goalDistance) {
-      reason = "distance";
-      title = "목표 달성!";
-      body = `${config.goalDistance}km 완주`;
-    } else if (config.goalTime && elapsed >= config.goalTime * 60) {
-      reason = "time";
-      title = "시간 목표 달성!";
-      body = `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`;
-    }
-
-    if (!reason) return;
-
-    arrivedRef.current = true;
-    setCompletionReason(reason);
-    setArrived(true);
-
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, {
-        body,
-        icon: "/icons/icon-192x192.png",
-      });
-    }
-  }, [position, config, effectiveDistance, elapsed]);
-
-  const completionCopy = (() => {
-    if (completionReason === "distance" && config?.goalDistance) {
-      return {
-        title: "목표 달성! 🎉",
-        description: `${config.goalDistance}km 완주`,
-      };
-    }
-    if (completionReason === "time" && config?.goalTime) {
-      return {
-        title: "시간 목표 달성! 🎉",
-        description: `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`,
-      };
-    }
-    if (completionReason === "interval") {
-      return {
-        title: "인터벌 완료! 🎉",
-        description: "예정된 세트를 모두 완료했어요.",
-      };
-    }
-    return {
-      title: "도착!",
-      description: "목적지 5m 이내 진입",
-    };
-  })();
-
-  // 경로 이탈 감지: 예상 경로에서 일정 거리 이상 벗어나면 안내
-  useEffect(() => {
-    if (!position || !config?.routePath || config.routePath.length < 2) return;
-    if (isPaused || arrived) {
-      offRouteSinceRef.current = null;
-      return;
-    }
-
-    const OFF_ROUTE_THRESHOLD_KM = runTuning.offRouteThresholdKm;
-    const OFF_ROUTE_SUSTAIN_MS = runTuning.offRouteSustainMs;
-    const ALERT_COOLDOWN_MS = runTuning.offRouteAlertCooldownMs;
-    const now = Date.now();
-
-    const minDistanceToRoute = calcMinDistanceToPathKm(position, config.routePath);
-    const isOffRoute = minDistanceToRoute >= OFF_ROUTE_THRESHOLD_KM;
-
-    if (!isOffRoute) {
-      offRouteSinceRef.current = null;
-      return;
-    }
-
-    if (offRouteSinceRef.current === null) {
-      offRouteSinceRef.current = now;
-      return;
-    }
-
-    const sustained = now - offRouteSinceRef.current >= OFF_ROUTE_SUSTAIN_MS;
-    const canAlert = now - lastOffRouteAlertAtRef.current >= ALERT_COOLDOWN_MS;
-
-    if (sustained && canAlert) {
-      lastOffRouteAlertAtRef.current = now;
-      showToast("경로에서 벗어났을 수 있어요. 지도를 확인해 주세요.");
-    }
-  }, [position, config, isPaused, arrived, showToast, runTuning]);
-
-  const handleFinish = useCallback(() => {
-    if (!config) return;
-    cancelSpeak();
-    stopTracking();
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (stillnessTimerRef.current) { clearTimeout(stillnessTimerRef.current); stillnessTimerRef.current = null; }
-    wakeLockRef.current?.release();
-    const finalElapsed = Math.floor(
-      baseElapsedRef.current + (isPausedRef.current ? 0 : (Date.now() - startTimeRef.current) / 1000)
-    );
-    sessionStorage.setItem("runResult", JSON.stringify({
-      startPoint: config.startPoint,
-      endPoint: config.endPoint,
-      distance_km: effectiveDistance,
-      gps_distance_km_raw: totalDistance,
-      gap_adjustment_distance_km: adjustedDistanceKm,
-      gap_adjustment_seconds: untrackedSeconds,
-      gap_adjustment_count: adjustedGapCount,
-      gap_adjustment_auto_enabled: profile.autoApplyGapAdjustment,
-      duration_seconds: finalElapsed,
-      pace: calcPace(effectiveDistance, finalElapsed),
-      activity_type: config.activityType,
-      pathPoints,
-      trackPoints,
-      altitude_start_m: startAltitude,
-      altitude_end_m: endAltitude,
-      elevation_gain_m: elevationGain,
-      elevation_loss_m: elevationLoss,
-      ...(config.intervalPreset && {
-        intervalPreset: config.intervalPreset,
-        intervalCompletedSets: intervalSetRef.current,
-        intervalTotalRunSeconds: intervalRunSecondsRef.current,
-        intervalTotalRestSeconds: intervalRestSecondsRef.current,
-      }),
-    }));
-    clearRecoverySnapshot();
-    sessionStorage.removeItem("runConfig");
-    router.push("/result");
-  }, [
-    config,
-    effectiveDistance,
-    totalDistance,
-    adjustedDistanceKm,
-    untrackedSeconds,
-    adjustedGapCount,
-    profile.autoApplyGapAdjustment,
-    pathPoints,
-    trackPoints,
-    startAltitude,
-    endAltitude,
-    elevationGain,
-    elevationLoss,
-    stopTracking,
-    router,
-    clearRecoverySnapshot,
-    cancelSpeak,
-  ]);
-
-  const handlePause = useCallback(() => {
-    frozenPositionRef.current = position;
-    pauseTracking();
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    baseElapsedRef.current += (Date.now() - startTimeRef.current) / 1000;
-    isPausedRef.current = true;
-    isPausingRef.current = false;
-    setIsPaused(true);
-  }, [pauseTracking, position]);
-
-  const handleResume = useCallback(() => {
-    frozenPositionRef.current = null;
-    resumeTracking();
-    startTimeRef.current = Date.now();
-    isPausedRef.current = false;
-    timerRef.current = setInterval(() => {
-      setElapsed(Math.floor(baseElapsedRef.current + (Date.now() - startTimeRef.current) / 1000));
-    }, 1000);
-    setIsPaused(false);
-  }, [resumeTracking]);
-
-  const handleApplyGapAdjustment = useCallback(() => {
-    if (!gapSuggestion) return;
-    applyGapAdjustment(gapSuggestion);
-    setGapSuggestion(null);
-  }, [gapSuggestion, applyGapAdjustment]);
-
-  const handleSkipGapAdjustment = useCallback(() => {
-    setGapSuggestion(null);
-  }, []);
-
-  // 인터벌 preset 설정 시 초기화
-  useEffect(() => {
-    if (!config?.intervalPreset) return;
-
-    const preset = config.intervalPreset;
-    const hasWarmup = preset.sets > 0 && (preset.warmupSeconds ?? 0) > 0;
-    const initialPhase: IntervalPhase = hasWarmup ? "warmup" : "run";
-    const initialCountdown = hasWarmup ? (preset.warmupSeconds ?? 0) : (preset.sets === 0 ? 0 : preset.runSeconds);
-
-    intervalCountdownRef.current = initialCountdown;
-    intervalPhaseRef.current = initialPhase;
-    intervalSetRef.current = 1;
-    intervalRunSecondsRef.current = 0;
-    intervalRestSecondsRef.current = 0;
-    setIntervalCountdown(initialCountdown);
-    setIntervalPhase(initialPhase);
-    setIntervalSet(1);
-  }, [config]);
-
-  // 인터벌 tick (pause/tracking 상태에 따라 타이머 on/off)
-  useEffect(() => {
-    if (!config?.intervalPreset || isPaused || !isTracking) {
-      if (intervalTimerRef.current) { clearInterval(intervalTimerRef.current); intervalTimerRef.current = null; }
-      return;
-    }
-    const preset = config.intervalPreset;
-
-    intervalTimerRef.current = setInterval(() => {
-      if (intervalPhaseRef.current === "run") intervalRunSecondsRef.current += 1;
-      if (intervalPhaseRef.current === "rest") intervalRestSecondsRef.current += 1;
-
-      if (preset.sets === 0) {
-        // 파틀렉: 카운트업
-        intervalCountdownRef.current += 1;
-        setIntervalCountdown((prev) => prev + 1);
-        return;
-      }
-
-      const next = intervalCountdownRef.current - 1;
-      if (next <= 0) {
-        if (intervalPhaseRef.current === "warmup") {
-          intervalPhaseRef.current = "run";
-          intervalSetRef.current = 1;
-          intervalCountdownRef.current = preset.runSeconds;
-          setIntervalPhase("run");
-          setIntervalSet(1);
-          setIntervalCountdown(preset.runSeconds);
-          if (voiceEnabled) speak("워밍업 완료. 1세트 달리기 시작합니다.");
-          if ("vibrate" in navigator) navigator.vibrate(150);
-        } else if (intervalPhaseRef.current === "run") {
-          intervalPhaseRef.current = "rest";
-          intervalCountdownRef.current = preset.restSeconds;
-          setIntervalPhase("rest");
-          setIntervalCountdown(preset.restSeconds);
-          if (voiceEnabled) speak(`${intervalSetRef.current}세트 달리기 완료. 휴식 시작.`);
-          if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
-        } else if (intervalPhaseRef.current === "rest") {
-          const nextSet = intervalSetRef.current + 1;
-          if (nextSet > preset.sets) {
-            const cooldown = preset.cooldownSeconds ?? 0;
-            if (cooldown > 0) {
-              intervalPhaseRef.current = "cooldown";
-              intervalCountdownRef.current = cooldown;
-              setIntervalPhase("cooldown");
-              setIntervalCountdown(cooldown);
-              if (voiceEnabled) speak("본 세트 완료. 쿨다운 시작합니다.");
-              if ("vibrate" in navigator) navigator.vibrate(200);
-            } else {
-              clearInterval(intervalTimerRef.current!);
-              intervalTimerRef.current = null;
-              setIntervalCountdown(0);
-              setArrived(true);
-              arrivedRef.current = true;
-              setCompletionReason("interval");
-              if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
+            if (preset.sets === 0) {
+                // 파틀렉: 카운트업
+                intervalCountdownRef.current += 1;
+                setIntervalCountdown((prev) => prev + 1);
+                return;
             }
-          } else {
-            intervalSetRef.current = nextSet;
-            intervalPhaseRef.current = "run";
-            intervalCountdownRef.current = preset.runSeconds;
-            setIntervalSet(nextSet);
-            setIntervalPhase("run");
-            setIntervalCountdown(preset.runSeconds);
-            if (voiceEnabled) speak(`${nextSet}세트 달리기 시작.`);
-            if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
-          }
-        } else if (intervalPhaseRef.current === "cooldown") {
-          clearInterval(intervalTimerRef.current!);
-          intervalTimerRef.current = null;
-          setIntervalCountdown(0);
-          setArrived(true);
-          arrivedRef.current = true;
-          setCompletionReason("interval");
-          if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
-        }
-      } else {
-        intervalCountdownRef.current = next;
-        setIntervalCountdown(next);
-      }
-    }, 1000);
 
-    return () => { if (intervalTimerRef.current) { clearInterval(intervalTimerRef.current); intervalTimerRef.current = null; } };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPaused, isTracking, config?.intervalPreset, voiceEnabled, speak]);
-
-  // Auto-pause: 속도 평활 + 거리 변화를 함께 보고 정지 판정
-  useEffect(() => {
-    const STOP_SPEED_THRESHOLD = runTuning.autoPauseStopSpeedMs;
-    const RESUME_SPEED_THRESHOLD = runTuning.autoPauseResumeSpeedMs;
-    const MIN_MOVE_DISTANCE_KM = runTuning.autoPauseMinMoveKm;
-    const REQUIRED_STILLNESS_MS = runTuning.autoPauseStillnessMs;
-
-    if (!profile.autoPause || isPaused || !isTracking) {
-      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
-      autoPauseTimerRef.current = null;
-      if (stillnessTimerRef.current) clearTimeout(stillnessTimerRef.current);
-      stillnessTimerRef.current = null;
-      return;
-    }
-
-    if (speed !== null && Number.isFinite(speed)) {
-      const nextSamples = [...speedSamplesRef.current, speed];
-      if (nextSamples.length > 6) nextSamples.shift();
-      speedSamplesRef.current = nextSamples;
-    }
-
-    const validSamples = speedSamplesRef.current.filter((v) => Number.isFinite(v));
-    const smoothSpeed = validSamples.length > 0
-      ? validSamples.reduce((sum, value) => sum + value, 0) / validSamples.length
-      : null;
-
-    const distanceDelta = Math.max(0, effectiveDistance - lastAutoPauseDistanceRef.current);
-
-    const moving =
-      distanceDelta >= MIN_MOVE_DISTANCE_KM ||
-      (smoothSpeed !== null && smoothSpeed >= RESUME_SPEED_THRESHOLD);
-
-    if (moving) {
-      if (autoPauseTimerRef.current) clearTimeout(autoPauseTimerRef.current);
-      autoPauseTimerRef.current = null;
-      if (stillnessTimerRef.current) clearTimeout(stillnessTimerRef.current);
-      stillnessTimerRef.current = null;
-      lastAutoPauseDistanceRef.current = effectiveDistance;
-      return;
-    }
-
-    const likelyStopped =
-      distanceDelta < MIN_MOVE_DISTANCE_KM &&
-      smoothSpeed !== null &&
-      smoothSpeed <= STOP_SPEED_THRESHOLD;
-
-    if (!likelyStopped) return;
-
-    if (!stillnessTimerRef.current) {
-      stillnessTimerRef.current = setTimeout(() => {
-        stillnessTimerRef.current = null;
-        if (!isPausedRef.current && !isPausingRef.current) {
-          isPausingRef.current = true;
-          handlePause();
-          showToast("자동으로 일시정지됨");
-        }
-      }, REQUIRED_STILLNESS_MS);
-    }
-
-    return () => {
-      // no-op cleanup: 타이머는 상태 전환 분기에서 관리
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speed, effectiveDistance, isPaused, isTracking, profile.autoPause, runTuning]);
-
-  // 음성 안내: 매 1km 스플릿 + 직전 구간 대비 코칭
-  useEffect(() => {
-    if (!voiceEnabled || isPaused) return;
-    const km = Math.floor(effectiveDistance);
-    if (km > 0 && km > lastAnnouncedKmRef.current) {
-      lastAnnouncedKmRef.current = km;
-      const splitDistance = Math.max(0.01, effectiveDistance - lastSplitDistanceRef.current);
-      const splitElapsed = Math.max(1, elapsed - lastSplitElapsedRef.current);
-      const splitPace = calcPace(splitDistance, splitElapsed);
-
-      let trendComment = "리듬 유지 좋아요.";
-      if (lastSplitPaceRef.current !== null) {
-        const diff = splitPace - lastSplitPaceRef.current;
-        if (diff <= -0.12) trendComment = "직전 구간보다 빨라졌어요.";
-        else if (diff >= 0.12) trendComment = "조금 느려졌어요. 호흡을 정리해봐요.";
-      }
-
-      if (splitPace > 0 && Number.isFinite(splitPace)) {
-        speak(`${km}킬로미터 통과. 이번 구간 페이스 ${formatPace(splitPace)}. ${trendComment}`);
-      } else {
-        speak(`${km}킬로미터 통과. ${trendComment}`);
-      }
-      lastPaceCoachAtRef.current = Date.now();
-
-      lastSplitDistanceRef.current = effectiveDistance;
-      lastSplitElapsedRef.current = elapsed;
-      lastSplitPaceRef.current = splitPace > 0 && Number.isFinite(splitPace) ? splitPace : null;
-    }
-  }, [effectiveDistance, voiceEnabled, isPaused, speak, elapsed]);
-
-  // 음성 코칭: 주기적으로 현재 페이스 존과 가이드를 간단히 안내
-  useEffect(() => {
-    if (!voiceEnabled || isPaused || arrived || !config) return;
-    if (effectiveDistance < 0.3 || elapsed < 90) return;
-
-    const now = Date.now();
-    if (now - lastPaceCoachAtRef.current < PACE_COACHING_INTERVAL_MS) return;
-
-    const currentPace = calcPace(effectiveDistance, elapsed);
-    if (!Number.isFinite(currentPace) || currentPace <= 0) return;
-
-    const zone = getPaceZone(currentPace, config.activityType);
-    const guide = getPaceGuidance(currentPace, config.activityType);
-    lastPaceCoachAtRef.current = now;
-    speak(`현재 페이스 ${zone.label}. ${guide}`);
-  }, [voiceEnabled, isPaused, arrived, config, effectiveDistance, elapsed, speak]);
-
-  // voiceEnabled → localStorage
-  useEffect(() => {
-    localStorage.setItem("voiceGuide", voiceEnabled ? "on" : "off");
-  }, [voiceEnabled]);
-
-  // 온라인/오프라인 감지
-  useEffect(() => {
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
-  }, []);
-
-  if (!config) {
-    if (configError) {
-      return (
-        <main className="min-h-dvh flex items-center justify-center" style={{ background: "var(--c-bg)" }}>
-          <div className="text-center px-6">
-            <p style={{ fontSize: 16, fontWeight: 600, color: "var(--c-text-1)", marginBottom: 8 }}>설정 정보가 없어요</p>
-            <p style={{ fontSize: 13, color: "var(--c-text-3)" }}>홈으로 돌아갑니다…</p>
-          </div>
-        </main>
-      );
-    }
-    return null;
-  }
-
-  const isRun = config.activityType === "running";
-  const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-  const pace = calcPace(effectiveDistance, elapsed);
-  const paceZone = getPaceZone(pace, config.activityType);
-  const paceGuide = getPaceGuidance(pace, config.activityType);
-  const hasCompletionPriorityHint = Boolean(config.endPoint && (config.goalDistance || config.goalTime));
-  const intervalTone = intervalPhase === "run"
-    ? "var(--c-toss-blue)"
-    : intervalPhase === "rest"
-      ? "var(--c-walk)"
-      : intervalPhase === "warmup"
-        ? "#ffd60a"
-        : "#64d2ff";
-  const intervalBg = intervalPhase === "run"
-    ? "rgba(0,122,255,0.15)"
-    : intervalPhase === "rest"
-      ? "rgba(52,199,89,0.15)"
-      : intervalPhase === "warmup"
-        ? "rgba(255,214,10,0.16)"
-        : "rgba(100,210,255,0.16)";
-  const intervalBorder = intervalPhase === "run"
-    ? "rgba(0,122,255,0.3)"
-    : intervalPhase === "rest"
-      ? "rgba(52,199,89,0.3)"
-      : intervalPhase === "warmup"
-        ? "rgba(255,214,10,0.35)"
-        : "rgba(100,210,255,0.35)";
-  const intervalLabel = intervalPhase === "run"
-    ? "⚡ 달리기"
-    : intervalPhase === "rest"
-      ? "💤 휴식"
-      : intervalPhase === "warmup"
-        ? "🔥 워밍업"
-        : "🧊 쿨다운";
-
-  return (
-    <main className="relative w-full h-dvh overflow-hidden" style={{ background: "var(--c-bg)" }}>
-      <KakaoMap
-        center={(isPaused ? frozenPositionRef.current : position) ?? config.startPoint}
-        startPoint={config.startPoint}
-        endPoint={config.endPoint}
-        currentPosition={isPaused ? frozenPositionRef.current : position}
-        heading={isPaused ? undefined : heading}
-        pathPoints={pathPoints}
-        showArrivalRadius
-        activityType={config.activityType}
-        followUser={followUser}
-        onUserDrag={() => setFollowUser(false)}
-        className="absolute inset-0 h-full"
-      />
-
-      {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
-      {!followUser && (
-        <button
-          onClick={() => setFollowUser(true)}
-          className="absolute z-10 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
-          style={{
-            right: 16,
-            bottom: "calc(var(--sab) + 100px)",
-            background: "rgba(20,22,26,0.9)",
-            border: `1px solid ${accent}55`,
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            color: accent,
-            fontSize: 12,
-            fontWeight: 700,
-            boxShadow: `0 2px 12px ${accent}33`,
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-            <circle cx="12" cy="12" r="8" />
-          </svg>
-          내 위치
-        </button>
-      )}
-
-      {/* 오프라인 배너 */}
-      {!isOnline && (
-        <div
-          className="absolute z-30 left-0 right-0 flex items-center justify-center gap-2 px-4 py-2"
-          style={{
-            top: "calc(var(--sat) + 0px)",
-            background: "rgba(255,69,58,0.92)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            color: "#fff",
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          오프라인 — 기록은 로컬 저장됨
-        </div>
-      )}
-
-      {/* 토스트 */}
-      {toast && (
-        <div
-          className="absolute z-30 left-1/2 -translate-x-1/2 rounded-2xl"
-          style={{
-            top: isOnline ? "calc(var(--sat) + 80px)" : "calc(var(--sat) + 112px)",
-            background: "rgba(30,30,32,0.95)",
-            border: "1px solid rgba(255,159,10,0.4)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            maxWidth: "calc(100vw - 32px)",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-          }}
-        >
-          <div
-            className="flex items-center gap-2 px-4 py-2.5"
-            style={{
-              color: "#ff9f0a",
-              fontSize: 13,
-              fontWeight: 600,
-              textAlign: toast.undoFn ? "left" : "center",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            <span>{toast.msg}</span>
-            {toast.undoFn && (
-              <button
-                onClick={() => {
-                  toast.undoFn?.();
-                  setToast(null);
-                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-                }}
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#fff",
-                  background: "rgba(255,255,255,0.18)",
-                  border: "1px solid rgba(255,255,255,0.28)",
-                  borderRadius: 8,
-                  minHeight: 44,
-                  padding: "0 12px",
-                  flexShrink: 0,
-                  cursor: "pointer",
-                }}
-              >
-                취소
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 나침반 권한 요청 버튼 (iOS 13+만 필요) */}
-      {needsPermission && (
-        <button
-          onClick={requestCompassPermission}
-          className="absolute z-20 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
-          style={{
-            right: 16,
-            bottom: "calc(var(--sab) + 160px)",
-            background: "rgba(20,22,26,0.9)",
-            border: "1px solid rgba(255,255,255,0.18)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            color: "#fff",
-            fontSize: 12,
-            fontWeight: 600,
-            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <circle cx="12" cy="12" r="10" />
-            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-          </svg>
-          나침반 켜기
-        </button>
-      )}
-
-      {/* 상단 스탯 */}
-      <div
-        className="absolute top-0 left-0 right-0 z-10"
-        style={{
-          paddingTop: "calc(var(--sat) + 14px)",
-          paddingBottom: topPanelCollapsed ? "10px" : "16px",
-          background: isPaused
-            ? "rgba(10,11,12,0.88)"
-            : isRun
-              ? "rgba(0,20,50,0.88)"
-              : "rgba(0,28,15,0.88)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderBottom: `1px solid ${accent}33`,
-          transition: "background 0.5s ease, border-color 0.5s ease",
-        }}
-      >
-        <div className="px-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span
-                className="text-xs font-bold px-2.5 py-1 rounded-full"
-                style={{ background: `${accent}22`, color: accent, letterSpacing: "-0.01em" }}
-              >
-                {isPaused ? "⏸ 일시정지" : (isRun ? "🏃 러닝" : "🚶 워킹") + " 중"}
-              </span>
-              {/* 페이스존 밽지 */}
-              {!isPaused && pace > 0 && (
-                <span
-                  className="text-xs font-bold px-2 py-1 rounded-full"
-                  style={{
-                    background: `${paceZone.color}22`,
-                    color: paceZone.color,
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {paceZone.label}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              {isPaused ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(255,159,10,0.15)" }}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#ff9f0a" }} />
-                  <span className="text-xs font-semibold" style={{ color: "#ff9f0a" }}>일시정지</span>
-                </div>
-              ) : isTracking ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(52,199,89,0.15)" }}>
-                  <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: "#34c759" }} />
-                  <span className="text-xs font-semibold" style={{ color: "#34c759" }}>GPS</span>
-                </div>
-              ) : null}
-              <button
-                onClick={() => setVoiceEnabled((prev) => !prev)}
-                aria-label={voiceEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
-                className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
-                style={{
-                  background: voiceEnabled ? `${accent}22` : "rgba(255,255,255,0.08)",
-                  border: `1px solid ${voiceEnabled ? `${accent}44` : "rgba(255,255,255,0.18)"}`,
-                  color: voiceEnabled ? accent : "#5e636a",
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  {voiceEnabled ? (
-                    <>
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                    </>
-                  ) : (
-                    <>
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                      <line x1="23" y1="9" x2="17" y2="15" />
-                      <line x1="17" y1="9" x2="23" y2="15" />
-                    </>
-                  )}
-                </svg>
-              </button>
-              <button
-                onClick={() => setTopPanelCollapsed((prev) => !prev)}
-                aria-label={topPanelCollapsed ? "상단 패널 펼치기" : "상단 패널 접기"}
-                className="px-3 py-2 rounded-full active:scale-95 transition-transform"
-                style={{
-                  minHeight: 44,
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  color: "#d1d4d9",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {topPanelCollapsed ? "펼치기" : "접기"}
-              </button>
-            </div>
-          </div>
-          {!topPanelCollapsed && (
-            <>
-              {!isPaused && (
-                <p className="mb-3" style={{ fontSize: 12, fontWeight: 600, color: paceZone.color }}>
-                  {paceGuide}
-                </p>
-              )}
-              {hasCompletionPriorityHint && (
-                <p
-                  className="mb-3"
-                  style={{
-                    fontSize: 11,
-                    color: "#9da1a6",
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  완료 우선순위: 목적지 도착 → 거리 목표 → 시간 목표
-                </p>
-              )}
-              {currentAltitude !== null && (
-                <p className="mb-3" style={{ fontSize: 12, color: "#9da1a6" }}>
-                  고도 {Math.round(currentAltitude)}m · 누적 상승 {Math.round(elevationGain)}m
-                </p>
-              )}
-              {adjustedDistanceKm > 0 && (
-                <p className="mb-3" style={{ fontSize: 12, color: "#ff9f0a" }}>
-                  공백 보정 {adjustedDistanceKm.toFixed(2)}km · 누락 시간 {formatDuration(untrackedSeconds)}
-                </p>
-              )}
-              <p className="mb-3" style={{ fontSize: 11, color: "#7f8690" }}>
-                튜닝값 · 정지 {runTuning.autoPauseStopSpeedMs.toFixed(2)}m/s · 재개 {runTuning.autoPauseResumeSpeedMs.toFixed(2)}m/s · 정지판정 {(runTuning.autoPauseStillnessMs / 1000).toFixed(1)}초 · 이탈 {Math.round(runTuning.offRouteThresholdKm * 1000)}m
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <RunStat label="거리" value={effectiveDistance.toFixed(2)} unit="km" accent={accent} large />
-                <RunStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} large />
-                <RunStat label="페이스" value={formatPace(pace)} unit="/km" accent={pace > 0 && !isPaused ? paceZone.color : accent} />
-                <div
-                  className="rounded-2xl px-3 py-3 text-center"
-                  style={{
-                    background: `${accent}0d`,
-                    border: `1px solid ${accent}33`,
-                    boxShadow: `0 0 12px ${accent}18`,
-                    transition: "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
-                  }}
-                >
-                  <p style={{ fontSize: 11, color: "#5e636a", marginBottom: 4 }}>방위</p>
-                  <p className="num" style={{ fontSize: 22, fontWeight: 800, color: accent, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
-                    {heading !== null ? toCardinal(heading) : "--"}
-                  </p>
-                  <svg
-                    width="16" height="16" viewBox="0 0 24 24" fill="none"
-                    style={{
-                      marginTop: 4,
-                      transform: `rotate(${heading ?? 0}deg)`,
-                      transition: "transform 0.3s ease",
-                      opacity: heading !== null ? 1 : 0.25,
-                      display: "inline-block",
-                    }}
-                  >
-                    <path d="M12 2L8 20l4-4 4 4L12 2Z" fill={accent} />
-                  </svg>
-                </div>
-              </div>
-            </>
-          )}
-          {topPanelCollapsed && (
-            <div className="flex items-center justify-between py-1">
-              <p className="num" style={{ fontSize: 16, fontWeight: 800, color: accent, letterSpacing: "-0.02em" }}>
-                {effectiveDistance.toFixed(2)} km
-              </p>
-              <p className="num" style={{ fontSize: 15, fontWeight: 700, color: "#d1d4d9", letterSpacing: "-0.02em" }}>
-                {formatDuration(elapsed)}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* 목표 거리 진행 바 */}
-        {!topPanelCollapsed && config.goalDistance && (
-          <div className="px-5 pt-3">
-            <div className="flex justify-between items-center mb-1.5">
-              <span style={{ fontSize: 11, color: "#5e636a" }}>목표까지</span>
-              <span className="num" style={{ fontSize: 11, fontWeight: 700, color: accent }}>
-                {Math.max(0, config.goalDistance - effectiveDistance).toFixed(2)} km 남음
-              </span>
-            </div>
-            <div className="rounded-full overflow-hidden" style={{ height: 5, background: "rgba(255,255,255,0.1)" }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min(100, (effectiveDistance / config.goalDistance) * 100)}%`,
-                  background: accent,
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 목표 시간 진행 바 */}
-        {!topPanelCollapsed && config.goalTime && (
-          <div className="px-5 pt-3">
-            <div className="flex justify-between items-center mb-1.5">
-              <span style={{ fontSize: 11, color: "#5e636a" }}>남은 시간</span>
-              <span className="num" style={{ fontSize: 11, fontWeight: 700, color: accent }}>
-                {formatDuration(Math.max(0, config.goalTime * 60 - elapsed))}
-              </span>
-            </div>
-            <div className="rounded-full overflow-hidden" style={{ height: 5, background: "rgba(255,255,255,0.1)" }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min(100, (elapsed / (config.goalTime * 60)) * 100)}%`,
-                  background: accent,
-                }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-      {arrived && (
-        <div
-          className="absolute inset-0 z-20 flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
-        >
-          <div
-            className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
-            style={{
-              background: "#121315",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "24px 24px 0 0",
-            }}
-          >
-            <div className="flex justify-center mb-5">
-              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
-            </div>
-            <h2
-              className="mb-1 text-center"
-              style={{ fontSize: 30, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}
-            >
-              {completionCopy.title}
-            </h2>
-            <p className="text-center mb-6" style={{ fontSize: 14, color: "#9da1a6" }}>
-              {completionCopy.description}
-            </p>
-            <div className="grid grid-cols-2 gap-2 mb-5">
-              <MiniStat label="거리" value={`${effectiveDistance.toFixed(2)}`} unit="km" accent={accent} />
-              <MiniStat label="시간" value={formatDuration(elapsed)} unit="" accent={accent} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { arrivedRef.current = false; setArrived(false); setCompletionReason(null); }}
-                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#d1d4d9",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                계속 달리기
-              </button>
-              <button
-                onClick={handleFinish}
-                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
-                style={{ background: accent, boxShadow: `0 4px 20px ${accent}44`, letterSpacing: "-0.01em" }}
-              >
-                결과 보기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {gapSuggestion && (
-        <div
-          className="absolute inset-0 z-30 flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.62)", backdropFilter: "blur(6px)" }}
-        >
-          <div
-            className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
-            style={{
-              background: "#121315",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "24px 24px 0 0",
-            }}
-          >
-            <div className="flex justify-center mb-5">
-              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
-            </div>
-            <h2 className="mb-2 text-center" style={{ fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
-              공백 구간을 찾았어요
-            </h2>
-            <p className="text-center mb-2" style={{ fontSize: 14, color: "#9da1a6" }}>
-              화면이 {gapSuggestion.gapSeconds}초 동안 비활성 상태였습니다.
-            </p>
-            <p className="text-center mb-6" style={{ fontSize: 14, color: "#ff9f0a", fontWeight: 700 }}>
-              추천 보정 거리: {gapSuggestion.suggestedDistanceKm.toFixed(2)}km
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleSkipGapAdjustment}
-                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#d1d4d9",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                건너뛰기
-              </button>
-              <button
-                onClick={handleApplyGapAdjustment}
-                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
-                style={{
-                  background: "#ff9f0a",
-                  boxShadow: "0 4px 20px rgba(255,159,10,0.35)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                보정 적용
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingRecovery && (
-        <div
-          className="absolute inset-0 z-40 flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
-        >
-          <div
-            className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
-            style={{
-              background: "#121315",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "24px 24px 0 0",
-            }}
-          >
-            <div className="flex justify-center mb-5">
-              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
-            </div>
-            <h2 className="mb-2 text-center" style={{ fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
-              러닝 기록을 찾았어요
-            </h2>
-            <p className="text-center mb-5" style={{ fontSize: 14, color: "#9da1a6" }}>
-              {formatDuration(pendingRecovery.elapsed)} · {(pendingRecovery.totalDistance + (pendingRecovery.adjustedDistanceKm ?? 0)).toFixed(2)}km
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleDiscardRecoveredSession}
-                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#d1d4d9",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                새로 시작
-              </button>
-              <button
-                onClick={handleResumeRecoveredSession}
-                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
-                style={{
-                  background: accent,
-                  boxShadow: `0 4px 20px ${accent}44`,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                이어하기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 하단 버튼 */}
-      <div
-        className="absolute bottom-0 left-0 right-0 z-30 px-5"
-        style={{
-          paddingBottom: "calc(var(--sab) + 20px)",
-          paddingTop: "16px",
-          background: "linear-gradient(to top, rgba(10,11,12,0.95) 60%, transparent)",
-        }}
-      >
-        {/* 인터벌 HUD */}
-        {config.intervalPreset && (
-          <div
-            className="rounded-2xl px-4 py-3 mb-2"
-            style={{
-              background: intervalBg,
-              border: `1px solid ${intervalBorder}`,
-            }}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold" style={{ color: intervalTone }}>
-                {intervalLabel}
-              </span>
-              {config.intervalPreset.sets > 0 && (
-                <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
-                  {intervalSet}/{config.intervalPreset.sets}세트
-                </span>
-              )}
-            </div>
-            {config.intervalPreset.sets === 0 ? (
-              <div className="flex items-center justify-between">
-                <span className="font-bold num" style={{ fontSize: 28, color: "#fff", letterSpacing: "-0.03em" }}>
-                  {Math.floor(intervalCountdown / 60).toString().padStart(2, "0")}:{(intervalCountdown % 60).toString().padStart(2, "0")}
-                </span>
-                <button
-                  onClick={() => {
-                    const next = intervalPhaseRef.current === "run" ? "rest" : "run";
-                    intervalPhaseRef.current = next;
-                    intervalCountdownRef.current = 0;
-                    setIntervalPhase(next);
+            const next = intervalCountdownRef.current - 1;
+            if (next <= 0) {
+                if (intervalPhaseRef.current === "warmup") {
+                    intervalPhaseRef.current = "run";
+                    intervalSetRef.current = 1;
+                    intervalCountdownRef.current = preset.runSeconds;
+                    setIntervalPhase("run");
+                    setIntervalSet(1);
+                    setIntervalCountdown(preset.runSeconds);
+                    if (voiceEnabled)
+                        speak("워밍업 완료. 1세트 달리기 시작합니다.");
+                    if ("vibrate" in navigator) navigator.vibrate(150);
+                } else if (intervalPhaseRef.current === "run") {
+                    intervalPhaseRef.current = "rest";
+                    intervalCountdownRef.current = preset.restSeconds;
+                    setIntervalPhase("rest");
+                    setIntervalCountdown(preset.restSeconds);
+                    if (voiceEnabled)
+                        speak(
+                            `${intervalSetRef.current}세트 달리기 완료. 휴식 시작.`,
+                        );
+                    if ("vibrate" in navigator)
+                        navigator.vibrate([200, 100, 200]);
+                } else if (intervalPhaseRef.current === "rest") {
+                    const nextSet = intervalSetRef.current + 1;
+                    if (nextSet > preset.sets) {
+                        const cooldown = preset.cooldownSeconds ?? 0;
+                        if (cooldown > 0) {
+                            intervalPhaseRef.current = "cooldown";
+                            intervalCountdownRef.current = cooldown;
+                            setIntervalPhase("cooldown");
+                            setIntervalCountdown(cooldown);
+                            if (voiceEnabled)
+                                speak("본 세트 완료. 쿨다운 시작합니다.");
+                            if ("vibrate" in navigator) navigator.vibrate(200);
+                        } else {
+                            clearInterval(intervalTimerRef.current!);
+                            intervalTimerRef.current = null;
+                            setIntervalCountdown(0);
+                            setArrived(true);
+                            arrivedRef.current = true;
+                            setCompletionReason("interval");
+                            if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
+                        }
+                    } else {
+                        intervalSetRef.current = nextSet;
+                        intervalPhaseRef.current = "run";
+                        intervalCountdownRef.current = preset.runSeconds;
+                        setIntervalSet(nextSet);
+                        setIntervalPhase("run");
+                        setIntervalCountdown(preset.runSeconds);
+                        if (voiceEnabled) speak(`${nextSet}세트 달리기 시작.`);
+                        if ("vibrate" in navigator)
+                            navigator.vibrate([200, 100, 200]);
+                    }
+                } else if (intervalPhaseRef.current === "cooldown") {
+                    clearInterval(intervalTimerRef.current!);
+                    intervalTimerRef.current = null;
                     setIntervalCountdown(0);
-                  }}
-                  className="text-xs font-bold h-11 px-3 rounded-xl active:scale-95 transition-transform"
-                  style={{ background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}
+                    setArrived(true);
+                    arrivedRef.current = true;
+                    setCompletionReason("interval");
+                    if (voiceEnabled) speak("인터벌 완료. 수고했어요.");
+                }
+            } else {
+                intervalCountdownRef.current = next;
+                setIntervalCountdown(next);
+            }
+        }, 1000);
+
+        return () => {
+            if (intervalTimerRef.current) {
+                clearInterval(intervalTimerRef.current);
+                intervalTimerRef.current = null;
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPaused, isTracking, config?.intervalPreset, voiceEnabled, speak]);
+
+    // Auto-pause: 속도 평활 + 거리 변화를 함께 보고 정지 판정
+    useEffect(() => {
+        const STOP_SPEED_THRESHOLD = runTuning.autoPauseStopSpeedMs;
+        const RESUME_SPEED_THRESHOLD = runTuning.autoPauseResumeSpeedMs;
+        const MIN_MOVE_DISTANCE_KM = runTuning.autoPauseMinMoveKm;
+        const REQUIRED_STILLNESS_MS = runTuning.autoPauseStillnessMs;
+
+        if (!profile.autoPause || isPaused || !isTracking) {
+            if (autoPauseTimerRef.current)
+                clearTimeout(autoPauseTimerRef.current);
+            autoPauseTimerRef.current = null;
+            if (stillnessTimerRef.current)
+                clearTimeout(stillnessTimerRef.current);
+            stillnessTimerRef.current = null;
+            return;
+        }
+
+        if (speed !== null && Number.isFinite(speed)) {
+            const nextSamples = [...speedSamplesRef.current, speed];
+            if (nextSamples.length > 6) nextSamples.shift();
+            speedSamplesRef.current = nextSamples;
+        }
+
+        const validSamples = speedSamplesRef.current.filter((v) =>
+            Number.isFinite(v),
+        );
+        const smoothSpeed =
+            validSamples.length > 0
+                ? validSamples.reduce((sum, value) => sum + value, 0) /
+                  validSamples.length
+                : null;
+
+        const distanceDelta = Math.max(
+            0,
+            effectiveDistance - lastAutoPauseDistanceRef.current,
+        );
+
+        const moving =
+            distanceDelta >= MIN_MOVE_DISTANCE_KM ||
+            (smoothSpeed !== null && smoothSpeed >= RESUME_SPEED_THRESHOLD);
+
+        if (moving) {
+            if (autoPauseTimerRef.current)
+                clearTimeout(autoPauseTimerRef.current);
+            autoPauseTimerRef.current = null;
+            if (stillnessTimerRef.current)
+                clearTimeout(stillnessTimerRef.current);
+            stillnessTimerRef.current = null;
+            lastAutoPauseDistanceRef.current = effectiveDistance;
+            return;
+        }
+
+        const likelyStopped =
+            distanceDelta < MIN_MOVE_DISTANCE_KM &&
+            smoothSpeed !== null &&
+            smoothSpeed <= STOP_SPEED_THRESHOLD;
+
+        if (!likelyStopped) return;
+
+        if (!stillnessTimerRef.current) {
+            stillnessTimerRef.current = setTimeout(() => {
+                stillnessTimerRef.current = null;
+                if (!isPausedRef.current && !isPausingRef.current) {
+                    isPausingRef.current = true;
+                    handlePause();
+                    showToast("자동으로 일시정지됨");
+                }
+            }, REQUIRED_STILLNESS_MS);
+        }
+
+        return () => {
+            // no-op cleanup: 타이머는 상태 전환 분기에서 관리
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        speed,
+        effectiveDistance,
+        isPaused,
+        isTracking,
+        profile.autoPause,
+        runTuning,
+    ]);
+
+    // 음성 안내: 매 1km 스플릿 + 직전 구간 대비 코칭
+    useEffect(() => {
+        if (!voiceEnabled || isPaused) return;
+        const km = Math.floor(effectiveDistance);
+        if (km > 0 && km > lastAnnouncedKmRef.current) {
+            lastAnnouncedKmRef.current = km;
+            const splitDistance = Math.max(
+                0.01,
+                effectiveDistance - lastSplitDistanceRef.current,
+            );
+            const splitElapsed = Math.max(
+                1,
+                elapsed - lastSplitElapsedRef.current,
+            );
+            const splitPace = calcPace(splitDistance, splitElapsed);
+
+            let trendComment = "리듬 유지 좋아요.";
+            if (lastSplitPaceRef.current !== null) {
+                const diff = splitPace - lastSplitPaceRef.current;
+                if (diff <= -0.12) trendComment = "직전 구간보다 빨라졌어요.";
+                else if (diff >= 0.12)
+                    trendComment = "조금 느려졌어요. 호흡을 정리해봐요.";
+            }
+
+            if (splitPace > 0 && Number.isFinite(splitPace)) {
+                speak(
+                    `${km}킬로미터 통과. 이번 구간 페이스 ${formatPace(splitPace)}. ${trendComment}`,
+                );
+            } else {
+                speak(`${km}킬로미터 통과. ${trendComment}`);
+            }
+            lastPaceCoachAtRef.current = Date.now();
+
+            lastSplitDistanceRef.current = effectiveDistance;
+            lastSplitElapsedRef.current = elapsed;
+            lastSplitPaceRef.current =
+                splitPace > 0 && Number.isFinite(splitPace) ? splitPace : null;
+        }
+    }, [effectiveDistance, voiceEnabled, isPaused, speak, elapsed]);
+
+    // 음성 코칭: 주기적으로 현재 페이스 존과 가이드를 간단히 안내
+    useEffect(() => {
+        if (!voiceEnabled || isPaused || arrived || !config) return;
+        if (effectiveDistance < 0.3 || elapsed < 90) return;
+
+        const now = Date.now();
+        if (now - lastPaceCoachAtRef.current < PACE_COACHING_INTERVAL_MS)
+            return;
+
+        const currentPace = calcPace(effectiveDistance, elapsed);
+        if (!Number.isFinite(currentPace) || currentPace <= 0) return;
+
+        const zone = getPaceZone(currentPace, config.activityType);
+        const guide = getPaceGuidance(currentPace, config.activityType);
+        lastPaceCoachAtRef.current = now;
+        speak(`현재 페이스 ${zone.label}. ${guide}`);
+    }, [
+        voiceEnabled,
+        isPaused,
+        arrived,
+        config,
+        effectiveDistance,
+        elapsed,
+        speak,
+    ]);
+
+    // voiceEnabled → localStorage
+    useEffect(() => {
+        localStorage.setItem("voiceGuide", voiceEnabled ? "on" : "off");
+    }, [voiceEnabled]);
+
+    // 온라인/오프라인 감지
+    useEffect(() => {
+        const onOnline = () => setIsOnline(true);
+        const onOffline = () => setIsOnline(false);
+        window.addEventListener("online", onOnline);
+        window.addEventListener("offline", onOffline);
+        return () => {
+            window.removeEventListener("online", onOnline);
+            window.removeEventListener("offline", onOffline);
+        };
+    }, []);
+
+    if (!config) {
+        if (configError) {
+            return (
+                <main
+                    className="min-h-dvh flex items-center justify-center"
+                    style={{background: "var(--c-bg)"}}
                 >
-                  {intervalPhase === "run" ? "→ 휴식" : "→ 달리기"}
+                    <div className="text-center px-6">
+                        <p
+                            style={{
+                                fontSize: 16,
+                                fontWeight: 600,
+                                color: "var(--c-text-1)",
+                                marginBottom: 8,
+                            }}
+                        >
+                            설정 정보가 없어요
+                        </p>
+                        <p style={{fontSize: 13, color: "var(--c-text-3)"}}>
+                            홈으로 돌아갑니다…
+                        </p>
+                    </div>
+                </main>
+            );
+        }
+        return null;
+    }
+
+    const isRun = config.activityType === "running";
+    const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
+    const pace = calcPace(effectiveDistance, elapsed);
+    const paceZone = getPaceZone(pace, config.activityType);
+    const paceGuide = getPaceGuidance(pace, config.activityType);
+    const hasCompletionPriorityHint = Boolean(
+        config.endPoint && (config.goalDistance || config.goalTime),
+    );
+    const intervalTone =
+        intervalPhase === "run"
+            ? "var(--c-toss-blue)"
+            : intervalPhase === "rest"
+              ? "var(--c-walk)"
+              : intervalPhase === "warmup"
+                ? "#ffd60a"
+                : "#64d2ff";
+    const intervalBg =
+        intervalPhase === "run"
+            ? "rgba(0,122,255,0.15)"
+            : intervalPhase === "rest"
+              ? "rgba(52,199,89,0.15)"
+              : intervalPhase === "warmup"
+                ? "rgba(255,214,10,0.16)"
+                : "rgba(100,210,255,0.16)";
+    const intervalBorder =
+        intervalPhase === "run"
+            ? "rgba(0,122,255,0.3)"
+            : intervalPhase === "rest"
+              ? "rgba(52,199,89,0.3)"
+              : intervalPhase === "warmup"
+                ? "rgba(255,214,10,0.35)"
+                : "rgba(100,210,255,0.35)";
+    const intervalLabel =
+        intervalPhase === "run"
+            ? "⚡ 달리기"
+            : intervalPhase === "rest"
+              ? "💤 휴식"
+              : intervalPhase === "warmup"
+                ? "🔥 워밍업"
+                : "🧊 쿨다운";
+
+    return (
+        <main
+            className="relative w-full h-dvh overflow-hidden"
+            style={{background: "var(--c-bg)"}}
+        >
+            <KakaoMap
+                center={
+                    (isPaused ? frozenPositionRef.current : position) ??
+                    config.startPoint
+                }
+                startPoint={config.startPoint}
+                endPoint={config.endPoint}
+                currentPosition={
+                    isPaused ? frozenPositionRef.current : position
+                }
+                heading={isPaused ? undefined : heading}
+                pathPoints={pathPoints}
+                showArrivalRadius
+                activityType={config.activityType}
+                followUser={followUser}
+                onUserDrag={() => setFollowUser(false)}
+                className="absolute inset-0 h-full"
+            />
+
+            {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
+            {!followUser && (
+                <button
+                    onClick={() => setFollowUser(true)}
+                    className="absolute z-10 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
+                    style={{
+                        right: 16,
+                        bottom: "calc(var(--sab) + 100px)",
+                        background: "rgba(20,22,26,0.9)",
+                        border: `1px solid ${accent}55`,
+                        backdropFilter: "blur(12px)",
+                        WebkitBackdropFilter: "blur(12px)",
+                        color: accent,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        boxShadow: `0 2px 12px ${accent}33`,
+                    }}
+                >
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                    >
+                        <circle
+                            cx="12"
+                            cy="12"
+                            r="3"
+                            fill="currentColor"
+                            stroke="none"
+                        />
+                        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                        <circle cx="12" cy="12" r="8" />
+                    </svg>
+                    내 위치
                 </button>
-              </div>
-            ) : (
-              <>
-                <span className="font-bold num" style={{ fontSize: 28, color: "#fff", letterSpacing: "-0.03em" }}>
-                  {Math.floor(intervalCountdown / 60).toString().padStart(2, "0")}:{(intervalCountdown % 60).toString().padStart(2, "0")}
-                </span>
-                {config.intervalPreset.sets > 0 && (
-                  <div className="mt-2 rounded-full overflow-hidden" style={{ height: 4, background: "rgba(255,255,255,0.1)" }}>
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${Math.round((intervalSet - 1) / config.intervalPreset.sets * 100)}%`,
-                        background: intervalTone,
-                      }}
-                    />
-                  </div>
-                )}
-              </>
             )}
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={isPaused ? handleResume : handlePause}
-            className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-            style={{
-              background: isPaused ? "rgba(52,199,89,0.2)" : "rgba(255,159,10,0.2)",
-              color: isPaused ? "#34c759" : "#ff9f0a",
-              border: `1px solid ${isPaused ? "rgba(52,199,89,0.3)" : "rgba(255,159,10,0.3)"}`,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {isPaused ? "계속하기" : "일시정지"}
-          </button>
-          <button
-            onClick={handleFinish}
-            className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-            style={{
-              background: "var(--c-danger)",
-              color: "#fff",
-              boxShadow: "0 4px 20px rgba(255,69,58,0.35)",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            종료
-          </button>
-        </div>
-      </div>
-    </main>
-  );
+
+            {/* 오프라인 배너 */}
+            {!isOnline && (
+                <div
+                    className="absolute z-30 left-0 right-0 flex items-center justify-center gap-2 px-4 py-2"
+                    style={{
+                        top: "calc(var(--sat) + 0px)",
+                        background: "rgba(255,69,58,0.92)",
+                        backdropFilter: "blur(12px)",
+                        WebkitBackdropFilter: "blur(12px)",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 600,
+                    }}
+                >
+                    <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                    >
+                        <path
+                            d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                    </svg>
+                    오프라인 — 기록은 로컬 저장됨
+                </div>
+            )}
+
+            {/* 토스트 */}
+            {toast && (
+                <div
+                    className="absolute z-30 left-1/2 -translate-x-1/2 rounded-2xl"
+                    style={{
+                        top: isOnline
+                            ? "calc(var(--sat) + 80px)"
+                            : "calc(var(--sat) + 112px)",
+                        background: "rgba(30,30,32,0.95)",
+                        border: "1px solid rgba(255,159,10,0.4)",
+                        backdropFilter: "blur(16px)",
+                        WebkitBackdropFilter: "blur(16px)",
+                        maxWidth: "calc(100vw - 32px)",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                    }}
+                >
+                    <div
+                        className="flex items-center gap-2 px-4 py-2.5"
+                        style={{
+                            color: "#ff9f0a",
+                            fontSize: 13,
+                            fontWeight: 600,
+                            textAlign: toast.undoFn ? "left" : "center",
+                            whiteSpace: "pre-wrap",
+                        }}
+                    >
+                        <span>{toast.msg}</span>
+                        {toast.undoFn && (
+                            <button
+                                onClick={() => {
+                                    toast.undoFn?.();
+                                    setToast(null);
+                                    if (toastTimerRef.current)
+                                        clearTimeout(toastTimerRef.current);
+                                }}
+                                style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "#fff",
+                                    background: "rgba(255,255,255,0.18)",
+                                    border: "1px solid rgba(255,255,255,0.28)",
+                                    borderRadius: 8,
+                                    minHeight: 44,
+                                    padding: "0 12px",
+                                    flexShrink: 0,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                취소
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* 나침반 권한 요청 버튼 (iOS 13+만 필요) */}
+            {needsPermission && (
+                <button
+                    onClick={requestCompassPermission}
+                    className="absolute z-20 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
+                    style={{
+                        right: 16,
+                        bottom: "calc(var(--sab) + 160px)",
+                        background: "rgba(20,22,26,0.9)",
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        backdropFilter: "blur(12px)",
+                        WebkitBackdropFilter: "blur(12px)",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+                    }}
+                >
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                    >
+                        <circle cx="12" cy="12" r="10" />
+                        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
+                    </svg>
+                    나침반 켜기
+                </button>
+            )}
+
+            {/* 상단 스탯 */}
+            <div
+                className="absolute top-0 left-0 right-0 z-10"
+                style={{
+                    paddingTop: "calc(var(--sat) + 14px)",
+                    paddingBottom: topPanelCollapsed ? "10px" : "16px",
+                    background: isPaused
+                        ? "rgba(10,11,12,0.88)"
+                        : isRun
+                          ? "rgba(0,20,50,0.88)"
+                          : "rgba(0,28,15,0.88)",
+                    backdropFilter: "blur(20px)",
+                    WebkitBackdropFilter: "blur(20px)",
+                    borderBottom: `1px solid ${accent}33`,
+                    transition: "background 0.5s ease, border-color 0.5s ease",
+                }}
+            >
+                <div className="px-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <span
+                                className="text-xs font-bold px-2.5 py-1 rounded-full"
+                                style={{
+                                    background: `${accent}22`,
+                                    color: accent,
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                {isPaused
+                                    ? "⏸ 일시정지"
+                                    : (isRun ? "🏃 러닝" : "🚶 워킹") + " 중"}
+                            </span>
+                            {/* 페이스존 밽지 */}
+                            {!isPaused && pace > 0 && (
+                                <span
+                                    className="text-xs font-bold px-2 py-1 rounded-full"
+                                    style={{
+                                        background: `${paceZone.color}22`,
+                                        color: paceZone.color,
+                                        letterSpacing: "-0.01em",
+                                    }}
+                                >
+                                    {paceZone.label}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {isPaused ? (
+                                <div
+                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                                    style={{
+                                        background: "rgba(255,159,10,0.15)",
+                                    }}
+                                >
+                                    <span
+                                        className="w-1.5 h-1.5 rounded-full"
+                                        style={{background: "#ff9f0a"}}
+                                    />
+                                    <span
+                                        className="text-xs font-semibold"
+                                        style={{color: "#ff9f0a"}}
+                                    >
+                                        일시정지
+                                    </span>
+                                </div>
+                            ) : isTracking ? (
+                                <div
+                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                                    style={{background: "rgba(52,199,89,0.15)"}}
+                                >
+                                    <span
+                                        className="w-1.5 h-1.5 rounded-full pulse-dot"
+                                        style={{background: "#34c759"}}
+                                    />
+                                    <span
+                                        className="text-xs font-semibold"
+                                        style={{color: "#34c759"}}
+                                    >
+                                        GPS
+                                    </span>
+                                </div>
+                            ) : null}
+                            <button
+                                onClick={() => setVoiceEnabled((prev) => !prev)}
+                                aria-label={
+                                    voiceEnabled
+                                        ? "음성 안내 끄기"
+                                        : "음성 안내 켜기"
+                                }
+                                className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                                style={{
+                                    background: voiceEnabled
+                                        ? `${accent}22`
+                                        : "rgba(255,255,255,0.08)",
+                                    border: `1px solid ${voiceEnabled ? `${accent}44` : "rgba(255,255,255,0.18)"}`,
+                                    color: voiceEnabled ? accent : "#5e636a",
+                                }}
+                            >
+                                <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    {voiceEnabled ? (
+                                        <>
+                                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                                            <line
+                                                x1="23"
+                                                y1="9"
+                                                x2="17"
+                                                y2="15"
+                                            />
+                                            <line
+                                                x1="17"
+                                                y1="9"
+                                                x2="23"
+                                                y2="15"
+                                            />
+                                        </>
+                                    )}
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() =>
+                                    setTopPanelCollapsed((prev) => !prev)
+                                }
+                                aria-label={
+                                    topPanelCollapsed
+                                        ? "상단 패널 펼치기"
+                                        : "상단 패널 접기"
+                                }
+                                className="px-3 py-2 rounded-full active:scale-95 transition-transform"
+                                style={{
+                                    minHeight: 44,
+                                    background: "rgba(255,255,255,0.08)",
+                                    border: "1px solid rgba(255,255,255,0.18)",
+                                    color: "#d1d4d9",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                {topPanelCollapsed ? "펼치기" : "접기"}
+                            </button>
+                        </div>
+                    </div>
+                    {!topPanelCollapsed && (
+                        <>
+                            {!isPaused && (
+                                <p
+                                    className="mb-3"
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: paceZone.color,
+                                    }}
+                                >
+                                    {paceGuide}
+                                </p>
+                            )}
+                            {hasCompletionPriorityHint && (
+                                <p
+                                    className="mb-3"
+                                    style={{
+                                        fontSize: 11,
+                                        color: "#9da1a6",
+                                        letterSpacing: "-0.01em",
+                                    }}
+                                >
+                                    완료 우선순위: 목적지 도착 → 거리 목표 →
+                                    시간 목표
+                                </p>
+                            )}
+                            {currentAltitude !== null && (
+                                <p
+                                    className="mb-3"
+                                    style={{fontSize: 12, color: "#9da1a6"}}
+                                >
+                                    고도 {Math.round(currentAltitude)}m · 누적
+                                    상승 {Math.round(elevationGain)}m
+                                </p>
+                            )}
+                            {adjustedDistanceKm > 0 && (
+                                <p
+                                    className="mb-3"
+                                    style={{fontSize: 12, color: "#ff9f0a"}}
+                                >
+                                    공백 보정 {adjustedDistanceKm.toFixed(2)}km
+                                    · 누락 시간{" "}
+                                    {formatDuration(untrackedSeconds)}
+                                </p>
+                            )}
+                            <p
+                                className="mb-3"
+                                style={{fontSize: 11, color: "#7f8690"}}
+                            >
+                                튜닝값 · 정지{" "}
+                                {runTuning.autoPauseStopSpeedMs.toFixed(2)}m/s ·
+                                재개{" "}
+                                {runTuning.autoPauseResumeSpeedMs.toFixed(2)}m/s
+                                · 정지판정{" "}
+                                {(
+                                    runTuning.autoPauseStillnessMs / 1000
+                                ).toFixed(1)}
+                                초 · 이탈{" "}
+                                {Math.round(
+                                    runTuning.offRouteThresholdKm * 1000,
+                                )}
+                                m
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <RunStat
+                                    label="거리"
+                                    value={effectiveDistance.toFixed(2)}
+                                    unit="km"
+                                    accent={accent}
+                                    large
+                                />
+                                <RunStat
+                                    label="시간"
+                                    value={formatDuration(elapsed)}
+                                    unit=""
+                                    accent={accent}
+                                    large
+                                />
+                                <RunStat
+                                    label="페이스"
+                                    value={formatPace(pace)}
+                                    unit="/km"
+                                    accent={
+                                        pace > 0 && !isPaused
+                                            ? paceZone.color
+                                            : accent
+                                    }
+                                />
+                                <div
+                                    className="rounded-2xl px-3 py-3 text-center"
+                                    style={{
+                                        background: `${accent}0d`,
+                                        border: `1px solid ${accent}33`,
+                                        boxShadow: `0 0 12px ${accent}18`,
+                                        transition:
+                                            "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
+                                    }}
+                                >
+                                    <p
+                                        style={{
+                                            fontSize: 11,
+                                            color: "#5e636a",
+                                            marginBottom: 4,
+                                        }}
+                                    >
+                                        방위
+                                    </p>
+                                    <p
+                                        className="num"
+                                        style={{
+                                            fontSize: 22,
+                                            fontWeight: 800,
+                                            color: accent,
+                                            lineHeight: 1.1,
+                                            letterSpacing: "-0.03em",
+                                        }}
+                                    >
+                                        {heading !== null
+                                            ? toCardinal(heading)
+                                            : "--"}
+                                    </p>
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        style={{
+                                            marginTop: 4,
+                                            transform: `rotate(${heading ?? 0}deg)`,
+                                            transition: "transform 0.3s ease",
+                                            opacity:
+                                                heading !== null ? 1 : 0.25,
+                                            display: "inline-block",
+                                        }}
+                                    >
+                                        <path
+                                            d="M12 2L8 20l4-4 4 4L12 2Z"
+                                            fill={accent}
+                                        />
+                                    </svg>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                    {topPanelCollapsed && (
+                        <div className="flex items-center justify-between py-1">
+                            <p
+                                className="num"
+                                style={{
+                                    fontSize: 16,
+                                    fontWeight: 800,
+                                    color: accent,
+                                    letterSpacing: "-0.02em",
+                                }}
+                            >
+                                {effectiveDistance.toFixed(2)} km
+                            </p>
+                            <p
+                                className="num"
+                                style={{
+                                    fontSize: 15,
+                                    fontWeight: 700,
+                                    color: "#d1d4d9",
+                                    letterSpacing: "-0.02em",
+                                }}
+                            >
+                                {formatDuration(elapsed)}
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                {/* 목표 거리 진행 바 */}
+                {!topPanelCollapsed && config.goalDistance && (
+                    <div className="px-5 pt-3">
+                        <div className="flex justify-between items-center mb-1.5">
+                            <span style={{fontSize: 11, color: "#5e636a"}}>
+                                목표까지
+                            </span>
+                            <span
+                                className="num"
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: accent,
+                                }}
+                            >
+                                {Math.max(
+                                    0,
+                                    config.goalDistance - effectiveDistance,
+                                ).toFixed(2)}{" "}
+                                km 남음
+                            </span>
+                        </div>
+                        <div
+                            className="rounded-full overflow-hidden"
+                            style={{
+                                height: 5,
+                                background: "rgba(255,255,255,0.1)",
+                            }}
+                        >
+                            <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                    width: `${Math.min(100, (effectiveDistance / config.goalDistance) * 100)}%`,
+                                    background: accent,
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* 목표 시간 진행 바 */}
+                {!topPanelCollapsed && config.goalTime && (
+                    <div className="px-5 pt-3">
+                        <div className="flex justify-between items-center mb-1.5">
+                            <span style={{fontSize: 11, color: "#5e636a"}}>
+                                남은 시간
+                            </span>
+                            <span
+                                className="num"
+                                style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: accent,
+                                }}
+                            >
+                                {formatDuration(
+                                    Math.max(0, config.goalTime * 60 - elapsed),
+                                )}
+                            </span>
+                        </div>
+                        <div
+                            className="rounded-full overflow-hidden"
+                            style={{
+                                height: 5,
+                                background: "rgba(255,255,255,0.1)",
+                            }}
+                        >
+                            <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                    width: `${Math.min(100, (elapsed / (config.goalTime * 60)) * 100)}%`,
+                                    background: accent,
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
+            {arrived && (
+                <div
+                    className="absolute inset-0 z-20 flex items-end justify-center"
+                    style={{
+                        background: "rgba(0,0,0,0.72)",
+                        backdropFilter: "blur(8px)",
+                    }}
+                >
+                    <div
+                        className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
+                        style={{
+                            background: "#121315",
+                            borderTop: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: "24px 24px 0 0",
+                        }}
+                    >
+                        <div className="flex justify-center mb-5">
+                            <div
+                                className="w-10 h-1 rounded-full"
+                                style={{background: "rgba(255,255,255,0.2)"}}
+                            />
+                        </div>
+                        <h2
+                            className="mb-1 text-center"
+                            style={{
+                                fontSize: 30,
+                                fontWeight: 800,
+                                color: "#fff",
+                                letterSpacing: "-0.02em",
+                            }}
+                        >
+                            {completionCopy.title}
+                        </h2>
+                        <p
+                            className="text-center mb-6"
+                            style={{fontSize: 14, color: "#9da1a6"}}
+                        >
+                            {completionCopy.description}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 mb-5">
+                            <MiniStat
+                                label="거리"
+                                value={`${effectiveDistance.toFixed(2)}`}
+                                unit="km"
+                                accent={accent}
+                            />
+                            <MiniStat
+                                label="시간"
+                                value={formatDuration(elapsed)}
+                                unit=""
+                                accent={accent}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => {
+                                    arrivedRef.current = false;
+                                    setArrived(false);
+                                    setCompletionReason(null);
+                                }}
+                                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                                style={{
+                                    background: "rgba(255,255,255,0.08)",
+                                    color: "#d1d4d9",
+                                    border: "1px solid rgba(255,255,255,0.12)",
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                계속 달리기
+                            </button>
+                            <button
+                                onClick={handleFinish}
+                                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                                style={{
+                                    background: accent,
+                                    boxShadow: `0 4px 20px ${accent}44`,
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                결과 보기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {gapSuggestion && (
+                <div
+                    className="absolute inset-0 z-30 flex items-end justify-center"
+                    style={{
+                        background: "rgba(0,0,0,0.62)",
+                        backdropFilter: "blur(6px)",
+                    }}
+                >
+                    <div
+                        className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
+                        style={{
+                            background: "#121315",
+                            borderTop: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: "24px 24px 0 0",
+                        }}
+                    >
+                        <div className="flex justify-center mb-5">
+                            <div
+                                className="w-10 h-1 rounded-full"
+                                style={{background: "rgba(255,255,255,0.2)"}}
+                            />
+                        </div>
+                        <h2
+                            className="mb-2 text-center"
+                            style={{
+                                fontSize: 24,
+                                fontWeight: 800,
+                                color: "#fff",
+                                letterSpacing: "-0.02em",
+                            }}
+                        >
+                            공백 구간을 찾았어요
+                        </h2>
+                        <p
+                            className="text-center mb-2"
+                            style={{fontSize: 14, color: "#9da1a6"}}
+                        >
+                            화면이 {gapSuggestion.gapSeconds}초 동안 비활성
+                            상태였습니다.
+                        </p>
+                        <p
+                            className="text-center mb-6"
+                            style={{
+                                fontSize: 14,
+                                color: "#ff9f0a",
+                                fontWeight: 700,
+                            }}
+                        >
+                            추천 보정 거리:{" "}
+                            {gapSuggestion.suggestedDistanceKm.toFixed(2)}km
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={handleSkipGapAdjustment}
+                                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                                style={{
+                                    background: "rgba(255,255,255,0.08)",
+                                    color: "#d1d4d9",
+                                    border: "1px solid rgba(255,255,255,0.12)",
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                건너뛰기
+                            </button>
+                            <button
+                                onClick={handleApplyGapAdjustment}
+                                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                                style={{
+                                    background: "#ff9f0a",
+                                    boxShadow:
+                                        "0 4px 20px rgba(255,159,10,0.35)",
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                보정 적용
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {pendingRecovery && (
+                <div
+                    className="absolute inset-0 z-40 flex items-end justify-center"
+                    style={{
+                        background: "rgba(0,0,0,0.72)",
+                        backdropFilter: "blur(8px)",
+                    }}
+                >
+                    <div
+                        className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
+                        style={{
+                            background: "#121315",
+                            borderTop: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: "24px 24px 0 0",
+                        }}
+                    >
+                        <div className="flex justify-center mb-5">
+                            <div
+                                className="w-10 h-1 rounded-full"
+                                style={{background: "rgba(255,255,255,0.2)"}}
+                            />
+                        </div>
+                        <h2
+                            className="mb-2 text-center"
+                            style={{
+                                fontSize: 24,
+                                fontWeight: 800,
+                                color: "#fff",
+                                letterSpacing: "-0.02em",
+                            }}
+                        >
+                            러닝 기록을 찾았어요
+                        </h2>
+                        <p
+                            className="text-center mb-5"
+                            style={{fontSize: 14, color: "#9da1a6"}}
+                        >
+                            {formatDuration(pendingRecovery.elapsed)} ·{" "}
+                            {(
+                                pendingRecovery.totalDistance +
+                                (pendingRecovery.adjustedDistanceKm ?? 0)
+                            ).toFixed(2)}
+                            km
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={handleDiscardRecoveredSession}
+                                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                                style={{
+                                    background: "rgba(255,255,255,0.08)",
+                                    color: "#d1d4d9",
+                                    border: "1px solid rgba(255,255,255,0.12)",
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                새로 시작
+                            </button>
+                            <button
+                                onClick={handleResumeRecoveredSession}
+                                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                                style={{
+                                    background: accent,
+                                    boxShadow: `0 4px 20px ${accent}44`,
+                                    letterSpacing: "-0.01em",
+                                }}
+                            >
+                                이어하기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 하단 버튼 */}
+            <div
+                className="absolute bottom-0 left-0 right-0 z-30 px-5"
+                style={{
+                    paddingBottom: "calc(var(--sab) + 20px)",
+                    paddingTop: "16px",
+                    background:
+                        "linear-gradient(to top, rgba(10,11,12,0.95) 60%, transparent)",
+                }}
+            >
+                {/* 인터벌 HUD */}
+                {config.intervalPreset && (
+                    <div
+                        className="rounded-2xl px-4 py-3 mb-2"
+                        style={{
+                            background: intervalBg,
+                            border: `1px solid ${intervalBorder}`,
+                        }}
+                    >
+                        <div className="flex items-center justify-between mb-1">
+                            <span
+                                className="text-xs font-bold"
+                                style={{color: intervalTone}}
+                            >
+                                {intervalLabel}
+                            </span>
+                            {config.intervalPreset.sets > 0 && (
+                                <span
+                                    className="text-xs"
+                                    style={{color: "rgba(255,255,255,0.5)"}}
+                                >
+                                    {intervalSet}/{config.intervalPreset.sets}
+                                    세트
+                                </span>
+                            )}
+                        </div>
+                        {config.intervalPreset.sets === 0 ? (
+                            <div className="flex items-center justify-between">
+                                <span
+                                    className="font-bold num"
+                                    style={{
+                                        fontSize: 28,
+                                        color: "#fff",
+                                        letterSpacing: "-0.03em",
+                                    }}
+                                >
+                                    {Math.floor(intervalCountdown / 60)
+                                        .toString()
+                                        .padStart(2, "0")}
+                                    :
+                                    {(intervalCountdown % 60)
+                                        .toString()
+                                        .padStart(2, "0")}
+                                </span>
+                                <button
+                                    onClick={() => {
+                                        const next =
+                                            intervalPhaseRef.current === "run"
+                                                ? "rest"
+                                                : "run";
+                                        intervalPhaseRef.current = next;
+                                        intervalCountdownRef.current = 0;
+                                        setIntervalPhase(next);
+                                        setIntervalCountdown(0);
+                                    }}
+                                    className="text-xs font-bold h-11 px-3 rounded-xl active:scale-95 transition-transform"
+                                    style={{
+                                        background: "rgba(255,255,255,0.12)",
+                                        color: "#fff",
+                                        border: "1px solid rgba(255,255,255,0.2)",
+                                    }}
+                                >
+                                    {intervalPhase === "run"
+                                        ? "→ 휴식"
+                                        : "→ 달리기"}
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <span
+                                    className="font-bold num"
+                                    style={{
+                                        fontSize: 28,
+                                        color: "#fff",
+                                        letterSpacing: "-0.03em",
+                                    }}
+                                >
+                                    {Math.floor(intervalCountdown / 60)
+                                        .toString()
+                                        .padStart(2, "0")}
+                                    :
+                                    {(intervalCountdown % 60)
+                                        .toString()
+                                        .padStart(2, "0")}
+                                </span>
+                                {config.intervalPreset.sets > 0 && (
+                                    <div
+                                        className="mt-2 rounded-full overflow-hidden"
+                                        style={{
+                                            height: 4,
+                                            background: "rgba(255,255,255,0.1)",
+                                        }}
+                                    >
+                                        <div
+                                            className="h-full rounded-full transition-all"
+                                            style={{
+                                                width: `${Math.round(((intervalSet - 1) / config.intervalPreset.sets) * 100)}%`,
+                                                background: intervalTone,
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        onClick={isPaused ? handleResume : handlePause}
+                        className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                        style={{
+                            background: isPaused
+                                ? "rgba(52,199,89,0.2)"
+                                : "rgba(255,159,10,0.2)",
+                            color: isPaused ? "#34c759" : "#ff9f0a",
+                            border: `1px solid ${isPaused ? "rgba(52,199,89,0.3)" : "rgba(255,159,10,0.3)"}`,
+                            letterSpacing: "-0.01em",
+                        }}
+                    >
+                        {isPaused ? "계속하기" : "일시정지"}
+                    </button>
+                    <button
+                        onClick={handleFinish}
+                        className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                        style={{
+                            background: "var(--c-danger)",
+                            color: "#fff",
+                            boxShadow: "0 4px 20px rgba(255,69,58,0.35)",
+                            letterSpacing: "-0.01em",
+                        }}
+                    >
+                        종료
+                    </button>
+                </div>
+            </div>
+        </main>
+    );
 }
 
 function toCardinal(deg: number): string {
-  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  return dirs[Math.round(deg / 45) % 8];
+    const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return dirs[Math.round(deg / 45) % 8];
 }
 
-function RunStat({ label, value, unit, accent, large = false }: {
-  label: string; value: string; unit: string; accent: string; large?: boolean;
+function RunStat({
+    label,
+    value,
+    unit,
+    accent,
+    large = false,
+}: {
+    label: string;
+    value: string;
+    unit: string;
+    accent: string;
+    large?: boolean;
 }) {
-  return (
-    <div
-      className="rounded-2xl px-3 py-3 text-center"
-      style={{
-        background: `${accent}0d`,
-        border: `1px solid ${accent}33`,
-        boxShadow: `0 0 12px ${accent}18`,
-        transition: "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
-      }}
-    >
-      <p style={{ fontSize: 11, color: "#5e636a", marginBottom: 4 }}>{label}</p>
-      <p
-        className="num"
-        style={{ fontSize: large ? 22 : 18, fontWeight: 800, color: accent, lineHeight: 1.1, letterSpacing: "-0.03em" }}
-      >
-        {value}
-      </p>
-      {unit && <p style={{ fontSize: 11, color: "#5e636a", marginTop: 2 }}>{unit}</p>}
-    </div>
-  );
+    return (
+        <div
+            className="rounded-2xl px-3 py-3 text-center"
+            style={{
+                background: `${accent}0d`,
+                border: `1px solid ${accent}33`,
+                boxShadow: `0 0 12px ${accent}18`,
+                transition:
+                    "background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease",
+            }}
+        >
+            <p style={{fontSize: 11, color: "#5e636a", marginBottom: 4}}>
+                {label}
+            </p>
+            <p
+                className="num"
+                style={{
+                    fontSize: large ? 22 : 18,
+                    fontWeight: 800,
+                    color: accent,
+                    lineHeight: 1.1,
+                    letterSpacing: "-0.03em",
+                }}
+            >
+                {value}
+            </p>
+            {unit && (
+                <p style={{fontSize: 11, color: "#5e636a", marginTop: 2}}>
+                    {unit}
+                </p>
+            )}
+        </div>
+    );
 }
 
-function MiniStat({ label, value, unit, accent }: { label: string; value: string; unit: string; accent: string }) {
-  return (
-    <div
-      className="rounded-2xl py-3 text-center"
-      style={{ background: "rgba(26,28,31,0.9)", border: "1px solid rgba(255,255,255,0.08)" }}
-    >
-      <p style={{ fontSize: 11, color: "#9da1a6", marginBottom: 4 }}>{label}</p>
-      <div className="flex items-baseline justify-center gap-0.5">
-        <span className="num" style={{ fontSize: 20, fontWeight: 800, color: accent, letterSpacing: "-0.03em" }}>{value}</span>
-        {unit && <span style={{ fontSize: 12, color: "#5e636a" }}>{unit}</span>}
-      </div>
-    </div>
-  );
+function MiniStat({
+    label,
+    value,
+    unit,
+    accent,
+}: {
+    label: string;
+    value: string;
+    unit: string;
+    accent: string;
+}) {
+    return (
+        <div
+            className="rounded-2xl py-3 text-center"
+            style={{
+                background: "rgba(26,28,31,0.9)",
+                border: "1px solid rgba(255,255,255,0.08)",
+            }}
+        >
+            <p style={{fontSize: 11, color: "#9da1a6", marginBottom: 4}}>
+                {label}
+            </p>
+            <div className="flex items-baseline justify-center gap-0.5">
+                <span
+                    className="num"
+                    style={{
+                        fontSize: 20,
+                        fontWeight: 800,
+                        color: accent,
+                        letterSpacing: "-0.03em",
+                    }}
+                >
+                    {value}
+                </span>
+                {unit && (
+                    <span style={{fontSize: 12, color: "#5e636a"}}>{unit}</span>
+                )}
+            </div>
+        </div>
+    );
 }

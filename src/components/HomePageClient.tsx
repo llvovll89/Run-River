@@ -8,7 +8,11 @@ import {useTheme} from "@/hooks/useTheme";
 import {usePWAInstall} from "@/hooks/usePWAInstall";
 import {useUserProfile} from "@/hooks/useUserProfile";
 import {getCurrentUser, getRunningHistory} from "@/lib/supabase";
-import {getGrowthSummary, trackGrowthEvent, type GrowthSummary} from "@/lib/growthEvents";
+import {
+    getGrowthSummary,
+    trackGrowthEvent,
+    type GrowthSummary,
+} from "@/lib/growthEvents";
 import Image from "next/image";
 import type {LatLng, ActivityType} from "@/types";
 import {calcDistance} from "@/hooks/useGeolocation";
@@ -42,6 +46,31 @@ const SAVED_ROUTES_MAX = 5;
 const REFERRAL_BANNER_SEEN_KEY = "rr_referral_banner_seen_at";
 const REFERRAL_BANNER_COOLDOWN_MS = 1000 * 60 * 60 * 24 * 7;
 const REFERRAL_VISIT_SESSION_KEY = "rr_referral_visit_logged";
+const CUSTOM_INTERVAL_KEY = "rr_custom_interval";
+
+function buildCustomPreset(inputs: {
+    warmupMin: string;
+    runSec: string;
+    restSec: string;
+    sets: string;
+    cooldownMin: string;
+}): IntervalPreset {
+    const runSec = Math.max(5, parseInt(inputs.runSec, 10) || 5);
+    const restSec = Math.max(0, parseInt(inputs.restSec, 10) || 0);
+    const sets = Math.max(1, parseInt(inputs.sets, 10) || 1);
+    const warmupSec = (parseInt(inputs.warmupMin, 10) || 0) * 60;
+    const cooldownSec = (parseInt(inputs.cooldownMin, 10) || 0) * 60;
+    return {
+        id: "custom",
+        name: "직접 설정",
+        description: `${runSec}초 달리기 / ${restSec}초 휴식 × ${sets}세트`,
+        warmupSeconds: warmupSec > 0 ? warmupSec : undefined,
+        runSeconds: runSec,
+        restSeconds: restSec,
+        sets,
+        cooldownSeconds: cooldownSec > 0 ? cooldownSec : undefined,
+    };
+}
 
 export default function Home() {
     const router = useRouter();
@@ -64,6 +93,20 @@ export default function Home() {
     const [selectedPreset, setSelectedPreset] = useState<IntervalPreset>(
         INTERVAL_PRESETS[0],
     );
+    const [customInterval, setCustomInterval] = useState({
+        warmupMin: "3",
+        runSec: "60",
+        restSec: "30",
+        sets: "5",
+        cooldownMin: "3",
+    });
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(CUSTOM_INTERVAL_KEY);
+            if (raw) setCustomInterval(JSON.parse(raw));
+        } catch {}
+    }, []);
     const [search, setSearch] = useState<{
         open: boolean;
         query: string;
@@ -82,7 +125,8 @@ export default function Home() {
     const [route, setRoute] = useState<{
         info: {path: LatLng[]; distanceM: number; durationS: number} | null;
         loading: boolean;
-    }>({info: null, loading: false});
+        error: boolean;
+    }>({info: null, loading: false, error: false});
     const [addresses, setAddresses] = useState({start: "", end: ""});
     const startAddrOverride = useRef<string | null>(null);
     const endAddrOverride = useRef<string | null>(null);
@@ -130,9 +174,11 @@ export default function Home() {
         mapRef.current?.panTo(r.startPoint);
     }
 
-    // PC 감지: 임시 비활성화 (개발/테스트용)
+    // 터치스크린 없고 화면 너비 769px 초과 시 데스크탑으로 판별
     useEffect(() => {
-        setIsDesktop(false);
+        const noTouch =
+            !("ontouchstart" in window) && navigator.maxTouchPoints === 0;
+        setIsDesktop(noTouch && window.innerWidth > 768);
     }, []);
 
     useEffect(() => {
@@ -203,11 +249,11 @@ export default function Home() {
     // 도보 경로 페치 (OSRM)
     useEffect(() => {
         if (!startPoint || !endPoint || pageMode !== "map") {
-            setRoute((prev) => ({...prev, info: null}));
+            setRoute((prev) => ({...prev, info: null, error: false}));
             return;
         }
         let cancelled = false;
-        setRoute((prev) => ({...prev, loading: true}));
+        setRoute((prev) => ({...prev, loading: true, error: false}));
 
         fetch(
             `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`,
@@ -230,7 +276,8 @@ export default function Home() {
                 if (!cancelled) setRoute((prev) => ({...prev, info}));
             })
             .catch(() => {
-                if (!cancelled) setRoute((prev) => ({...prev, info: null}));
+                if (!cancelled)
+                    setRoute((prev) => ({...prev, info: null, error: true}));
             })
             .finally(() => {
                 if (!cancelled) setRoute((prev) => ({...prev, loading: false}));
@@ -424,7 +471,10 @@ export default function Home() {
             : pageMode === "time"
               ? !!(userLocation || startPoint) && goal.time > 0
               : pageMode === "interval"
-                ? !!(userLocation || startPoint)
+                ? !!(userLocation || startPoint) &&
+                  (selectedPreset.id !== "custom" ||
+                      ((parseInt(customInterval.runSec, 10) || 0) > 0 &&
+                          (parseInt(customInterval.sets, 10) || 0) > 0))
                 : !!(startPoint && endPoint);
     const isRun = activityType === "running";
     const accentVar = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
@@ -529,7 +579,9 @@ export default function Home() {
 
                 const distance = records.reduce((sum, record) => {
                     const created = new Date(record.created_at);
-                    return created >= weekStart ? sum + record.distance_km : sum;
+                    return created >= weekStart
+                        ? sum + record.distance_km
+                        : sum;
                 }, 0);
 
                 if (mounted) {
@@ -942,7 +994,9 @@ export default function Home() {
                                 Growth Debug
                             </p>
                             <button
-                                onClick={() => setGrowthSummary(getGrowthSummary())}
+                                onClick={() =>
+                                    setGrowthSummary(getGrowthSummary())
+                                }
                                 className="h-11 px-3 rounded-lg text-xs font-semibold"
                                 style={{
                                     background: "var(--c-elevated)",
@@ -953,14 +1007,40 @@ export default function Home() {
                                 새로고침
                             </button>
                         </div>
-                        <p className="mt-2" style={{fontSize: 11, color: "var(--c-text-3)"}}>
-                            유입 {growthSummary.counters.referral_visit} · 배너노출 {growthSummary.counters.referral_banner_shown} · 시작 {growthSummary.counters.referral_banner_start}
+                        <p
+                            className="mt-2"
+                            style={{fontSize: 11, color: "var(--c-text-3)"}}
+                        >
+                            유입 {growthSummary.counters.referral_visit} ·
+                            배너노출{" "}
+                            {growthSummary.counters.referral_banner_shown} ·
+                            시작 {growthSummary.counters.referral_banner_start}
                         </p>
-                        <p className="mt-1" style={{fontSize: 11, color: "var(--c-text-3)"}}>
-                            전환율(유입→노출) {Math.round(growthSummary.conversion.referralToBannerRate * 100)}% · 전환율(노출→시작) {Math.round(growthSummary.conversion.bannerToStartRate * 100)}%
+                        <p
+                            className="mt-1"
+                            style={{fontSize: 11, color: "var(--c-text-3)"}}
+                        >
+                            전환율(유입→노출){" "}
+                            {Math.round(
+                                growthSummary.conversion.referralToBannerRate *
+                                    100,
+                            )}
+                            % · 전환율(노출→시작){" "}
+                            {Math.round(
+                                growthSummary.conversion.bannerToStartRate *
+                                    100,
+                            )}
+                            %
                         </p>
-                        <p className="mt-1" style={{fontSize: 11, color: "var(--c-text-3)"}}>
-                            공유 성공률 {Math.round(growthSummary.conversion.shareSuccessRate * 100)}%
+                        <p
+                            className="mt-1"
+                            style={{fontSize: 11, color: "var(--c-text-3)"}}
+                        >
+                            공유 성공률{" "}
+                            {Math.round(
+                                growthSummary.conversion.shareSuccessRate * 100,
+                            )}
+                            %
                         </p>
                     </div>
                 </div>
@@ -1516,7 +1596,8 @@ export default function Home() {
                                     letterSpacing: "-0.01em",
                                 }}
                             >
-                                {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
+                                {weeklyDistanceKm.toFixed(1)} /{" "}
+                                {weeklyGoalKm.toFixed(1)} km
                             </span>
                         </button>
                     ) : (
@@ -1541,12 +1622,18 @@ export default function Home() {
                                 <div className="flex items-center gap-2">
                                     <p
                                         className="num"
-                                        style={{fontSize: 12, color: "var(--c-text-2)"}}
+                                        style={{
+                                            fontSize: 12,
+                                            color: "var(--c-text-2)",
+                                        }}
                                     >
-                                        {weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm.toFixed(1)} km
+                                        {weeklyDistanceKm.toFixed(1)} /{" "}
+                                        {weeklyGoalKm.toFixed(1)} km
                                     </p>
                                     <button
-                                        onClick={() => setWeeklyChallengeOpen(false)}
+                                        onClick={() =>
+                                            setWeeklyChallengeOpen(false)
+                                        }
                                         className="w-5 h-5 rounded-md flex items-center justify-center"
                                         style={{
                                             color: "var(--c-text-3)",
@@ -1560,13 +1647,17 @@ export default function Home() {
                             </div>
                             <div
                                 className="mt-2 rounded-full overflow-hidden"
-                                style={{height: 7, background: "var(--c-border)"}}
+                                style={{
+                                    height: 7,
+                                    background: "var(--c-border)",
+                                }}
                             >
                                 <div
                                     style={{
                                         width: `${Math.round(weeklyProgress * 100)}%`,
                                         height: "100%",
-                                        background: "linear-gradient(90deg, #007aff, #34c759)",
+                                        background:
+                                            "linear-gradient(90deg, #007aff, #34c759)",
                                         transition: "width 220ms ease",
                                     }}
                                 />
@@ -1667,7 +1758,10 @@ export default function Home() {
                         <div className="space-y-2">
                             {/* 저장된 경로 */}
                             {savedRoutes.length > 0 && (
-                                <div className="flex gap-2 overflow-x-auto pb-1" style={{scrollbarWidth: "none"}}>
+                                <div
+                                    className="flex gap-2 overflow-x-auto pb-1"
+                                    style={{scrollbarWidth: "none"}}
+                                >
                                     {savedRoutes.map((r) => (
                                         <div
                                             key={r.id}
@@ -1682,7 +1776,14 @@ export default function Home() {
                                             }}
                                             onClick={() => loadSavedRoute(r)}
                                         >
-                                            <span style={{maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                                            <span
+                                                style={{
+                                                    maxWidth: 100,
+                                                    overflow: "hidden",
+                                                    textOverflow: "ellipsis",
+                                                    whiteSpace: "nowrap",
+                                                }}
+                                            >
                                                 {r.label}
                                             </span>
                                             <button
@@ -1691,10 +1792,25 @@ export default function Home() {
                                                     deleteSavedRoute(r.id);
                                                 }}
                                                 className="w-11 h-11 rounded-full flex items-center justify-center"
-                                                style={{background: "var(--c-border)", color: "var(--c-text-3)", flexShrink: 0}}
+                                                style={{
+                                                    background:
+                                                        "var(--c-border)",
+                                                    color: "var(--c-text-3)",
+                                                    flexShrink: 0,
+                                                }}
                                             >
-                                                <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                                                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"/>
+                                                <svg
+                                                    width="8"
+                                                    height="8"
+                                                    viewBox="0 0 12 12"
+                                                    fill="none"
+                                                >
+                                                    <path
+                                                        d="M2 2l8 8M10 2l-8 8"
+                                                        stroke="currentColor"
+                                                        strokeWidth={1.8}
+                                                        strokeLinecap="round"
+                                                    />
                                                 </svg>
                                             </button>
                                         </div>
@@ -1750,8 +1866,17 @@ export default function Home() {
                                                 color: "var(--c-text-2)",
                                             }}
                                         >
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                                            <svg
+                                                width="13"
+                                                height="13"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth={2}
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            >
+                                                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
                                             </svg>
                                             이 경로 저장
                                         </button>
@@ -1767,7 +1892,16 @@ export default function Home() {
                                             color: "var(--c-danger)",
                                         }}
                                     >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                        <svg
+                                            width="13"
+                                            height="13"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                        >
                                             <path d="M3 12a9 9 0 1 0 2.64-6.36" />
                                             <path d="M3 3v5h5" />
                                         </svg>
@@ -1852,15 +1986,25 @@ export default function Home() {
                                                 strokeWidth={2.5}
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
-                                                style={{color: accentVar}}
+                                                style={{
+                                                    color: route.error
+                                                        ? "#ff9f0a"
+                                                        : accentVar,
+                                                }}
                                             >
                                                 <path d="M3 12h18M12 5l7 7-7 7" />
                                             </svg>
                                             <span
                                                 className="text-xs font-bold num"
-                                                style={{color: accentVar}}
+                                                style={{
+                                                    color: route.error
+                                                        ? "#ff9f0a"
+                                                        : accentVar,
+                                                }}
                                             >
-                                                직선 거리
+                                                {route.error
+                                                    ? "탐색 실패 · 직선"
+                                                    : "직선 거리"}
                                             </span>
                                             <span
                                                 className="text-sm font-extrabold num"
@@ -2102,6 +2246,217 @@ export default function Home() {
                                     </button>
                                 );
                             })}
+
+                            {/* 커스텀 인터벌 카드 */}
+                            <div>
+                                <button
+                                    onClick={() =>
+                                        setSelectedPreset(
+                                            buildCustomPreset(customInterval),
+                                        )
+                                    }
+                                    className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-all active:scale-[0.98]"
+                                    style={{
+                                        background:
+                                            selectedPreset.id === "custom"
+                                                ? `${accentVar}18`
+                                                : "var(--c-elevated)",
+                                        border:
+                                            selectedPreset.id === "custom"
+                                                ? `1.5px solid ${accentVar}`
+                                                : "1px solid var(--c-border)",
+                                    }}
+                                >
+                                    <div>
+                                        <p
+                                            className="font-bold"
+                                            style={{
+                                                fontSize: 14,
+                                                color: "var(--c-text-1)",
+                                            }}
+                                        >
+                                            직접 설정
+                                        </p>
+                                        <p
+                                            style={{
+                                                fontSize: 12,
+                                                color: "var(--c-text-3)",
+                                                marginTop: 2,
+                                            }}
+                                        >
+                                            나만의 인터벌을 직접 입력하세요
+                                        </p>
+                                    </div>
+                                    {selectedPreset.id === "custom" && (
+                                        <span
+                                            className="text-xs font-bold px-2 py-0.5 rounded-full ml-3 shrink-0"
+                                            style={{
+                                                background: accentVar,
+                                                color: "#fff",
+                                            }}
+                                        >
+                                            선택
+                                        </span>
+                                    )}
+                                </button>
+
+                                {selectedPreset.id === "custom" && (
+                                    <div
+                                        className="mt-2 px-4 py-3 rounded-2xl space-y-2"
+                                        style={{
+                                            background: "var(--c-elevated)",
+                                            border: "1px solid var(--c-border)",
+                                        }}
+                                    >
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {(
+                                                [
+                                                    [
+                                                        "runSec",
+                                                        "달리기 (초)",
+                                                        5,
+                                                        3600,
+                                                    ],
+                                                    [
+                                                        "restSec",
+                                                        "휴식 (초)",
+                                                        0,
+                                                        3600,
+                                                    ],
+                                                ] as const
+                                            ).map(
+                                                ([field, label, min, max]) => (
+                                                    <div key={field}>
+                                                        <p
+                                                            className="text-xs mb-1"
+                                                            style={{
+                                                                color: "var(--c-text-3)",
+                                                            }}
+                                                        >
+                                                            {label}
+                                                        </p>
+                                                        <input
+                                                            type="number"
+                                                            min={min}
+                                                            max={max}
+                                                            value={
+                                                                customInterval[
+                                                                    field
+                                                                ]
+                                                            }
+                                                            onChange={(e) => {
+                                                                const next = {
+                                                                    ...customInterval,
+                                                                    [field]:
+                                                                        e.target
+                                                                            .value,
+                                                                };
+                                                                setCustomInterval(
+                                                                    next,
+                                                                );
+                                                                try {
+                                                                    localStorage.setItem(
+                                                                        CUSTOM_INTERVAL_KEY,
+                                                                        JSON.stringify(
+                                                                            next,
+                                                                        ),
+                                                                    );
+                                                                } catch {}
+                                                                setSelectedPreset(
+                                                                    buildCustomPreset(
+                                                                        next,
+                                                                    ),
+                                                                );
+                                                            }}
+                                                            className="w-full px-3 py-2 rounded-xl text-sm font-semibold outline-none"
+                                                            style={{
+                                                                background:
+                                                                    "var(--c-surface)",
+                                                                border: "1px solid var(--c-border)",
+                                                                color: "var(--c-text-1)",
+                                                            }}
+                                                        />
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(
+                                                [
+                                                    ["sets", "세트", 1, 50],
+                                                    [
+                                                        "warmupMin",
+                                                        "워밍업 (분)",
+                                                        0,
+                                                        60,
+                                                    ],
+                                                    [
+                                                        "cooldownMin",
+                                                        "쿨다운 (분)",
+                                                        0,
+                                                        60,
+                                                    ],
+                                                ] as const
+                                            ).map(
+                                                ([field, label, min, max]) => (
+                                                    <div key={field}>
+                                                        <p
+                                                            className="text-xs mb-1"
+                                                            style={{
+                                                                color: "var(--c-text-3)",
+                                                            }}
+                                                        >
+                                                            {label}
+                                                        </p>
+                                                        <input
+                                                            type="number"
+                                                            min={min}
+                                                            max={max}
+                                                            value={
+                                                                customInterval[
+                                                                    field
+                                                                ]
+                                                            }
+                                                            onChange={(e) => {
+                                                                const next = {
+                                                                    ...customInterval,
+                                                                    [field]:
+                                                                        e.target
+                                                                            .value,
+                                                                };
+                                                                setCustomInterval(
+                                                                    next,
+                                                                );
+                                                                try {
+                                                                    localStorage.setItem(
+                                                                        CUSTOM_INTERVAL_KEY,
+                                                                        JSON.stringify(
+                                                                            next,
+                                                                        ),
+                                                                    );
+                                                                } catch {}
+                                                                setSelectedPreset(
+                                                                    buildCustomPreset(
+                                                                        next,
+                                                                    ),
+                                                                );
+                                                            }}
+                                                            className="w-full px-3 py-2 rounded-xl text-sm font-semibold outline-none"
+                                                            style={{
+                                                                background:
+                                                                    "var(--c-surface)",
+                                                                border: "1px solid var(--c-border)",
+                                                                color: "var(--c-text-1)",
+                                                            }}
+                                                        />
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <p
                                 className="text-xs text-center"
                                 style={{color: "var(--c-text-3)"}}
@@ -2151,11 +2506,11 @@ export default function Home() {
                         >
                             {pageMode === "goal"
                                 ? canStart
-                                                                        ? `${goal.distance}km ${startActionText} 시작`
+                                    ? `${goal.distance}km ${startActionText} 시작`
                                     : "위치 확인 중..."
                                 : pageMode === "time"
                                   ? canStart
-                                                                            ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} ${startActionText} 시작`
+                                      ? `${goal.time >= 60 ? "1시간" : `${goal.time}분`} ${startActionText} 시작`
                                       : "위치 확인 중..."
                                   : pageMode === "interval"
                                     ? canStart
