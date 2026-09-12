@@ -18,6 +18,7 @@ import {
 } from "@/lib/supabase";
 import {DEFAULT_RUN_TUNING, normalizeRunTuning} from "@/lib/runTuning";
 import type {UserProfile} from "@/types";
+import TintedButton from "@/components/TintedButton";
 
 function formatRetryTime(ts: number | null): string {
     if (!ts) return "-";
@@ -562,6 +563,8 @@ export default function SettingsPage() {
                     </div>
                     <button
                         onClick={() => setAutoPause((v) => !v)}
+                        role="switch"
+                        aria-checked={autoPause}
                         className="relative shrink-0"
                         style={{
                             width: 51,
@@ -617,6 +620,8 @@ export default function SettingsPage() {
                     </div>
                     <button
                         onClick={() => setAutoApplyGapAdjustment((v) => !v)}
+                        role="switch"
+                        aria-checked={autoApplyGapAdjustment}
                         className="relative shrink-0"
                         style={{
                             width: 51,
@@ -919,38 +924,26 @@ export default function SettingsPage() {
                                         {item.lastError ?? "알 수 없는 오류"}
                                     </p>
                                     <div className="mt-2 flex items-center gap-2">
-                                        <button
+                                        <TintedButton
+                                            tone="accent"
                                             onClick={() =>
                                                 void handleRetryExhausted(
                                                     item.queueId,
                                                 )
                                             }
-                                            className="h-11 px-3 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
-                                            style={{
-                                                background:
-                                                    "rgba(0,122,255,0.12)",
-                                                color: "var(--c-toss-blue)",
-                                                border: "1px solid rgba(0,122,255,0.3)",
-                                            }}
                                         >
                                             재시도
-                                        </button>
-                                        <button
+                                        </TintedButton>
+                                        <TintedButton
+                                            tone="danger"
                                             onClick={() =>
                                                 handleDeleteExhausted(
                                                     item.queueId,
                                                 )
                                             }
-                                            className="h-11 px-3 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
-                                            style={{
-                                                background:
-                                                    "rgba(255,69,58,0.12)",
-                                                color: "var(--c-danger)",
-                                                border: "1px solid rgba(255,69,58,0.3)",
-                                            }}
                                         >
                                             삭제
-                                        </button>
+                                        </TintedButton>
                                     </div>
                                 </div>
                             ))}
@@ -1008,6 +1001,7 @@ function ProfileField({
     placeholder: string;
     hint?: string;
 }) {
+    const fieldId = `profile-field-${label.replace(/\s+/g, "-")}`;
     return (
         <div
             className="px-4 rounded-2xl"
@@ -1017,14 +1011,16 @@ function ProfileField({
             }}
         >
             <div className="flex items-center justify-between py-4">
-                <span
+                <label
+                    htmlFor={fieldId}
                     className="font-semibold"
                     style={{fontSize: 15, color: "var(--c-text-1)"}}
                 >
                     {label}
-                </span>
+                </label>
                 <div className="flex items-center gap-2">
                     <input
+                        id={fieldId}
                         type="number"
                         inputMode="numeric"
                         value={value}

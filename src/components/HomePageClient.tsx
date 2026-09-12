@@ -19,6 +19,7 @@ import {calcDistance} from "@/hooks/useGeolocation";
 import {INTERVAL_PRESETS} from "@/lib/intervalPresets";
 import type {IntervalPreset} from "@/lib/intervalPresets";
 import PCLanding from "@/components/PCLanding";
+import SegmentedControl from "@/components/SegmentedControl";
 
 const KakaoMap = dynamicImport(() => import("@/components/KakaoMap"), {
     ssr: false,
@@ -1634,13 +1635,17 @@ export default function Home() {
                                         onClick={() =>
                                             setWeeklyChallengeOpen(false)
                                         }
-                                        className="w-5 h-5 rounded-md flex items-center justify-center"
+                                        className="relative w-5 h-5 rounded-md flex items-center justify-center"
                                         style={{
                                             color: "var(--c-text-3)",
                                             background: "var(--c-surface)",
                                         }}
                                         aria-label="이번 주 챌린지 접기"
                                     >
+                                        <span
+                                            className="absolute -inset-3"
+                                            aria-hidden="true"
+                                        />
                                         ×
                                     </button>
                                 </div>
@@ -1676,82 +1681,48 @@ export default function Home() {
                     )}
 
                     {/* 모드 탭 */}
-                    <div
-                        className="flex gap-1 p-1 rounded-2xl"
-                        style={{background: "var(--c-elevated)"}}
-                    >
-                        {(
-                            [
-                                ["map", "지도"],
-                                ["goal", "거리"],
-                                ["time", "시간"],
-                                ["interval", "인터벌"],
-                            ] as [PageMode, string][]
-                        ).map(([m, label]) => (
-                            <button
-                                key={m}
-                                onClick={() => setPageMode(m)}
-                                className="flex-1 py-2 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]"
-                                style={{
-                                    background:
-                                        pageMode === m
-                                            ? accentVar
-                                            : "transparent",
-                                    color:
-                                        pageMode === m
-                                            ? "#fff"
-                                            : "var(--c-text-2)",
-                                    boxShadow:
-                                        pageMode === m
-                                            ? `0 2px 10px ${accentVar}44`
-                                            : "none",
-                                }}
-                            >
-                                {label}
-                            </button>
-                        ))}
-                    </div>
+                    <SegmentedControl<PageMode>
+                        value={pageMode}
+                        onChange={setPageMode}
+                        options={[
+                            {value: "map", label: "지도", color: accentVar},
+                            {value: "goal", label: "거리", color: accentVar},
+                            {value: "time", label: "시간", color: accentVar},
+                            {value: "interval", label: "인터벌", color: accentVar},
+                        ]}
+                    />
 
                     {/* 활동 유형 */}
-                    <div
-                        className="card flex gap-2 p-1 rounded-2xl"
-                        style={{background: "var(--c-elevated)"}}
-                    >
-                        {(["running", "walking"] as ActivityType[]).map((t) => {
-                            const active = activityType === t;
-                            const color =
-                                t === "running"
-                                    ? "var(--c-toss-blue)"
-                                    : "var(--c-walk)";
-                            return (
-                                <button
-                                    key={t}
-                                    onClick={() => setActivityType(t)}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]"
-                                    style={{
-                                        background: active
-                                            ? color
-                                            : "transparent",
-                                        color: active
-                                            ? "#fff"
-                                            : "var(--c-text-2)",
-                                        boxShadow: active
-                                            ? `0 2px 14px ${color}44`
-                                            : "none",
-                                    }}
-                                >
-                                    {t === "running" ? (
+                    <SegmentedControl<ActivityType>
+                        value={activityType}
+                        onChange={setActivityType}
+                        gapClassName="gap-2"
+                        itemPaddingClassName="py-2.5"
+                        shadowBlur={14}
+                        wrapperExtraClassName="card"
+                        options={[
+                            {
+                                value: "running",
+                                color: "var(--c-toss-blue)",
+                                label: (
+                                    <>
                                         <RunIcon />
-                                    ) : (
+                                        <span>러닝</span>
+                                    </>
+                                ),
+                            },
+                            {
+                                value: "walking",
+                                color: "var(--c-walk)",
+                                label: (
+                                    <>
                                         <WalkIcon />
-                                    )}
-                                    <span>
-                                        {t === "running" ? "러닝" : "워킹"}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                                        <span>워킹</span>
+                                    </>
+                                ),
+                            },
+                        ]}
+                    />
 
                     {/* 지도 모드: 포인트 카드 */}
                     {pageMode === "map" && (
@@ -2327,15 +2298,17 @@ export default function Home() {
                                             ).map(
                                                 ([field, label, min, max]) => (
                                                     <div key={field}>
-                                                        <p
-                                                            className="text-xs mb-1"
+                                                        <label
+                                                            htmlFor={`custom-interval-${field}`}
+                                                            className="text-xs mb-1 block"
                                                             style={{
                                                                 color: "var(--c-text-3)",
                                                             }}
                                                         >
                                                             {label}
-                                                        </p>
+                                                        </label>
                                                         <input
+                                                            id={`custom-interval-${field}`}
                                                             type="number"
                                                             min={min}
                                                             max={max}
@@ -2400,15 +2373,17 @@ export default function Home() {
                                             ).map(
                                                 ([field, label, min, max]) => (
                                                     <div key={field}>
-                                                        <p
-                                                            className="text-xs mb-1"
+                                                        <label
+                                                            htmlFor={`custom-interval-${field}`}
+                                                            className="text-xs mb-1 block"
                                                             style={{
                                                                 color: "var(--c-text-3)",
                                                             }}
                                                         >
                                                             {label}
-                                                        </p>
+                                                        </label>
                                                         <input
+                                                            id={`custom-interval-${field}`}
                                                             type="number"
                                                             min={min}
                                                             max={max}

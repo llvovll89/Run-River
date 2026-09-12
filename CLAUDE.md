@@ -97,7 +97,13 @@ getPaceZone(pace, activityType): { label, color }
 
 ## 스토리지
 - **sessionStorage:** `runConfig`(시작 전), `runResult`(결과 페이지용)
-- **localStorage:** `theme`
+- **localStorage:**
+  - `theme` (useTheme)
+  - `userProfile` (useUserProfile — Supabase 동기화 전 로컬 우선 프로필)
+  - `runTuningV1` (runTuning.ts — GPS 튜닝 파라미터)
+  - `pendingRunRecords` (offlineQueue.ts — 오프라인 저장 대기열)
+  - `rr_growth_events`, `rr_growth_counter_*` (growthEvents.ts)
+  - `rr_custom_interval` (HomePageClient — 커스텀 인터벌 입력값)
 - **Supabase:** 영구 기록
 
 ---

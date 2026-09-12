@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteRunningRecord } from "@/lib/supabase";
+import TintedButton from "@/components/TintedButton";
 
 export default function DeleteRecordButton({ id }: { id: string }) {
   const router = useRouter();
@@ -26,29 +27,12 @@ export default function DeleteRecordButton({ id }: { id: string }) {
         {error && (
           <span className="text-xs" style={{ color: "var(--c-danger)" }}>{error}</span>
         )}
-        <button
-          onClick={() => setConfirm(false)}
-          disabled={isPending}
-          className="text-xs font-semibold h-11 px-3 rounded-xl active:scale-95 transition-transform"
-          style={{
-            background: "var(--c-elevated)",
-            border: "1px solid var(--c-border)",
-            color: "var(--c-text-2)",
-          }}
-        >
+        <TintedButton tone="neutral" onClick={() => setConfirm(false)} disabled={isPending}>
           취소
-        </button>
-        <button
-          onClick={handleDelete}
-          disabled={isPending}
-          className="text-xs font-semibold h-11 px-3 rounded-xl active:scale-95 transition-transform"
-          style={{
-            background: isPending ? "var(--c-elevated)" : "var(--c-danger)",
-            color: isPending ? "var(--c-text-3)" : "#fff",
-          }}
-        >
+        </TintedButton>
+        <TintedButton tone="danger-solid" onClick={handleDelete} disabled={isPending}>
           {isPending ? "삭제 중…" : "삭제 확인"}
-        </button>
+        </TintedButton>
       </div>
     );
   }

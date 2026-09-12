@@ -73,6 +73,7 @@ export function useGeolocation(): UseGeolocationReturn {
   const lastPositionRef = useRef<LatLng | null>(null);
   const lastPathPointRef = useRef<LatLng | null>(null);
   const lastTimestampRef = useRef<number | null>(null);
+  const lastSampleTimestampRef = useRef<number | null>(null);
   const elapsedSecondsRef = useRef(0);
   const lastAltitudeRef = useRef<number | null>(null);
   const startAltitudeRef = useRef<number | null>(null);
@@ -100,13 +101,14 @@ export function useGeolocation(): UseGeolocationReturn {
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const currentTs = pos.timestamp;
-        const prevTs = lastTimestampRef.current;
-        if (prevTs !== null) {
-          const deltaSeconds = (currentTs - prevTs) / 1000;
+        const prevSampleTs = lastSampleTimestampRef.current;
+        if (prevSampleTs !== null) {
+          const deltaSeconds = (currentTs - prevSampleTs) / 1000;
           if (deltaSeconds > 0 && Number.isFinite(deltaSeconds)) {
             elapsedSecondsRef.current += deltaSeconds;
           }
         }
+        lastSampleTimestampRef.current = currentTs;
 
         const newPos: LatLng = {
           lat: pos.coords.latitude,
@@ -146,6 +148,7 @@ export function useGeolocation(): UseGeolocationReturn {
         }
 
         if (lastPositionRef.current === null) {
+          // 최초 포인트: 그대로 앵커로 채택
           appendTrackPoint({
             ...newPos,
             timestamp: currentTs,
@@ -153,13 +156,17 @@ export function useGeolocation(): UseGeolocationReturn {
             distance_km: totalDistanceRef.current,
             altitude_m: altitude,
           });
-        }
-
-        // 거리 누적: 정확도 + 속도 기반 검증 통과 시에만 반영
-        if (lastPositionRef.current) {
+          lastPositionRef.current = newPos;
+          lastTimestampRef.current = currentTs;
+        } else if (lastTimestampRef.current === null) {
+          // 재개/복원 직후 등 앵커 시각이 없는 상태: 검증 없이 현재 위치로 재앵커링만 수행
+          lastPositionRef.current = newPos;
+          lastTimestampRef.current = currentTs;
+        } else {
+          // 거리 누적: 정확도 + 속도 기반 검증 통과 시에만 반영.
+          // reject된 포인트는 다음 델타의 기준점으로 삼지 않음 (앵커 오염 방지)
           const dist = calcDistance(lastPositionRef.current, newPos);
-          const safePrevTs = prevTs ?? currentTs;
-          const deltaSeconds = (currentTs - safePrevTs) / 1000;
+          const deltaSeconds = (currentTs - lastTimestampRef.current) / 1000;
           const accuracyMeters = pos.coords.accuracy ?? Number.POSITIVE_INFINITY;
 
           if (isValidDistancePoint(dist, deltaSeconds, accuracyMeters)) {
@@ -181,10 +188,11 @@ export function useGeolocation(): UseGeolocationReturn {
               setPathPoints((prev) => [...prev, newPos]);
               lastPathPointRef.current = newPos;
             }
+
+            lastPositionRef.current = newPos;
+            lastTimestampRef.current = currentTs;
           }
         }
-        lastPositionRef.current = newPos;
-        lastTimestampRef.current = pos.timestamp;
       },
       (err) => {
         setState((prev) => ({ ...prev, error: err.message }));
@@ -219,6 +227,7 @@ export function useGeolocation(): UseGeolocationReturn {
       lastPositionRef.current = restoredLast;
       lastPathPointRef.current = restoredLast;
       lastTimestampRef.current = null;
+      lastSampleTimestampRef.current = null;
       lastAltitudeRef.current = restore.endAltitude;
       startAltitudeRef.current = restore.startAltitude;
       altGainBufferRef.current = 0;
@@ -237,6 +246,7 @@ export function useGeolocation(): UseGeolocationReturn {
       lastPositionRef.current = null;
       lastPathPointRef.current = null;
       lastTimestampRef.current = null;
+      lastSampleTimestampRef.current = null;
       lastAltitudeRef.current = null;
       startAltitudeRef.current = null;
       altGainBufferRef.current = 0;
@@ -255,17 +265,13 @@ export function useGeolocation(): UseGeolocationReturn {
     setState((prev) => ({ ...prev, isTracking: false }));
   }, []);
 
-  const pauseTracking = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    setState((prev) => ({ ...prev, isTracking: false }));
-  }, []);
+  // 훅 레벨에서는 stopTracking과 동일한 동작(watch 해제)이며, 재개 가능 여부는 호출부가 관리한다
+  const pauseTracking = stopTracking;
 
   const resumeTracking = useCallback(() => {
     if (!navigator.geolocation) return;
     lastTimestampRef.current = null;
+    lastSampleTimestampRef.current = null;
     setState((prev) => ({ ...prev, isTracking: true, error: null }));
     startWatch();
   }, [startWatch]);
@@ -275,6 +281,7 @@ export function useGeolocation(): UseGeolocationReturn {
       if (document.visibilityState === "visible" && watchIdRef.current !== null) {
         lastPositionRef.current = null;
         lastTimestampRef.current = null;
+        lastSampleTimestampRef.current = null;
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);

@@ -1,19 +1,9 @@
 import {createServerClient} from "@supabase/ssr";
 import {NextResponse, type NextRequest} from "next/server";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-
-function assertEnv() {
-    if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error(
-            "Supabase 환경 변수가 설정되지 않았습니다. .env.local을 확인하세요.",
-        );
-    }
-}
+import {assertSupabaseEnv, supabaseUrl, supabaseAnonKey} from "@/lib/supabaseEnv";
 
 export async function updateSession(request: NextRequest) {
-    assertEnv();
+    assertSupabaseEnv();
     type CookieToSet = {
         name: string;
         value: string;

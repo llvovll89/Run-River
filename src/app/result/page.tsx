@@ -43,6 +43,7 @@ import type {
 import {useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
 import {trackGrowthEvent} from "@/lib/growthEvents";
+import TintedButton from "@/components/TintedButton";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
@@ -904,17 +905,13 @@ export default function ResultPage() {
                                 >
                                     저장 실패
                                 </span>
-                                <button
+                                <TintedButton
+                                    tone="danger"
+                                    rounded="full"
                                     onClick={() => result && doSave(result)}
-                                    className="text-xs font-semibold h-11 px-3 rounded-full active:scale-95 transition-transform"
-                                    style={{
-                                        background: "rgba(255,69,58,0.12)",
-                                        color: "var(--c-danger)",
-                                        border: "1px solid rgba(255,69,58,0.3)",
-                                    }}
                                 >
                                     재시도
-                                </button>
+                                </TintedButton>
                             </div>
                         ) : isAuthenticated === false ? (
                             <div className="flex items-center gap-2">
@@ -924,19 +921,15 @@ export default function ResultPage() {
                                 >
                                     게스트 모드 · 기록 미저장
                                 </span>
-                                <button
+                                <TintedButton
+                                    tone="neutral"
+                                    rounded="full"
                                     onClick={() =>
                                         router.push("/auth?next=/history")
                                     }
-                                    className="text-xs font-semibold h-11 px-3 rounded-full active:scale-95 transition-transform"
-                                    style={{
-                                        background: "var(--c-elevated)",
-                                        color: "var(--c-text-1)",
-                                        border: "1px solid var(--c-border)",
-                                    }}
                                 >
                                     로그인
-                                </button>
+                                </TintedButton>
                             </div>
                         ) : null}
                     </div>

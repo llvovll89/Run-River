@@ -28,6 +28,7 @@ import {
     normalizeRunTuning,
     type RunTuning,
 } from "@/lib/runTuning";
+import {SheetHandle, SheetActionGrid} from "@/components/RunSheetParts";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
@@ -1249,6 +1250,7 @@ export default function RunningPage() {
             {!followUser && (
                 <button
                     onClick={() => setFollowUser(true)}
+                    aria-label="내 위치로 지도 재중심"
                     className="absolute z-10 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
                     style={{
                         right: 16,
@@ -1608,25 +1610,6 @@ export default function RunningPage() {
                                     {formatDuration(untrackedSeconds)}
                                 </p>
                             )}
-                            <p
-                                className="mb-3"
-                                style={{fontSize: 11, color: "#7f8690"}}
-                            >
-                                튜닝값 · 정지{" "}
-                                {runTuning.autoPauseStopSpeedMs.toFixed(2)}m/s ·
-                                재개{" "}
-                                {runTuning.autoPauseResumeSpeedMs.toFixed(2)}m/s
-                                · 정지판정{" "}
-                                {(
-                                    runTuning.autoPauseStillnessMs / 1000
-                                ).toFixed(1)}
-                                초 · 이탈{" "}
-                                {Math.round(
-                                    runTuning.offRouteThresholdKm * 1000,
-                                )}
-                                m
-                            </p>
-
                             <div className="grid grid-cols-2 gap-2">
                                 <RunStat
                                     label="거리"
@@ -1830,12 +1813,7 @@ export default function RunningPage() {
                             borderRadius: "24px 24px 0 0",
                         }}
                     >
-                        <div className="flex justify-center mb-5">
-                            <div
-                                className="w-10 h-1 rounded-full"
-                                style={{background: "rgba(255,255,255,0.2)"}}
-                            />
-                        </div>
+                        <SheetHandle />
                         <h2
                             className="mb-1 text-center"
                             style={{
@@ -1867,35 +1845,18 @@ export default function RunningPage() {
                                 accent={accent}
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={() => {
-                                    arrivedRef.current = false;
-                                    setArrived(false);
-                                    setCompletionReason(null);
-                                }}
-                                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-                                style={{
-                                    background: "rgba(255,255,255,0.08)",
-                                    color: "#d1d4d9",
-                                    border: "1px solid rgba(255,255,255,0.12)",
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                계속 달리기
-                            </button>
-                            <button
-                                onClick={handleFinish}
-                                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
-                                style={{
-                                    background: accent,
-                                    boxShadow: `0 4px 20px ${accent}44`,
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                결과 보기
-                            </button>
-                        </div>
+                        <SheetActionGrid
+                            secondaryLabel="계속 달리기"
+                            onSecondary={() => {
+                                arrivedRef.current = false;
+                                setArrived(false);
+                                setCompletionReason(null);
+                            }}
+                            primaryLabel="결과 보기"
+                            onPrimary={handleFinish}
+                            primaryColor={accent}
+                            primaryShadow={`0 4px 20px ${accent}44`}
+                        />
                     </div>
                 </div>
             )}
@@ -1916,12 +1877,7 @@ export default function RunningPage() {
                             borderRadius: "24px 24px 0 0",
                         }}
                     >
-                        <div className="flex justify-center mb-5">
-                            <div
-                                className="w-10 h-1 rounded-full"
-                                style={{background: "rgba(255,255,255,0.2)"}}
-                            />
-                        </div>
+                        <SheetHandle />
                         <h2
                             className="mb-2 text-center"
                             style={{
@@ -1951,32 +1907,14 @@ export default function RunningPage() {
                             추천 보정 거리:{" "}
                             {gapSuggestion.suggestedDistanceKm.toFixed(2)}km
                         </p>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={handleSkipGapAdjustment}
-                                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-                                style={{
-                                    background: "rgba(255,255,255,0.08)",
-                                    color: "#d1d4d9",
-                                    border: "1px solid rgba(255,255,255,0.12)",
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                건너뛰기
-                            </button>
-                            <button
-                                onClick={handleApplyGapAdjustment}
-                                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
-                                style={{
-                                    background: "#ff9f0a",
-                                    boxShadow:
-                                        "0 4px 20px rgba(255,159,10,0.35)",
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                보정 적용
-                            </button>
-                        </div>
+                        <SheetActionGrid
+                            secondaryLabel="건너뛰기"
+                            onSecondary={handleSkipGapAdjustment}
+                            primaryLabel="보정 적용"
+                            onPrimary={handleApplyGapAdjustment}
+                            primaryColor="#ff9f0a"
+                            primaryShadow="0 4px 20px rgba(255,159,10,0.35)"
+                        />
                     </div>
                 </div>
             )}
@@ -1997,12 +1935,7 @@ export default function RunningPage() {
                             borderRadius: "24px 24px 0 0",
                         }}
                     >
-                        <div className="flex justify-center mb-5">
-                            <div
-                                className="w-10 h-1 rounded-full"
-                                style={{background: "rgba(255,255,255,0.2)"}}
-                            />
-                        </div>
+                        <SheetHandle />
                         <h2
                             className="mb-2 text-center"
                             style={{
@@ -2025,31 +1958,14 @@ export default function RunningPage() {
                             ).toFixed(2)}
                             km
                         </p>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={handleDiscardRecoveredSession}
-                                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
-                                style={{
-                                    background: "rgba(255,255,255,0.08)",
-                                    color: "#d1d4d9",
-                                    border: "1px solid rgba(255,255,255,0.12)",
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                새로 시작
-                            </button>
-                            <button
-                                onClick={handleResumeRecoveredSession}
-                                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
-                                style={{
-                                    background: accent,
-                                    boxShadow: `0 4px 20px ${accent}44`,
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                이어하기
-                            </button>
-                        </div>
+                        <SheetActionGrid
+                            secondaryLabel="새로 시작"
+                            onSecondary={handleDiscardRecoveredSession}
+                            primaryLabel="이어하기"
+                            onPrimary={handleResumeRecoveredSession}
+                            primaryColor={accent}
+                            primaryShadow={`0 4px 20px ${accent}44`}
+                        />
                     </div>
                 </div>
             )}
