@@ -59,7 +59,7 @@ export default function EditableMemo({ id, initialMemo }: { id: string; initialM
           <span className="num" style={{ fontSize: 11, color: "var(--c-text-3)" }}>
             {draft.length}/{MEMO_MAX}
             {status === "error" && (
-              <span style={{ color: "var(--c-danger)", marginLeft: 6 }}>저장 실패</span>
+              <span style={{ color: "var(--c-danger-text)", marginLeft: 6 }}>저장 실패</span>
             )}
           </span>
           <div className="flex gap-2">
@@ -111,7 +111,7 @@ export default function EditableMemo({ id, initialMemo }: { id: string; initialM
             {memo.trim()}
           </p>
           {status === "success" && (
-            <p style={{ fontSize: 11, color: "var(--c-walk)", marginTop: 4 }}>저장되었습니다.</p>
+            <p style={{ fontSize: 11, color: "var(--c-walk-text)", marginTop: 4 }}>저장되었습니다.</p>
           )}
           <button
             onClick={startEdit}
@@ -124,7 +124,7 @@ export default function EditableMemo({ id, initialMemo }: { id: string; initialM
       ) : (
         <div className="pt-2 flex items-center justify-between">
           {status === "success" && (
-            <p style={{ fontSize: 11, color: "var(--c-walk)" }}>저장되었습니다.</p>
+            <p style={{ fontSize: 11, color: "var(--c-walk-text)" }}>저장되었습니다.</p>
           )}
           <button
             onClick={startEdit}

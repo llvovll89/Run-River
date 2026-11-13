@@ -13,7 +13,8 @@ import {
     trackGrowthEvent,
     type GrowthSummary,
 } from "@/lib/growthEvents";
-import Image from "next/image";
+import Brand from "@/components/Brand";
+import AppNavigation from "@/components/AppNavigation";
 import type {LatLng, ActivityType} from "@/types";
 import {calcDistance} from "@/hooks/useGeolocation";
 import {navigatePublic, readActiveRun} from "@/lib/runStorage";
@@ -87,7 +88,7 @@ export default function Home() {
     const [activityType, setActivityType] = useState<ActivityType>("running");
     const [userLocation, setUserLocation] = useState<LatLng | null>(null);
     const [sheetOpen, setSheetOpen] = useState(true);
-    const [pageMode, setPageMode] = useState<PageMode>("map");
+    const [pageMode, setPageMode] = useState<PageMode>("goal");
     const [goal, setGoal] = useState({
         distance: 5,
         distanceInput: "",
@@ -178,11 +179,13 @@ export default function Home() {
         mapRef.current?.panTo(r.startPoint);
     }
 
-    // 터치스크린 없고 화면 너비 769px 초과 시 데스크탑으로 판별
+    // Use the active pointer rather than touch API presence on hybrid laptops.
     useEffect(() => {
-        const noTouch =
-            !("ontouchstart" in window) && navigator.maxTouchPoints === 0;
-        setIsDesktop(noTouch && window.innerWidth > 768);
+        const query = window.matchMedia("(min-width: 769px) and (pointer: fine)");
+        const update = () => setIsDesktop(query.matches);
+        update();
+        query.addEventListener("change", update);
+        return () => query.removeEventListener("change", update);
     }, []);
 
     useEffect(() => {
@@ -530,10 +533,10 @@ export default function Home() {
                   color: accentVar,
               }
             : !startPoint
-              ? {text: "출발 지점을 탭하세요", color: "var(--c-toss-blue)"}
+              ? {text: "출발 지점을 탭하세요", color: "var(--c-accent-text)"}
               : !endPoint
                 ? {text: "도착 지점을 탭하세요", color: "#f59e0b"}
-                : {text: "준비 완료 · 출발하세요", color: "var(--c-walk)"};
+                : {text: "준비 완료 · 출발하세요", color: "var(--c-walk-text)"};
 
     useEffect(() => {
         if (!isShareReferral) {
@@ -643,7 +646,7 @@ export default function Home() {
     if (isDesktop) return <PCLanding />;
 
     return (
-        <main className="relative w-full h-dvh overflow-hidden">
+        <main className="home-screen relative w-full h-dvh overflow-hidden">
             <KakaoMap
                 ref={mapRef}
                 center={userLocation ?? {lat: 37.5665, lng: 126.978}}
@@ -678,16 +681,8 @@ export default function Home() {
                     paddingBottom: "12px",
                 }}
             >
-                <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2">
-                    <Image
-                        src="/icons/icon-192x192.png"
-                        alt="Run River"
-                        width={26}
-                        height={26}
-                        className="rounded-lg"
-                    />
-                </div>
-                <div className="flex items-center gap-2">
+                <a href="/" aria-label="Run River 홈" className="home-brand glass"><Brand /></a>
+                <div className="home-toolbar flex items-center gap-2">
                     <button
                         onClick={() =>
                             openSearchFor(mode === "end" ? "end" : "start")
@@ -892,7 +887,7 @@ export default function Home() {
                                                 }}
                                                 className="flex items-center gap-3 w-full px-4 py-3 active:opacity-60 transition-opacity text-left"
                                                 style={{
-                                                    color: "var(--c-toss-blue)",
+                                                    color: "var(--c-accent-text)",
                                                 }}
                                             >
                                                 <InstallIcon />
@@ -940,8 +935,8 @@ export default function Home() {
                     <div
                         className="rounded-2xl px-4 py-3"
                         style={{
-                            background: "rgba(0,122,255,0.14)",
-                            border: "1px solid rgba(0,122,255,0.35)",
+                            background: "rgba(33,109,116,0.14)",
+                            border: "1px solid rgba(33,109,116,0.35)",
                             backdropFilter: "blur(12px)",
                         }}
                     >
@@ -962,7 +957,7 @@ export default function Home() {
                             style={{
                                 fontSize: 13,
                                 fontWeight: 800,
-                                color: "var(--c-toss-blue)",
+                                color: "var(--c-accent-text)",
                                 letterSpacing: "-0.01em",
                             }}
                         >
@@ -1357,7 +1352,7 @@ export default function Home() {
                                             style={{
                                                 background:
                                                     search.pointMode === "start"
-                                                        ? "rgba(0,122,255,0.15)"
+                                                        ? "rgba(33,109,116,0.15)"
                                                         : "rgba(255,159,10,0.15)",
                                             }}
                                         >
@@ -1532,7 +1527,7 @@ export default function Home() {
                 ref={sheetRef}
                 className="absolute bottom-0 left-0 right-0 z-10 sheet"
                 style={{
-                    paddingBottom: "calc(var(--sab) + 16px)",
+                    paddingBottom: "16px",
                     transform: sheetOpen
                         ? "translateY(0)"
                         : "translateY(calc(100% - 28px))",
@@ -1580,45 +1575,15 @@ export default function Home() {
                     />
                 </div>
 
-                <div className="px-4 space-y-3">
-                    {!weeklyChallengeOpen ? (
-                        <button
-                            onClick={() => setWeeklyChallengeOpen(true)}
-                            className="h-11 rounded-full pl-3 pr-3 flex items-center gap-1.5 self-start"
-                            style={{
-                                background: "var(--c-elevated)",
-                                border: "1px solid var(--c-border)",
-                                backdropFilter: "blur(12px)",
-                            }}
-                            aria-label="이번 주 챌린지 펼치기"
-                        >
-                            <span
-                                aria-hidden="true"
-                                className="w-4 h-4 rounded-full flex items-center justify-center"
-                                style={{
-                                    background: "rgba(0,122,255,0.2)",
-                                    color: "#64d2ff",
-                                    fontSize: 10,
-                                    fontWeight: 800,
-                                    lineHeight: 1,
-                                }}
-                            >
-                                ★
-                            </span>
-                            <span
-                                className="num"
-                                style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    color: "var(--c-text-1)",
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
-                                {weeklyDistanceKm.toFixed(1)} /{" "}
-                                {weeklyGoalKm.toFixed(1)} km
-                            </span>
+                <div className="home-sheet-content space-y-3">
+                    <div className="home-intro">
+                        <div><h1>오늘의 운동</h1></div>
+                        <button className="home-challenge" onClick={() => setWeeklyChallengeOpen(v => !v)} aria-label={weeklyChallengeOpen ? "이번 주 챌린지 접기" : "이번 주 챌린지 펼치기"} aria-expanded={weeklyChallengeOpen}>
+                            이번 주 <span className="num">{weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm} km</span>
                         </button>
-                    ) : (
+                    </div>
+                    {weeklyChallengeOpen && (
+
                         <div
                             className="rounded-2xl px-4 py-3"
                             style={{
@@ -1679,7 +1644,7 @@ export default function Home() {
                                         width: `${Math.round(weeklyProgress * 100)}%`,
                                         height: "100%",
                                         background:
-                                            "linear-gradient(90deg, #007aff, #34c759)",
+                                            "linear-gradient(90deg, #216d74, #627c50)",
                                         transition: "width 220ms ease",
                                     }}
                                 />
@@ -1702,15 +1667,15 @@ export default function Home() {
                         value={pageMode}
                         onChange={setPageMode}
                         options={[
-                            {value: "map", label: "지도", color: accentVar},
                             {value: "goal", label: "거리", color: accentVar},
                             {value: "time", label: "시간", color: accentVar},
                             {value: "interval", label: "인터벌", color: accentVar},
+                            {value: "map", label: "지도", color: accentVar},
                         ]}
                     />
 
                     {/* 활동 유형 */}
-                    <SegmentedControl<ActivityType>
+                    {(pageMode === "map" || pageMode === "interval") && <SegmentedControl<ActivityType>
                         value={activityType}
                         onChange={setActivityType}
                         gapClassName="gap-2"
@@ -1720,7 +1685,7 @@ export default function Home() {
                         options={[
                             {
                                 value: "running",
-                                color: "var(--c-toss-blue)",
+                                color: "var(--c-accent-text)",
                                 label: (
                                     <>
                                         <RunIcon />
@@ -1730,7 +1695,7 @@ export default function Home() {
                             },
                             {
                                 value: "walking",
-                                color: "var(--c-walk)",
+                                color: "var(--c-walk-text)",
                                 label: (
                                     <>
                                         <WalkIcon />
@@ -1739,7 +1704,7 @@ export default function Home() {
                                 ),
                             },
                         ]}
-                    />
+                    />}
 
                     {/* 지도 모드: 포인트 카드 */}
                     {pageMode === "map" && (
@@ -1877,7 +1842,7 @@ export default function Home() {
                                             border: "1px solid var(--c-border)",
                                             fontSize: 12,
                                             fontWeight: 600,
-                                            color: "var(--c-danger)",
+                                            color: "var(--c-danger-text)",
                                         }}
                                     >
                                         <svg
@@ -1924,7 +1889,7 @@ export default function Home() {
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
                                                 style={{
-                                                    color: "#007aff",
+                                                    color: "#216d74",
                                                     flexShrink: 0,
                                                 }}
                                             >
@@ -1939,7 +1904,7 @@ export default function Home() {
                                             </svg>
                                             <span
                                                 className="text-xs font-bold"
-                                                style={{color: "#007aff"}}
+                                                style={{color: "#216d74"}}
                                             >
                                                 도보
                                             </span>
@@ -2012,7 +1977,10 @@ export default function Home() {
 
                     {/* 거리 목표 모드: 프리셋 + 직접 입력 */}
                     {pageMode === "goal" && (
-                        <div className="space-y-2">
+                        <div className="space-y-2"><div className="goal-heading"><strong className="num">{goal.distance}</strong><span>km</span><div className="goal-activity" role="group" aria-label="활동 유형">
+  <button aria-pressed={activityType === "running"} onClick={() => setActivityType("running")}>러닝</button>
+  <button aria-pressed={activityType === "walking"} onClick={() => setActivityType("walking")}>걷기</button>
+</div></div>
                             <div className="flex gap-2">
                                 {GOAL_PRESETS.map((p) => (
                                     <button
@@ -2047,7 +2015,7 @@ export default function Home() {
                                     </button>
                                 ))}
                             </div>
-                            <div className="flex gap-2 items-center">
+                            <details className="goal-custom"><summary>직접 거리 설정</summary><div className="flex gap-2 items-center">
                                 <input
                                     type="number"
                                     min={1}
@@ -2060,6 +2028,8 @@ export default function Home() {
                                         }))
                                     }
                                     placeholder="직접 입력 (km)"
+                                    aria-label="목표 거리 (km)"
+                                    inputMode="decimal"
                                     className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
                                     style={{
                                         background: "var(--c-elevated)",
@@ -2085,19 +2055,22 @@ export default function Home() {
                                 >
                                     설정
                                 </button>
-                            </div>
+                            </div></details>
                             <p
                                 className="text-xs text-center"
                                 style={{color: "var(--c-text-3)"}}
                             >
-                                현재 위치에서 출발 · 목표 거리 도달 시 자동 완료
+                                목표에 도달하면 운동을 자동으로 마쳐요
                             </p>
                         </div>
                     )}
 
                     {/* 시간 목표 모드: 프리셋 + 직접 입력 */}
                     {pageMode === "time" && (
-                        <div className="space-y-2">
+                        <div className="space-y-2"><div className="goal-heading"><strong className="num">{goal.time}</strong><span>분</span><div className="goal-activity" role="group" aria-label="활동 유형">
+  <button aria-pressed={activityType === "running"} onClick={() => setActivityType("running")}>러닝</button>
+  <button aria-pressed={activityType === "walking"} onClick={() => setActivityType("walking")}>걷기</button>
+</div></div>
                             <div className="flex gap-2">
                                 {TIME_PRESETS.map((t) => (
                                     <button
@@ -2132,7 +2105,7 @@ export default function Home() {
                                     </button>
                                 ))}
                             </div>
-                            <div className="flex gap-2 items-center">
+                            <details className="goal-custom"><summary>직접 시간 설정</summary><div className="flex gap-2 items-center">
                                 <input
                                     type="number"
                                     min={1}
@@ -2145,6 +2118,8 @@ export default function Home() {
                                         }))
                                     }
                                     placeholder="직접 입력 (분)"
+                                    aria-label="목표 시간 (분)"
+                                    inputMode="decimal"
                                     className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
                                     style={{
                                         background: "var(--c-elevated)",
@@ -2168,7 +2143,7 @@ export default function Home() {
                                 >
                                     설정
                                 </button>
-                            </div>
+                            </div></details>
                             <p
                                 className="text-xs text-center"
                                 style={{color: "var(--c-text-3)"}}
@@ -2459,6 +2434,8 @@ export default function Home() {
                         </div>
                     )}
 
+                </div>
+                <div className="home-sheet-footer px-5">
                     {/* 액션 버튼 */}
                     <OfflineStatus />
                     <div className="flex gap-2">
@@ -2482,7 +2459,7 @@ export default function Home() {
                         <button
                             onClick={handleStart}
                             disabled={!canStart}
-                            className="flex-1 py-3 rounded-2xl font-bold text-base transition-all duration-200 active:scale-[0.98]"
+                            className="home-primary flex-1 py-3 font-bold text-base transition-all duration-200 active:scale-[0.98]"
                             style={{
                                 background: canStart
                                     ? accentVar
@@ -2516,6 +2493,7 @@ export default function Home() {
                     </div>
                 </div>
             </div>
+        <AppNavigation />
         </main>
     );
 }
@@ -2893,7 +2871,7 @@ function LocateIcon() {
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{color: "var(--c-toss-blue)"}}
+            style={{color: "var(--c-accent-text)"}}
         >
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />

@@ -1,5 +1,8 @@
 "use client";
 
+import ScreenHeader from "@/components/ScreenHeader";
+import AppNavigation from "@/components/AppNavigation";
+
 import {useEffect, useState} from "react";
 import {useRouter} from "next/navigation";
 import {useUserProfile} from "@/hooks/useUserProfile";
@@ -331,63 +334,18 @@ export default function SettingsPage() {
     }
 
     return (
-        <main className="min-h-dvh" style={{background: "var(--c-bg)"}}>
-            {/* 헤더 */}
-            <div
-                className="px-5"
-                style={{
-                    paddingTop: "calc(var(--sat) + 10px)",
-                    paddingBottom: "16px",
-                    background: "var(--c-surface)",
-                    borderBottom: "1px solid var(--c-border)",
-                }}
-            >
-                <div className="flex items-center gap-2 mb-4">
-                    <button
-                        onClick={() => router.back()}
-                        className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
-                        style={{
-                            background: "var(--c-elevated)",
-                            border: "1px solid var(--c-border)",
-                        }}
-                        aria-label="뒤로 가기"
-                    >
-                        <svg
-                            width="16"
-                            height="16"
-                            style={{color: "var(--c-text-1)"}}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M15 19l-7-7 7-7"
-                            />
-                        </svg>
-                    </button>
-                </div>
-                <h1
-                    className="font-bold"
-                    style={{
-                        fontSize: 24,
-                        letterSpacing: "-0.02em",
-                        color: "var(--c-text-1)",
-                    }}
-                >
-                    내 프로필
-                </h1>
+        <main className="app-screen settings-screen min-h-dvh" style={{background: "var(--c-bg)"}}>
+            <ScreenHeader title="나에게 맞는 러닝" description="목표와 기록 방식을 내 몸에 맞춰 조절해요." />
+            <div className="px-5 py-4">
                 <div className="mt-2 flex items-center gap-2">
                     <span
                         className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
                         style={{
                             background:
                                 syncState === "saving"
-                                    ? "rgba(0,122,255,0.15)"
+                                    ? "rgba(33,109,116,0.15)"
                                     : syncState === "synced"
-                                      ? "rgba(52,199,89,0.15)"
+                                      ? "rgba(98,124,80,0.15)"
                                       : syncState === "error"
                                         ? "rgba(255,69,58,0.15)"
                                         : "var(--c-elevated)",
@@ -408,16 +366,16 @@ export default function SettingsPage() {
                               ? "클라우드 반영됨"
                               : syncState === "error"
                                 ? "로컬 저장됨 · 클라우드 재시도 필요"
-                                : "로컬/클라우드 동기화 대기"}
+                                : "기기에 저장됨"}
                     </span>
                     {syncState === "error" && (
                         <button
                             onClick={() => void retrySync()}
                             className="h-11 px-3 rounded-full text-xs font-semibold active:scale-95 transition-transform"
                             style={{
-                                background: "rgba(0,122,255,0.14)",
-                                color: "var(--c-toss-blue)",
-                                border: "1px solid rgba(0,122,255,0.35)",
+                                background: "rgba(33,109,116,0.14)",
+                                color: "var(--c-accent-text)",
+                                border: "1px solid rgba(33,109,116,0.35)",
                             }}
                         >
                             지금 재시도
@@ -428,7 +386,7 @@ export default function SettingsPage() {
                     <p
                         style={{
                             fontSize: 12,
-                            color: "var(--c-danger)",
+                            color: "var(--c-danger-text)",
                             marginTop: 6,
                         }}
                     >
@@ -448,6 +406,7 @@ export default function SettingsPage() {
 
             {/* 폼 */}
             <div className="px-5 py-6 flex flex-col gap-4">
+                {unclaimedCount > 0 && (
                 <div
                     className="rounded-2xl p-4"
                     style={{
@@ -464,7 +423,7 @@ export default function SettingsPage() {
                                     color: "var(--c-text-1)",
                                 }}
                             >
-                                레거시 기록 가져오기
+                                이전 기록 연결
                             </p>
                             <p
                                 style={{
@@ -473,7 +432,7 @@ export default function SettingsPage() {
                                     marginTop: 4,
                                 }}
                             >
-                                user_id가 없는 기존 기록 {unclaimedCount}건
+                                계정에 연결되지 않은 운동 {unclaimedCount}건
                             </p>
                         </div>
                         <button
@@ -507,6 +466,8 @@ export default function SettingsPage() {
                         </p>
                     )}
                 </div>
+
+                )}
 
                 <ProfileField
                     label="체중"
@@ -838,9 +799,9 @@ export default function SettingsPage() {
                             onClick={() => void handleRetryAllExhausted()}
                             className="ml-2 h-11 px-3 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
                             style={{
-                                background: "rgba(0,122,255,0.12)",
-                                color: "var(--c-toss-blue)",
-                                border: "1px solid rgba(0,122,255,0.3)",
+                                background: "rgba(33,109,116,0.12)",
+                                color: "var(--c-accent-text)",
+                                border: "1px solid rgba(33,109,116,0.3)",
                             }}
                             disabled={syncing || !isOnline}
                         >
@@ -852,7 +813,7 @@ export default function SettingsPage() {
                         <p
                             style={{
                                 fontSize: 12,
-                                color: "var(--c-danger)",
+                                color: "var(--c-danger-text)",
                                 marginTop: 8,
                             }}
                         >
@@ -952,7 +913,7 @@ export default function SettingsPage() {
                 </div>
 
                 {error && (
-                    <p style={{fontSize: 13, color: "var(--c-danger)"}}>
+                    <p style={{fontSize: 13, color: "var(--c-danger-text)"}}>
                         {error}
                     </p>
                 )}
@@ -962,7 +923,7 @@ export default function SettingsPage() {
                     className="w-full py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
                     style={{
                         background: "var(--c-toss-blue)",
-                        boxShadow: "0 4px 20px rgba(0,122,255,0.35)",
+                        boxShadow: "0 4px 20px rgba(33,109,116,0.35)",
                         letterSpacing: "-0.01em",
                         marginTop: 8,
                     }}
@@ -975,13 +936,14 @@ export default function SettingsPage() {
                     className="w-full py-3.5 rounded-2xl font-semibold text-sm"
                     style={{
                         background: "var(--c-elevated)",
-                        color: "var(--c-danger)",
+                        color: "var(--c-danger-text)",
                         border: "1px solid var(--c-border)",
                     }}
                 >
                     로그아웃
                 </button>
             </div>
+        <AppNavigation />
         </main>
     );
 }

@@ -40,7 +40,7 @@ self.addEventListener("fetch", (event) => {
         })());
     } else if (ASSETS.includes(url.pathname)) {
         event.respondWith((async () => {
-            const response = await caches.match(url.pathname);
+            const response = await (await caches.open(CACHE)).match(url.pathname) ?? await caches.match(url.pathname);
             return response ?? fetch(request);
         })());
     }

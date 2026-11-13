@@ -24,12 +24,12 @@ export default function OfflineRoute({points, currentPosition, top}: {points: La
             <svg viewBox="0 0 320 320" className="w-full flex-1 min-h-0 max-w-[360px]" role="img" aria-label="GPS 이동 궤적">
                 <defs><pattern id="route-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="currentColor" opacity="0.12" /></pattern></defs>
                 <rect width="320" height="320" fill="url(#route-grid)" />
-                <polyline points={path.map(({x, y}) => `${x},${y}`).join(" ")} fill="none" stroke="#007aff" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
-                {path[0] && <circle cx={path[0].x} cy={path[0].y} r="5" fill="#34c759" />}
-                {last && <circle cx={last.x} cy={last.y} r="7" fill="#007aff" stroke="white" strokeWidth="2" />}
+                <polyline points={path.map(({x, y}) => `${x},${y}`).join(" ")} fill="none" stroke="#216d74" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
+                {path[0] && <circle cx={path[0].x} cy={path[0].y} r="5" fill="#627c50" />}
+                {last && <circle cx={last.x} cy={last.y} r="7" fill="#216d74" stroke="white" strokeWidth="2" />}
             </svg>
             <p className="text-xs px-5 text-center">지도 배경 없이 GPS 이동 궤적을 표시해요</p>
-            <p className="text-xs px-5 mt-1 text-center">화면을 켜두세요 · 화면 잠금 중에는 기록이 끊길 수 있어요</p>
+            {top && <p className="text-xs px-5 mt-1 text-center">화면을 켜두세요. 화면 잠금 중에는 기록이 끊길 수 있어요.</p>}
             </div>
         </div>
     );

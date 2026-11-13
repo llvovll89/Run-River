@@ -25,7 +25,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
     return (
       <div className="flex items-center gap-1.5">
         {error && (
-          <span className="text-xs" style={{ color: "var(--c-danger)" }}>{error}</span>
+          <span className="text-xs" style={{ color: "var(--c-danger-text)" }}>{error}</span>
         )}
         <TintedButton tone="neutral" onClick={() => setConfirm(false)} disabled={isPending}>
           취소
