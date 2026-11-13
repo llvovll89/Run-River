@@ -4,6 +4,13 @@
 GPS 기반 러닝/걷기 트래커 PWA. Next.js 15 + React 19 + TypeScript + Supabase + Kakao Maps.
 모바일 전용 (max-width: 430px). 인증 없음 (RLS 전체 허용).
 
+## 배포 자동화 (Commit → Push → PR → Merge)
+- **Claude 작업 규칙:** 작업이 끝나고 `tsc`·`npm run build`·`npm run test:unit`이 통과하면 **확인 없이** 작업 브랜치(`claude/**`)에 commit → push 한다. 커밋에 Claude 작성 흔적(Co-Authored-By 등)을 남기지 않는다.
+- push 이후는 `.github/workflows/auto-merge.yml`이 처리: Verify(`verify.yml` 재사용) 통과 → PR 생성(없을 때만) → main에 **squash 머지** → 원격 브랜치 삭제.
+- 머지하지 않고 PR만 원할 때: 커밋 메시지에 `[no-merge]` 포함.
+- squash 머지라서, 다음 작업은 반드시 **최신 `origin/main`에서 브랜치를 다시 시작**한다 (이전 커밋이 남은 브랜치로 push하면 충돌).
+- main 머지 = Vercel 프로덕션 배포.
+
 ## 커맨드
 ```
 npm run dev      # 개발 서버

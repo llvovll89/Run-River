@@ -1,0 +1,84 @@
+name: Auto PR & Merge
+
+# claude/** 브랜치에 push하면: 검증(Verify) → PR 생성(없을 때만) → main에 squash 머지 → 브랜치 삭제
+# 커밋 메시지에 [no-merge]가 있으면 PR만 만들고 머지는 하지 않는다.
+on:
+  push:
+    branches: ["claude/**"]
+
+concurrency:
+  group: auto-merge-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # GITHUB_TOKEN으로 만든 PR은 pull_request 워크플로를 트리거하지 않으므로 여기서 직접 검증한다.
+    uses: ./.github/workflows/verify.yml
+
+  ship:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      # AUTO_MERGE_TOKEN(PAT) 시크릿이 있으면 우선 사용, 없으면 기본 토큰
+      GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      BASE: main
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check commits ahead of main
+        id: diff
+        run: |
+          git fetch --no-tags origin "$BASE"
+          count=$(git rev-list --count "origin/$BASE..HEAD")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" = "0" ]; then
+            echo "::notice::main 대비 새 커밋이 없어 PR/머지를 건너뜁니다."
+          fi
+
+      - name: Create or reuse pull request
+        id: pr
+        if: steps.diff.outputs.count != '0'
+        env:
+          COUNT: ${{ steps.diff.outputs.count }}
+        run: |
+          number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            first=$(git log --reverse --format=%s "origin/$BASE..HEAD" | head -n 1)
+            if [ "$COUNT" = "1" ]; then title="$first"; else title="$first 외 $((COUNT - 1))건"; fi
+            {
+              echo "## 변경 커밋"
+              git log --reverse --format='- %s' "origin/$BASE..HEAD"
+              echo
+              echo "> \`$BRANCH\` push로 자동 생성된 PR입니다. Verify 통과 후 자동 머지됩니다."
+            } > "$RUNNER_TEMP/pr-body.md"
+            gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"
+            number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number')
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "::notice::PR #$number"
+
+      - name: Merge pull request
+        if: steps.pr.outputs.number != ''
+        env:
+          NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          if git log -1 --format=%B | grep -qF '[no-merge]'; then
+            echo "::notice::[no-merge] 커밋이라 PR #$NUMBER 머지를 건너뜁니다."
+            exit 0
+          fi
+          # 브랜치 보호 규칙 때문에 즉시 머지가 안 되면 auto-merge 예약으로 대체한다.
+          if ! gh pr merge "$NUMBER" --squash --delete-branch; then
+            gh pr merge "$NUMBER" --squash --delete-branch --auto
+            echo "::notice::PR #$NUMBER 즉시 머지 불가 → auto-merge 예약"
+          fi
