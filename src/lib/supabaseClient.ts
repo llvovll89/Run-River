@@ -1,4 +1,5 @@
 import {createBrowserClient} from "@supabase/ssr";
+import {createClient} from "@supabase/supabase-js";
 import type {SupabaseClient} from "@supabase/supabase-js";
 import {assertSupabaseEnv, supabaseUrl, supabaseAnonKey} from "@/lib/supabaseEnv";
 
@@ -8,7 +9,9 @@ export function getSupabaseBrowserClient() {
     assertSupabaseEnv();
 
     if (!browserClient) {
-        browserClient = createBrowserClient(supabaseUrl, supabaseAnonKey);
+        browserClient = process.env.NEXT_PUBLIC_NATIVE_APP === "1"
+            ? createClient(supabaseUrl, supabaseAnonKey)
+            : createBrowserClient(supabaseUrl, supabaseAnonKey);
     }
 
     return browserClient;

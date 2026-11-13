@@ -6,6 +6,12 @@ import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 
 type AuthMode = "login" | "signup";
 
+function getEmailRedirectOrigin() {
+    return process.env.NEXT_PUBLIC_NATIVE_APP === "1"
+        ? process.env.NEXT_PUBLIC_SITE_URL ?? "https://run-river.vercel.app"
+        : window.location.origin;
+}
+
 function sanitizeNextPath(raw: string | null): string {
     if (!raw) return "/";
     const value = raw.trim();
@@ -158,7 +164,7 @@ export default function AuthPage() {
                     email,
                     password,
                     options: {
-                        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+                        emailRedirectTo: `${getEmailRedirectOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
                     },
                 });
 
@@ -207,7 +213,7 @@ export default function AuthPage() {
                 type: "signup",
                 email: email.trim(),
                 options: {
-                    emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+                    emailRedirectTo: `${getEmailRedirectOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
                 },
             });
 
