@@ -22,6 +22,7 @@ export function usePWAUpdate() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const refreshingRef = useRef(false);
+  const applyingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -44,6 +45,7 @@ export function usePWAUpdate() {
 
     // skipWaiting 후 새 SW가 controllerchange 이벤트를 발생시키면 안전하게 한 번만 리로드
     const onControllerChange = () => {
+      if (!applyingRef.current) return;
       if (refreshingRef.current) return;
       refreshingRef.current = true;
       window.setTimeout(() => {
@@ -60,6 +62,7 @@ export function usePWAUpdate() {
 
   const applyUpdate = useCallback(() => {
     if (!waitingWorker) return;
+    applyingRef.current = true;
     setIsApplying(true);
     waitingWorker.postMessage({ type: "SKIP_WAITING" });
 

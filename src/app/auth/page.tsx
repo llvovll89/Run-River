@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect, useState} from "react";
+import Brand from "@/components/Brand";
 import {useRouter} from "next/navigation";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 
@@ -225,7 +226,7 @@ export default function AuthPage() {
 
     return (
         <main
-            className="min-h-dvh px-5 pt-10 pb-8"
+            className="auth-screen min-h-dvh px-6 pb-8"
             style={{background: "var(--c-bg)"}}
         >
             {showBanner && notice && (
@@ -236,11 +237,11 @@ export default function AuthPage() {
                             background:
                                 notice.type === "error"
                                     ? "rgba(255,69,58,0.14)"
-                                    : "rgba(52,199,89,0.14)",
+                                    : "rgba(98,124,80,0.14)",
                             border:
                                 notice.type === "error"
                                     ? "1px solid rgba(255,69,58,0.45)"
-                                    : "1px solid rgba(52,199,89,0.45)",
+                                    : "1px solid rgba(98,124,80,0.45)",
                             color:
                                 notice.type === "error"
                                     ? "var(--c-danger)"
@@ -256,7 +257,7 @@ export default function AuthPage() {
                 </div>
             )}
 
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-8 flex items-center justify-between"><Brand />
                 <button
                     onClick={() => {
                         if (window.history.length > 1) {
@@ -306,13 +307,13 @@ export default function AuthPage() {
             >
                 <h1
                     style={{
-                        fontSize: 24,
+                        fontSize: 30,
                         fontWeight: 800,
                         color: "var(--c-text-1)",
                         letterSpacing: "-0.02em",
                     }}
                 >
-                    Run River 로그인
+                    {mode === "login" ? "로그인" : "회원가입"}
                 </h1>
                 <p
                     style={{
@@ -394,7 +395,7 @@ export default function AuthPage() {
                             style={{
                                 marginTop: 4,
                                 fontSize: 12,
-                                color: "var(--c-danger)",
+                                color: "var(--c-danger-text)",
                             }}
                         >
                             {fieldError.email}
@@ -428,7 +429,7 @@ export default function AuthPage() {
                             style={{
                                 marginTop: 4,
                                 fontSize: 12,
-                                color: "var(--c-danger)",
+                                color: "var(--c-danger-text)",
                             }}
                         >
                             {fieldError.password}

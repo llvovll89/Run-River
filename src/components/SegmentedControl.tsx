@@ -27,7 +27,7 @@ export default function SegmentedControl<T extends string>({
 }) {
     return (
         <div
-            className={`flex ${gapClassName} p-1 rounded-2xl ${wrapperExtraClassName}`}
+            className={`segmented-control flex ${gapClassName} p-1 ${wrapperExtraClassName}`}
             style={{ background: "var(--c-elevated)" }}
         >
             {options.map((opt) => {
@@ -35,14 +35,14 @@ export default function SegmentedControl<T extends string>({
                 return (
                     <button
                         key={opt.value}
+                        type="button"
+                        aria-pressed={active}
                         onClick={() => onChange(opt.value)}
                         className={`flex-1 flex items-center justify-center gap-2 ${itemPaddingClassName} rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]`}
                         style={{
-                            background: active ? opt.color : "transparent",
-                            color: active ? "#fff" : "var(--c-text-2)",
-                            boxShadow: active
-                                ? `0 2px ${shadowBlur}px ${opt.color}44`
-                                : "none",
+                            background: active ? "var(--c-surface)" : "transparent",
+                            color: active ? "var(--c-text-1)" : "var(--c-text-2)",
+                            boxShadow: active ? "0 1px 4px rgba(18,61,70,.08)" : "none",
                         }}
                     >
                         {opt.label}

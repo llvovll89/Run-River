@@ -22,8 +22,9 @@ export function formatDuration(seconds: number): string {
 
 export function formatPace(pace: number): string {
   if (!pace || !isFinite(pace)) return "--'--\"";
-  const min = Math.floor(pace);
-  const sec = Math.round((pace - min) * 60);
+  const totalSeconds = Math.round(pace * 60);
+  const min = Math.floor(totalSeconds / 60);
+  const sec = totalSeconds % 60;
   return `${min}'${String(sec).padStart(2, "0")}"`;
 }
 
@@ -46,11 +47,11 @@ export function getPaceZone(
   }
   if (activityType === "running") {
     if (pace < 4.5) return { label: "빠름", color: "#ff453a" };
-    if (pace < 6.5) return { label: "적정", color: "#30d158" };
+    if (pace < 6.5) return { label: "적정", color: "#89ac71" };
     return { label: "느림", color: "#636366" };
   } else {
     if (pace < 7.0) return { label: "빠름", color: "#ff453a" };
-    if (pace < 12.0) return { label: "적정", color: "#30d158" };
+    if (pace < 12.0) return { label: "적정", color: "#89ac71" };
     return { label: "느림", color: "#636366" };
   }
 }

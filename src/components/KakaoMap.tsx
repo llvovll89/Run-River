@@ -22,9 +22,9 @@ const END_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_e
 
 function buildCurrentMarkerHTML(heading: number | null): string {
   const cone = heading !== null
-    ? `<svg style="position:absolute;top:0;left:0;width:44px;height:44px;transform:rotate(${heading}deg);transform-origin:50% 50%" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><path d="M22,22 L17,10 Q22,4 27,10 Z" fill="#007aff" opacity="0.82"/></svg>`
+    ? `<svg style="position:absolute;top:0;left:0;width:44px;height:44px;transform:rotate(${heading}deg);transform-origin:50% 50%" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><path d="M22,22 L17,10 Q22,4 27,10 Z" fill="#216d74" opacity="0.82"/></svg>`
     : "";
-  return `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center">${cone}<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(0,122,255,0.15)"></div><div style="position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(0,122,255,0.22)"></div><div style="width:11px;height:11px;border-radius:50%;background:#007aff;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,122,255,0.7);position:relative;z-index:1"></div></div>`;
+  return `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center">${cone}<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(33,109,116,0.15)"></div><div style="position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(33,109,116,0.22)"></div><div style="width:11px;height:11px;border-radius:50%;background:#216d74;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(33,109,116,0.7);position:relative;z-index:1"></div></div>`;
 }
 
 // 미리보기 핀 마커 — 슬레이트 그라디언트
@@ -298,7 +298,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     const routeLine = new kakao.maps.Polyline({
       path: routePath.map((p) => new kakao.maps.LatLng(p.lat, p.lng)),
       strokeWeight: 6,
-      strokeColor: "#007aff",
+      strokeColor: "#216d74",
       strokeOpacity: 0.85,
       strokeStyle: "solid",
       map: mapInstanceRef.current,
@@ -330,7 +330,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   // activityType 변경 시 색상 업데이트 — 폴리라인 재생성
   useEffect(() => {
     if (!mapInstanceRef.current || !polylineRef.current) return;
-    const color = activityType === "walking" ? "#34c759" : "#007aff";
+    const color = activityType === "walking" ? "#627c50" : "#216d74";
     const path = polylineRef.current.getPath() as kakao.maps.LatLng[];
     polylineRef.current.setMap(null);
     polylineRef.current = new kakao.maps.Polyline({
@@ -349,7 +349,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   // pathPoints 변경 시 setPath로 점진적 업데이트 (전체 재생성 방지)
   useEffect(() => {
     if (!mapInstanceRef.current) return;
-    const color = activityType === "walking" ? "#34c759" : "#007aff";
+    const color = activityType === "walking" ? "#627c50" : "#216d74";
     if (pathPoints.length < 2) {
       if (polylineRef.current) {
         polylineRef.current.setMap(null);
@@ -398,7 +398,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
 
   return <div className={`relative w-full ${className}`}>
     <div ref={mapRef} className="absolute inset-0" />
-    {(!online || !mapReady) && <OfflineRoute top={offlineRouteTop} points={pathPoints} currentPosition={currentPosition ?? startPoint} />}
+    {(!online || !mapReady) && <OfflineRoute top={offlineRouteTop} points={pathPoints} currentPosition={currentPosition ?? pathPoints.at(-1) ?? startPoint} />}
   </div>;
 });
 

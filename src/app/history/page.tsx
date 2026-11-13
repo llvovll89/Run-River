@@ -1,3 +1,5 @@
+import ScreenHeader from "@/components/ScreenHeader";
+import AppNavigation from "@/components/AppNavigation";
 import {
     getRunningHistoryServer,
     getProfileWeightServer,
@@ -111,62 +113,8 @@ export default async function HistoryPage() {
     const allBadges = deriveAllBadges(records);
 
     return (
-        <main className="min-h-dvh" style={{background: "var(--c-bg)"}}>
-            {/* 헤더 */}
-            <div
-                className="px-5"
-                style={{
-                    paddingTop: "calc(var(--sat) + 10px)",
-                    paddingBottom: "16px",
-                    background: "var(--c-surface)",
-                    borderBottom: "1px solid var(--c-border)",
-                }}
-            >
-                <div className="flex items-center justify-between mb-4">
-                    <Link
-                        href="/"
-                        className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
-                        style={{
-                            background: "var(--c-elevated)",
-                            border: "1px solid var(--c-border)",
-                        }}
-                    >
-                        <svg
-                            width="16"
-                            height="16"
-                            style={{color: "var(--c-text-1)"}}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M15 19l-7-7 7-7"
-                            />
-                        </svg>
-                    </Link>
-                    <ExportButton records={records} />
-                </div>
-
-                <h1
-                    className="mb-2"
-                    style={{
-                        fontSize: 26,
-                        fontWeight: 800,
-                        color: "var(--c-text-1)",
-                        letterSpacing: "-0.02em",
-                        lineHeight: 1.1,
-                    }}
-                >
-                    활동 기록
-                </h1>
-                <p style={{fontSize: 15, color: "var(--c-text-2)"}}>
-                    총 {records.length}회
-                </p>
-            </div>
-
+        <main className="app-screen history-screen min-h-dvh" style={{background: "var(--c-bg)"}}>
+            <ScreenHeader title="활동 기록" description={`지금까지 ${records.length}번, 쌓여가는 나의 움직임.`} action={<ExportButton records={records} />} />
             {/* 요약 카드 */}
             {records.length > 0 && (
                 <>
@@ -388,7 +336,7 @@ export default async function HistoryPage() {
                         style={{
                             background: "var(--c-surface)",
                             border: "1px solid var(--c-border)",
-                            color: "var(--c-danger)",
+                            color: "var(--c-danger-text)",
                         }}
                     >
                         {fetchError}
@@ -448,6 +396,7 @@ export default async function HistoryPage() {
                     <RecordCard key={r.id} record={r} rank={i + 1} />
                 ))}
             </div>
+        <AppNavigation />
         </main>
     );
 }
@@ -647,14 +596,14 @@ function RecordCard({record, rank}: {record: RunningRecord; rank: number}) {
                             className="text-xs font-bold px-2.5 py-1 rounded-full"
                             style={{
                                 background: isAutoGapMode
-                                    ? "rgba(0,122,255,0.12)"
+                                    ? "rgba(33,109,116,0.12)"
                                     : "rgba(255,159,10,0.15)",
                                 color: isAutoGapMode
                                     ? "var(--c-toss-blue)"
                                     : "#ff9f0a",
-                                border: `1px solid ${isAutoGapMode ? "rgba(0,122,255,0.28)" : "rgba(255,159,10,0.35)"}`,
+                                border: `1px solid ${isAutoGapMode ? "rgba(33,109,116,0.28)" : "rgba(255,159,10,0.35)"}`,
                                 boxShadow: isAutoGapMode
-                                    ? "0 0 0 1px rgba(0,122,255,0.08)"
+                                    ? "0 0 0 1px rgba(33,109,116,0.08)"
                                     : "0 0 0 1px rgba(255,159,10,0.12)",
                             }}
                             title={`공백 보정 거리 +${gapDistance.toFixed(2)}km`}

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readActiveRun, writeActiveRun, clearActiveRun, saveLocalResult, readLocalResults, markLocalResultUploaded} from "../src/lib/runStorage";
 import {enqueue, getQueue, markRetry, resetRetry, RETRY_EXHAUSTED_AT} from "../src/lib/offlineQueue";
 import type {RunRecoverySnapshot} from "../src/types";
+import {formatPace} from "../src/lib/utils";
 
 class MemoryStorage {
     values = new Map<string, string>();
@@ -29,6 +30,10 @@ test("active run survives loss of the tab's session storage", () => {
     assert.deepEqual(readActiveRun(), snapshot);
     clearActiveRun();
     assert.equal(readActiveRun(), null);
+});
+test("pace rounds across the minute boundary without displaying sixty seconds", () => {
+    assert.equal(formatPace(2.999), "3'00\"");
+    assert.equal(formatPace(5.5), "5'30\"");
 });
 test("legacy tab snapshot can still be read", () => {
     sessionStorage.setItem("runInProgress", JSON.stringify(snapshot));

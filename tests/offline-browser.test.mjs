@@ -21,7 +21,8 @@ before(async () => {
         const url = new URL(request.url, origin);
         const json = (value, status = 200) => { response.writeHead(status, {"Content-Type": "application/json"}); response.end(JSON.stringify(value)); };
         if (url.pathname === "/auth/v1/user") { api.authRequests++; return json(mockUser()); }
-        if (url.pathname === "/rest/v1/user_profiles") return json(null);
+        if (url.pathname === "/rest/v1/user_profiles") return json({weight: 70, height: 175, age: 30, weekly_goal_km: 20, auto_pause: false, auto_apply_gap_adjustment: false});
+        if (url.pathname.startsWith("/rest/v1/rpc/")) return json(0);
         if (url.pathname === "/rest/v1/running_records") {
             if (request.method === "POST") {
                 let body = "";
@@ -53,6 +54,7 @@ async function prepare(browserType) {
     const browser = await browserType.launch();
     const context = await browser.newContext({
         ...devices["iPhone 13"], defaultBrowserType: undefined,
+        reducedMotion: "reduce",
         permissions: ["geolocation"], geolocation: {latitude: 37.5665, longitude: 126.978, accuracy: 5},
     });
     // Deterministic GPS callbacks model satellite fixes independently of network
@@ -87,6 +89,20 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
         try {
             await page.screenshot({path: `output/playwright/home-${name}.png`});
             assert.ok(await page.evaluate(() => document.body.scrollHeight <= window.innerHeight + 1));
+            await page.getByText("직접 거리 설정", {exact: true}).click();
+            await page.getByRole("spinbutton", {name: "목표 거리 (km)"}).fill("3");
+            await page.getByRole("button", {name: "설정", exact: true}).click();
+            await page.getByRole("button", {name: "3km 달리기 시작", exact: true}).waitFor();
+            await page.getByRole("button", {name: "5km", exact: true}).click();
+            await page.getByText("직접 거리 설정", {exact: true}).click();
+            await page.getByRole("button", {name: "걷기", exact: true}).click();
+            await page.getByRole("button", {name: "5km 걷기 시작", exact: true}).waitFor();
+            await page.getByRole("button", {name: "러닝", exact: true}).click();
+            assert.equal(new URL(page.url()).searchParams.has("sw"), false);
+            await page.goto(`${origin}/local-history`);
+            await page.getByRole("heading", {name: "첫 번째 기록을 남겨볼까요?"}).waitFor();
+            await page.screenshot({path: `output/playwright/empty-records-${name}.png`});
+            await page.goto(origin);
             await context.setOffline(true);
             await page.reload();
             await page.getByRole("button", {name: "거리", exact: true}).click();
@@ -99,6 +115,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_active_run")).totalDistance), 0);
             await page.evaluate(() => window.setTestGPS(37.5666, 126.978));
             await page.waitForFunction(() => JSON.parse(localStorage.getItem("rr_active_run"))?.totalDistance > 0.005);
+            await page.getByText(/GPS 정확도가 낮아요/).waitFor({state: "hidden"});
             await page.getByTestId("offline-route").waitFor();
             await page.screenshot({path: `output/playwright/offline-${name}.png`});
             const distance = await page.evaluate(() => JSON.parse(localStorage.getItem("rr_active_run")).totalDistance);
@@ -132,6 +149,9 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             await recovered.getByRole("button", {name: "종료", exact: true}).click();
             await recovered.waitForURL("**/result?id=*");
             await recovered.getByText("기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요").waitFor();
+            const routePoints = (await recovered.getByTestId("offline-route").locator("polyline").getAttribute("points")).split(" ");
+            assert.notEqual(routePoints[0], routePoints.at(-1));
+            await recovered.screenshot({path: `output/playwright/result-${name}.png`});
             const result = await recovered.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0]);
             assert.ok(result.result.pathPoints.length >= 2);
             assert.ok(result.result.distance_km > 0);
@@ -141,12 +161,30 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             await recovered.goto(`${origin}/local-history`);
             await recovered.getByRole("heading", {name: "이 기기의 운동 기록"}).waitFor();
             await recovered.locator('a[href^="/result?id="]').first().waitFor();
+            await recovered.screenshot({path: `output/playwright/records-${name}.png`});
+            await recovered.getByRole("link", {name: "통계", exact: true}).click({force: true});
+            await recovered.getByText("통계 화면은 인터넷에 연결한 뒤 열 수 있어요.").waitFor();
+            assert.equal(new URL(recovered.url()).pathname, "/local-history");
             assert.equal(await recovered.locator('a[href^="/result?id="]').count(), 1);
             const cachedPaths = await recovered.evaluate(async () => {
                 const keys = await caches.keys();
                 return (await Promise.all(keys.map(async (key) => (await (await caches.open(key)).keys()).map((request) => new URL(request.url).pathname)))).flat();
             });
             for (const path of ["/auth", "/history", "/settings"]) assert.equal(cachedPaths.includes(path), false);
+            await recovered.evaluate(() => localStorage.setItem("theme", "dark"));
+            await recovered.reload();
+            await recovered.locator('html[data-theme="dark"]').waitFor();
+            await recovered.screenshot({path: `output/playwright/records-dark-${name}.png`});
+            await recovered.goto(origin);
+            await recovered.getByRole("heading", {name: "오늘의 운동"}).waitFor();
+            await recovered.screenshot({path: `output/playwright/home-dark-${name}.png`});
+            await recovered.setViewportSize({width: 320, height: 700});
+            await recovered.screenshot({path: `output/playwright/home-small-${name}.png`});
+            assert.ok(await recovered.evaluate(() => document.body.scrollWidth <= window.innerWidth));
+            await context.setOffline(false);
+            await recovered.goto(`${origin}/auth`);
+            await recovered.getByRole("heading", {name: "로그인", exact: true}).waitFor();
+            await recovered.screenshot({path: `output/playwright/auth-${name}.png`});
         } finally { await browser.close(); }
     });
 
@@ -195,6 +233,18 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             assert.equal(api.inserts, 2);
             assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].uploaded), true);
             await page.getByText(/서버 저장됨/).waitFor();
+            await page.goto(`${origin}/history`);
+            await page.getByRole("heading", {name: "활동 기록", exact: true}).waitFor();
+            await page.screenshot({path: `output/playwright/history-${name}.png`});
+            await page.goto(`${origin}/settings`);
+            await page.getByRole("heading", {name: "나에게 맞는 러닝", exact: true}).waitFor();
+            await page.screenshot({path: `output/playwright/settings-${name}.png`});
+            const desktop = await browser.newPage({viewport: {width: 1280, height: 900}, reducedMotion: "reduce"});
+            await desktop.route("**/*", (route) => route.request().url().startsWith(origin) ? route.continue() : route.abort());
+            await desktop.goto(origin);
+            await desktop.getByRole("heading", {name: /나의 속도로/}).waitFor();
+            await desktop.screenshot({path: `output/playwright/desktop-${name}.png`});
+            await desktop.close();
         } finally { await browser.close(); }
     });
 }

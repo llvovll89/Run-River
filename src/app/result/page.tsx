@@ -44,8 +44,9 @@ import type {
 import {useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
 import {trackGrowthEvent} from "@/lib/growthEvents";
+import Brand from "@/components/Brand";
+import AppNavigation from "@/components/AppNavigation";
 import TintedButton from "@/components/TintedButton";
-import {OfflineStatus} from "@/components/OfflineSetup";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
@@ -175,7 +176,7 @@ async function generateShareImage(
     const ctx = canvas.getContext("2d")!;
 
     const isRun = result.activity_type === "running";
-    const accent = isRun ? "#007aff" : "#34c759";
+    const accent = isRun ? "#216d74" : "#627c50";
     const actLabel = isRun ? "러닝" : "워킹";
 
     await document.fonts.ready;
@@ -846,11 +847,10 @@ export default function ResultPage() {
 
     return (
         <main
-            className="min-h-dvh flex flex-col"
+            className="app-screen result-screen min-h-dvh flex flex-col"
             style={{background: "var(--c-bg)"}}
         >
             {/* 헤더 */}
-            <OfflineStatus />
             <div
                 className="px-5"
                 style={{
@@ -860,44 +860,31 @@ export default function ResultPage() {
                     borderBottom: "1px solid var(--c-border)",
                 }}
             >
-                <div className="flex items-center justify-between mb-4">
-                    <button
-                        onClick={() => navigatePublic("/")}
-                        className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+                <div className="result-topbar"><a href="/" aria-label="홈으로 가기"><Brand /></a><span className="result-complete">{label} 완료</span></div>
+                <h1 className="result-distance num"
+                    style={{
+                        color: "var(--c-text-1)",
+                    }}
+                >
+                    {result.distance_km.toFixed(2)}
+                    <span
                         style={{
-                            background: "var(--c-elevated)",
-                            border: "1px solid var(--c-border)",
+                            fontSize: 18,
+                            fontWeight: 600,
+                            color: "var(--c-text-2)",
+                            marginLeft: 6,
                         }}
-                        aria-label="홈으로 가기"
                     >
-                        <svg
-                            width="16"
-                            height="16"
-                            style={{color: "var(--c-text-1)"}}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M15 19l-7-7 7-7"
-                            />
-                        </svg>
-                    </button>
-                    <div className="flex items-center gap-2">
-                        <span
-                            className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
-                            style={{
-                                background: `${accent}18`,
-                                color: accent,
-                                letterSpacing: "-0.01em",
-                            }}
-                        >
-                            {label} 완료
-                        </span>
-                        {saving ? (
+                        km
+                    </span>
+                </h1>
+                <p
+                    className="mt-1"
+                    style={{fontSize: 14, color: "var(--c-text-3)"}}
+                >
+                    {dateStr}
+                </p>
+                <div className="result-save-status">{saving ? (
                             <span
                                 className="text-xs"
                                 style={{color: "var(--c-text-3)"}}
@@ -907,7 +894,7 @@ export default function ResultPage() {
                         ) : savedId ? (
                             <span
                                 className="text-xs font-semibold"
-                                style={{color: "var(--c-walk)"}}
+                                style={{color: "var(--c-walk-text)"}}
                             >
                                 ✓ 자동 저장됨
                             </span>
@@ -924,7 +911,7 @@ export default function ResultPage() {
                             <div className="flex items-center gap-2">
                                 <span
                                     className="text-xs font-semibold"
-                                    style={{color: "var(--c-danger)"}}
+                                    style={{color: "var(--c-danger-text)"}}
                                 >
                                     저장 실패
                                 </span>
@@ -954,43 +941,14 @@ export default function ResultPage() {
                                     로그인
                                 </TintedButton>
                             </div>
-                        ) : null}
-                    </div>
-                </div>
-                <h1
-                    style={{
-                        fontSize: 40,
-                        fontWeight: 800,
-                        color: "var(--c-text-1)",
-                        letterSpacing: "-0.03em",
-                        lineHeight: 1.05,
-                    }}
-                >
-                    {result.distance_km.toFixed(2)}
-                    <span
-                        style={{
-                            fontSize: 18,
-                            fontWeight: 600,
-                            color: "var(--c-text-2)",
-                            marginLeft: 6,
-                        }}
-                    >
-                        km
-                    </span>
-                </h1>
-                <p
-                    className="mt-1"
-                    style={{fontSize: 14, color: "var(--c-text-3)"}}
-                >
-                    {dateStr}
-                </p>
+                        ) : null}</div>
                 {adjustedDistanceKm > 0 && (
                     <div className="mt-2">
                         <span
                             className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
                             style={{
                                 background: isAutoGapMode
-                                    ? "rgba(0,122,255,0.12)"
+                                    ? "rgba(33,109,116,0.12)"
                                     : "rgba(255,159,10,0.15)",
                                 color: isAutoGapMode
                                     ? "var(--c-toss-blue)"
@@ -1003,7 +961,7 @@ export default function ResultPage() {
                         </span>
                     </div>
                 )}
-                {(offlineSaved || pendingCount > 0) && (
+                {(pendingCount > 0 || (offlineSaved && Boolean(result.ownerId))) && (
                     <>
                         <p
                             className="mt-1"
@@ -1054,28 +1012,10 @@ export default function ResultPage() {
                 )}
             </div>
 
-            {/* 경로 지도 */}
-            {result.pathPoints && result.pathPoints.length > 1 && (
-                <div className="px-4 pt-3">
-                    <div
-                        className="card rounded-2xl overflow-hidden"
-                        style={{height: 200}}
-                    >
-                        <KakaoMap
-                            center={result.startPoint}
-                            startPoint={result.startPoint}
-                            endPoint={result.endPoint}
-                            pathPoints={result.pathPoints}
-                            className="w-full h-full"
-                        />
-                    </div>
-                </div>
-            )}
-
             {/* 핵심 스탯 */}
             <div className="px-4 pt-3 slide-up">
                 <div className="card rounded-2xl">
-                    <div className="grid grid-cols-3">
+                    <div className="grid grid-cols-2">
                         {[
                             {
                                 label: "소요 시간",
@@ -1087,18 +1027,13 @@ export default function ResultPage() {
                                 value: formatPace(result.pace),
                                 unit: "/km",
                             },
-                            {
-                                label: "거리",
-                                value: result.distance_km.toFixed(2),
-                                unit: "km",
-                            },
                         ].map(({label: l, value, unit}, i) => (
                             <div
                                 key={l}
                                 className="py-4 text-center"
                                 style={{
                                     borderRight:
-                                        i < 2
+                                        i === 0
                                             ? "1px solid var(--c-border)"
                                             : "none",
                                 }}
@@ -1140,6 +1075,24 @@ export default function ResultPage() {
                     </div>
                 </div>
             </div>
+
+            {/* 경로 지도 */}
+            {result.pathPoints && result.pathPoints.length > 1 && (
+                <div className="px-4 pt-3">
+                    <div
+                        className="card rounded-2xl overflow-hidden"
+                        style={{height: 200}}
+                    >
+                        <KakaoMap
+                            center={result.startPoint}
+                            startPoint={result.startPoint}
+                            endPoint={result.endPoint}
+                            pathPoints={result.pathPoints}
+                            className="w-full h-full"
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* 고도 프로필 */}
             {analysis &&
@@ -1715,7 +1668,7 @@ export default function ResultPage() {
                                     className="num font-bold"
                                     style={{
                                         fontSize: 14,
-                                        color: "var(--c-toss-blue)",
+                                        color: "var(--c-accent-text)",
                                     }}
                                 >
                                     {formatDuration(
@@ -1736,7 +1689,7 @@ export default function ResultPage() {
                                     className="num font-bold"
                                     style={{
                                         fontSize: 14,
-                                        color: "var(--c-walk)",
+                                        color: "var(--c-walk-text)",
                                     }}
                                 >
                                     {formatDuration(
@@ -1994,7 +1947,7 @@ export default function ResultPage() {
                 {shareStatus === "success" && (
                     <p
                         className="text-center"
-                        style={{fontSize: 12, color: "var(--c-walk)"}}
+                        style={{fontSize: 12, color: "var(--c-walk-text)"}}
                     >
                         공유 완료! 친구 초대 링크도 함께 전송됐어요.
                     </p>
@@ -2002,7 +1955,7 @@ export default function ResultPage() {
                 {shareStatus === "error" && (
                     <p
                         className="text-center"
-                        style={{fontSize: 12, color: "var(--c-danger)"}}
+                        style={{fontSize: 12, color: "var(--c-danger-text)"}}
                     >
                         공유에 실패했어요. 다시 시도해주세요.
                     </p>
@@ -2058,6 +2011,7 @@ export default function ResultPage() {
                           : "저장 안 함"}
                 </button>
             </div>
+        <AppNavigation />
         </main>
     );
 }

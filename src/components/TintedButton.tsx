@@ -6,13 +6,13 @@ type Tone = "accent" | "danger" | "danger-solid" | "neutral";
 
 const TONE_STYLES: Record<Tone, { background: string; color: string; border: string }> = {
     accent: {
-        background: "rgba(0,122,255,0.12)",
-        color: "var(--c-toss-blue)",
-        border: "1px solid rgba(0,122,255,0.3)",
+        background: "rgba(33,109,116,0.12)",
+        color: "var(--c-accent-text)",
+        border: "1px solid rgba(33,109,116,0.3)",
     },
     danger: {
         background: "rgba(255,69,58,0.12)",
-        color: "var(--c-danger)",
+        color: "var(--c-danger-text)",
         border: "1px solid rgba(255,69,58,0.3)",
     },
     "danger-solid": {

@@ -1,6 +1,7 @@
 "use client";
 
 import {createContext, useContext, useEffect, useState} from "react";
+import {readActiveRun} from "@/lib/runStorage";
 
 const OfflineStatusContext = createContext("");
 
@@ -33,8 +34,11 @@ export default function OfflineSetup({children}: {children: React.ReactNode}) {
 
 export function OfflineStatus() {
     const status = useContext(OfflineStatusContext);
-    return <div className="px-4 py-2 text-xs" style={{background: "var(--c-surface)", color: "var(--c-text-2)"}}>
-        <p>{status || "화면을 켜두면 GPS 기록이 계속돼요"}</p>
-        <a href="/local-history" className="inline-block mt-1 underline">기기 기록 · 진행 중인 운동 복구</a>
+    const [active, setActive] = useState(false);
+    useEffect(() => {try {setActive(Boolean(readActiveRun()));} catch {}}, []);
+    const ready = status.includes("준비 완료");
+    return <div className="home-offline-status">
+        <p>{ready ? "오프라인 기록 준비 완료" : status || "화면을 켜두고 운동해주세요"}</p>
+        {active && <a href="/running">진행 중인 운동 복구</a>}
     </div>;
 }
