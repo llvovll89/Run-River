@@ -29,11 +29,10 @@ import {
     type RunTuning,
 } from "@/lib/runTuning";
 import {SheetHandle, SheetActionGrid} from "@/components/RunSheetParts";
+import {readActiveRun, writeActiveRun, clearActiveRun, saveLocalResult, navigatePublic} from "@/lib/runStorage";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
-const RUN_RECOVERY_KEY = "runInProgress";
-const RUN_RECOVERY_MAX_AGE_MS = 1000 * 60 * 60 * 6;
 const PACE_COACHING_INTERVAL_MS = 1000 * 120;
 
 interface GapSuggestion {
@@ -147,6 +146,7 @@ export default function RunningPage() {
         useState<CompletionReason | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const arrivedRef = useRef(false);
+    const finishedRef = useRef(false);
     const wakeLockRef = useRef<WakeLockSentinel | null>(null);
     const startTimeRef = useRef<number>(0);
     const baseElapsedRef = useRef<number>(0);
@@ -288,19 +288,17 @@ export default function RunningPage() {
                     updatedAt: Date.now(),
                     ...payload,
                 };
-                sessionStorage.setItem(
-                    RUN_RECOVERY_KEY,
-                    JSON.stringify(snapshot),
-                );
+                writeActiveRun(snapshot);
+                sessionStorage.removeItem("runConfig");
             } catch {
-                // Safari private mode 등 저장 실패는 무시
+                showToast("기기에 기록을 저장하지 못했어요. 앱을 닫지 말고 저장 공간을 확인해주세요.");
             }
         },
-        [],
+        [showToast],
     );
 
     const clearRecoverySnapshot = useCallback(() => {
-        sessionStorage.removeItem(RUN_RECOVERY_KEY);
+        clearActiveRun();
     }, []);
 
     const acquireWakeLock = useCallback(async () => {
@@ -332,6 +330,7 @@ export default function RunningPage() {
                 | "adjustedGapCount"
             >,
         ) => {
+            nextConfig = {...nextConfig, runId: nextConfig.runId ?? crypto.randomUUID()};
             setConfig(nextConfig);
             requestPermission();
             startTracking({
@@ -428,7 +427,7 @@ export default function RunningPage() {
                 return;
             }
         } else {
-            const rawRecovery = sessionStorage.getItem(RUN_RECOVERY_KEY);
+            const rawRecovery = (() => { try { const saved = readActiveRun(); return saved ? JSON.stringify(saved) : null; } catch { showToast("진행 중인 기록을 읽지 못했어요. 저장된 데이터는 유지됩니다."); return null; } })();
             if (rawRecovery) {
                 try {
                     const parsedRecovery = JSON.parse(
@@ -449,7 +448,7 @@ export default function RunningPage() {
                     const isFresh =
                         hasRequiredFields &&
                         updatedAt !== null &&
-                        Date.now() - updatedAt <= RUN_RECOVERY_MAX_AGE_MS;
+                        updatedAt > 0;
                     if (isFresh) {
                         const normalizedRecovery: RunRecoverySnapshot = {
                             ...parsedRecovery,
@@ -472,7 +471,7 @@ export default function RunningPage() {
                         return;
                     }
                 } catch {
-                    clearRecoverySnapshot();
+                        showToast("복구 기록을 읽지 못했어요. 저장된 데이터는 유지됩니다.");
                 }
             }
         }
@@ -512,7 +511,7 @@ export default function RunningPage() {
         setPendingRecovery(null);
         beginSession(pendingRecovery.config, {
             elapsed: pendingRecovery.elapsed,
-            isPaused: pendingRecovery.isPaused,
+            isPaused: true,
             pathPoints: pendingRecovery.pathPoints,
             trackPoints: pendingRecovery.trackPoints,
             totalDistance: pendingRecovery.totalDistance,
@@ -532,13 +531,14 @@ export default function RunningPage() {
         clearRecoverySnapshot();
         sessionStorage.removeItem("runConfig");
         setPendingRecovery(null);
-        router.replace("/");
+        navigatePublic("/");
     }, [clearRecoverySnapshot, router]);
 
     useEffect(() => {
         if (!config || arrived || pendingRecovery) return;
 
         const persist = () => {
+            if (finishedRef.current) return;
             const liveElapsed = Math.floor(
                 baseElapsedRef.current +
                     (isPausedRef.current
@@ -567,10 +567,13 @@ export default function RunningPage() {
         const saveTimer = setInterval(persist, 3000);
         const onPageHide = () => persist();
         window.addEventListener("pagehide", onPageHide);
+        const onHidden = () => { if (document.visibilityState === "hidden") persist(); };
+        document.addEventListener("visibilitychange", onHidden);
 
         return () => {
             clearInterval(saveTimer);
             window.removeEventListener("pagehide", onPageHide);
+            document.removeEventListener("visibilitychange", onHidden);
         };
     }, [
         config,
@@ -771,11 +774,12 @@ export default function RunningPage() {
                     ? 0
                     : (Date.now() - startTimeRef.current) / 1000),
         );
-        sessionStorage.setItem(
-            "runResult",
-            JSON.stringify({
+        try {
+            const finalResult = {
+                id: config.runId ?? crypto.randomUUID(),
+                ownerId: config.ownerId ?? null,
                 startPoint: config.startPoint,
-                endPoint: config.endPoint,
+                endPoint: position ?? pathPoints.at(-1) ?? config.startPoint,
                 distance_km: effectiveDistance,
                 gps_distance_km_raw: totalDistance,
                 gap_adjustment_distance_km: adjustedDistanceKm,
@@ -797,11 +801,19 @@ export default function RunningPage() {
                     intervalTotalRunSeconds: intervalRunSecondsRef.current,
                     intervalTotalRestSeconds: intervalRestSecondsRef.current,
                 }),
-            }),
-        );
-        clearRecoverySnapshot();
-        sessionStorage.removeItem("runConfig");
-        router.push("/result");
+            };
+            saveLocalResult(finalResult);
+            sessionStorage.setItem("runResult", JSON.stringify(finalResult));
+            finishedRef.current = true;
+            clearRecoverySnapshot();
+            sessionStorage.removeItem("runConfig");
+            navigatePublic(`/result?id=${finalResult.id}`);
+        } catch {
+            baseElapsedRef.current = finalElapsed;
+            isPausedRef.current = true;
+            setIsPaused(true);
+            showToast("완료 기록을 저장하지 못했어요. 저장 공간을 확보한 뒤 종료를 다시 눌러주세요.");
+        }
     }, [
         config,
         effectiveDistance,
@@ -820,6 +832,8 @@ export default function RunningPage() {
         router,
         clearRecoverySnapshot,
         cancelSpeak,
+        position,
+        showToast,
     ]);
 
     const handlePause = useCallback(() => {
@@ -1228,6 +1242,7 @@ export default function RunningPage() {
             style={{background: "var(--c-bg)"}}
         >
             <KakaoMap
+                offlineRouteTop={topPanelCollapsed ? "20%" : "56%"}
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??
                     config.startPoint
@@ -1411,7 +1426,7 @@ export default function RunningPage() {
             <div
                 className="absolute top-0 left-0 right-0 z-10"
                 style={{
-                    paddingTop: "calc(var(--sat) + 14px)",
+                    paddingTop: isOnline ? "calc(var(--sat) + 14px)" : "calc(var(--sat) + 44px)",
                     paddingBottom: topPanelCollapsed ? "10px" : "16px",
                     background: isPaused
                         ? "rgba(10,11,12,0.88)"

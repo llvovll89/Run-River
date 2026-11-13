@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from "react";
+import OfflineRoute from "@/components/OfflineRoute";
 import type { LatLng, ActivityType } from "@/types";
 
 const OVERLAY_UPDATE_INTERVAL_MS = 100;
@@ -35,6 +36,7 @@ export interface KakaoMapHandle {
 }
 
 interface KakaoMapProps {
+  offlineRouteTop?: string;
   center?: LatLng;
   onMapClick?: (latlng: LatLng) => void;
   onStartPointChange?: (latlng: LatLng) => void;
@@ -55,6 +57,7 @@ interface KakaoMapProps {
 }
 
 const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
+  offlineRouteTop,
   center = { lat: 37.5665, lng: 126.978 },
   onMapClick,
   onStartPointChange,
@@ -74,6 +77,15 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   className = "",
 }: KakaoMapProps, ref) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
   const mapInstanceRef = useRef<kakao.maps.Map | null>(null);
 
   useImperativeHandle(ref, () => ({
@@ -115,6 +127,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     });
 
     mapInstanceRef.current = mapInstance;
+    setMapReady(true);
 
     // 항상 클릭 리스너 등록 (ref로 최신 핸들러 참조)
     kakao.maps.event.addListener(mapInstance, "click", (e: kakao.maps.MouseEvent) => {
@@ -154,7 +167,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       });
     };
     document.head.appendChild(script);
-  }, [initMap]);
+  }, [initMap, online]);
 
   // 언마운트 시 mapInstanceRef 초기화 → React StrictMode 이중 마운트 대응
   useEffect(() => {
@@ -183,7 +196,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       onStartPointChangeRef.current?.({ lat: pos.getLat(), lng: pos.getLng() });
     });
     startMarkerRef.current = startM;
-  }, [startPoint]);
+  }, [startPoint, mapReady]);
 
   // 도착 마커 (드래그 가능) + 반경 원
   useEffect(() => {
@@ -213,7 +226,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       });
       circleRef.current = circle;
     }
-  }, [endPoint, showArrivalRadius]);
+  }, [endPoint, showArrivalRadius, mapReady]);
 
   // 현재 위치 마커
   useEffect(() => {
@@ -250,7 +263,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     if (followUser && !isDraggingRef.current) {
       mapInstanceRef.current.panTo(latlng);
     }
-  }, [currentPosition, heading, followUser]);
+  }, [currentPosition, heading, followUser, mapReady]);
 
   // 미리보기 파선 (경로 데이터 없을 때만 표시)
   useEffect(() => {
@@ -272,7 +285,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       map: mapInstanceRef.current,
     });
     previewLineRef.current = line;
-  }, [previewLine, startPoint, endPoint, routePath]);
+  }, [previewLine, startPoint, endPoint, routePath, mapReady]);
 
   // 경로 안내 폴리라인 (OSRM 도보 경로)
   useEffect(() => {
@@ -291,7 +304,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       map: mapInstanceRef.current,
     });
     routeLineRef.current = routeLine;
-  }, [routePath]);
+  }, [routePath, mapReady]);
 
   // 검색 미리보기 핀 마커
   useEffect(() => {
@@ -312,7 +325,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       image: img,
       map: mapInstanceRef.current,
     });
-  }, [previewPoint]);
+  }, [previewPoint, mapReady]);
 
   // activityType 변경 시 색상 업데이트 — 폴리라인 재생성
   useEffect(() => {
@@ -381,9 +394,12 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     polyline.setPath(polylinePathRef.current);
     lastPathPointCountRef.current = pathPoints.length;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathPoints]);
+  }, [pathPoints, mapReady]);
 
-  return <div ref={mapRef} className={`w-full ${className}`} />;
+  return <div className={`relative w-full ${className}`}>
+    <div ref={mapRef} className="absolute inset-0" />
+    {(!online || !mapReady) && <OfflineRoute top={offlineRouteTop} points={pathPoints} currentPosition={currentPosition ?? startPoint} />}
+  </div>;
 });
 
 export default KakaoMap;

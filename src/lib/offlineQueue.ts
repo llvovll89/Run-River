@@ -6,6 +6,13 @@ const MAX_QUEUE_ITEMS = 300;
 export const RETRY_EXHAUSTED_AT = Number.MAX_SAFE_INTEGER;
 
 export interface SaveRecordPayload {
+  id?: string;
+  user_id?: string;
+  gps_distance_km_raw?: number | null;
+  gap_adjustment_distance_km?: number | null;
+  gap_adjustment_seconds?: number | null;
+  gap_adjustment_count?: number | null;
+  gap_adjustment_auto_enabled?: boolean | null;
   start_point: LatLng;
   end_point: LatLng;
   distance_km: number;
@@ -37,7 +44,8 @@ export interface QueueSummary {
 function isLatLng(value: unknown): value is LatLng {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<LatLng>;
-  return typeof candidate.lat === "number" && typeof candidate.lng === "number";
+  return typeof candidate.lat === "number" && Number.isFinite(candidate.lat) && Math.abs(candidate.lat) <= 90 &&
+    typeof candidate.lng === "number" && Number.isFinite(candidate.lng) && Math.abs(candidate.lng) <= 180;
 }
 
 function isActivityType(value: unknown): value is ActivityType {
@@ -77,62 +85,47 @@ function isPendingRecord(value: unknown): value is PendingRecord {
   );
 }
 
-function sanitizeQueue(queue: PendingRecord[]): PendingRecord[] {
-  // Keep newest entries to avoid unbounded localStorage growth.
-  return queue
-    .slice()
-    .sort((a, b) => a.savedAt - b.savedAt)
-    .slice(-MAX_QUEUE_ITEMS);
-}
-
 function writeQueue(queue: PendingRecord[]): void {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
 }
 
-export function getQueue(): PendingRecord[] {
-  try {
+function readQueueStrict(): PendingRecord[] {
     const raw = localStorage.getItem(QUEUE_KEY);
     if (!raw) return [];
-
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      writeQueue([]);
-      return [];
+    if (!Array.isArray(parsed) || !parsed.every(isPendingRecord)) {
+      throw new Error("업로드 대기 기록을 읽을 수 없습니다. 기존 데이터는 유지됩니다.");
     }
+    return parsed;
+}
 
-    const valid = parsed.filter(isPendingRecord);
-    const normalized = sanitizeQueue(valid);
-    if (normalized.length !== parsed.length) {
-      writeQueue(normalized);
-    }
-
-    return normalized;
-  } catch {
-    return [];
-  }
+export function getQueue(): PendingRecord[] {
+  try { return readQueueStrict(); } catch { return []; }
 }
 
 export function enqueue(record: SaveRecordPayload): void {
-  const queue = getQueue();
+  const queue = readQueueStrict();
+  if (record.id && queue.some((item) => item.record.id === record.id)) return;
+  if (queue.length >= MAX_QUEUE_ITEMS) throw new Error("업로드 대기열이 가득 찼습니다. 기기 기록은 유지됩니다.");
   queue.push({
-    queueId: crypto.randomUUID(),
+    queueId: record.id ?? crypto.randomUUID(),
     record,
     savedAt: Date.now(),
     retryCount: 0,
     lastError: null,
     nextRetryAt: 0,
   });
-  writeQueue(sanitizeQueue(queue));
+  writeQueue(queue);
 }
 
 export function dequeue(id: string): void {
-  const queue = getQueue().filter((item) => item.queueId !== id);
+  const queue = readQueueStrict().filter((item) => item.queueId !== id);
   writeQueue(queue);
 }
 
 export function markRetry(id: string, errorMessage: string): void {
   const now = Date.now();
-  const queue = getQueue().map((item) => {
+  const queue = readQueueStrict().map((item) => {
     if (item.queueId !== id) return item;
     const retryCount = item.retryCount + 1;
     if (retryCount >= MAX_RETRY_COUNT) {
@@ -155,7 +148,7 @@ export function markRetry(id: string, errorMessage: string): void {
 }
 
 export function resetRetry(id: string): void {
-  const queue = getQueue().map((item) => {
+  const queue = readQueueStrict().map((item) => {
     if (item.queueId !== id) return item;
     return {
       ...item,
@@ -189,7 +182,7 @@ export function getExhaustedQueue(): PendingRecord[] {
 }
 
 export function resetAllExhaustedRetries(): number {
-  const queue = getQueue();
+  const queue = readQueueStrict();
   let updated = 0;
   const next = queue.map((item) => {
     if (item.nextRetryAt !== RETRY_EXHAUSTED_AT) return item;

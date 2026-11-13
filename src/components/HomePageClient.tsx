@@ -16,10 +16,13 @@ import {
 import Image from "next/image";
 import type {LatLng, ActivityType} from "@/types";
 import {calcDistance} from "@/hooks/useGeolocation";
+import {navigatePublic, readActiveRun} from "@/lib/runStorage";
+import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 import {INTERVAL_PRESETS} from "@/lib/intervalPresets";
 import type {IntervalPreset} from "@/lib/intervalPresets";
 import PCLanding from "@/components/PCLanding";
 import SegmentedControl from "@/components/SegmentedControl";
+import {OfflineStatus} from "@/components/OfflineSetup";
 
 const KakaoMap = dynamicImport(() => import("@/components/KakaoMap"), {
     ssr: false,
@@ -378,7 +381,10 @@ export default function Home() {
         setSearch((prev) => ({...prev, pointMode, open: true}));
     }
 
-    function handleStart() {
+    async function handleStart() {
+        try {
+            if (readActiveRun()) { navigatePublic("/running"); return; }
+        } catch { alert("기기 기록을 읽을 수 없습니다. 저장 공간을 확인해주세요."); return; }
         if (pageMode === "goal") {
             const origin = userLocation ?? startPoint;
             if (!origin || !goal.distance) return;
@@ -433,7 +439,18 @@ export default function Home() {
                 }),
             );
         }
-        router.push("/running");
+        const raw = sessionStorage.getItem("runConfig");
+        if (!raw) return;
+        let ownerId: string | null = null;
+        try {
+            const session = await Promise.race([
+                getSupabaseBrowserClient().auth.getSession(),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+            ]);
+            ownerId = session?.data.session?.user.id ?? null;
+        } catch { /* Guest recordings stay on this device. */ }
+        sessionStorage.setItem("runConfig", JSON.stringify({...JSON.parse(raw), runId: crypto.randomUUID(), ownerId}));
+        navigatePublic("/running");
     }
 
     function openAuthFor(path: string) {
@@ -2443,6 +2460,7 @@ export default function Home() {
                     )}
 
                     {/* 액션 버튼 */}
+                    <OfflineStatus />
                     <div className="flex gap-2">
                         {pageMode === "map" && (startPoint || endPoint) && (
                             <button
