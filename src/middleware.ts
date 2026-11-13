@@ -26,7 +26,14 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    const {response, user} = await updateSession(request);
+    const {response, user, unavailable} = await updateSession(request);
+
+    // Supabase가 느리거나 응답하지 않으면 탭을 눌러도 화면이 멈춘 것처럼 보인다.
+    // 로그인 여부를 판단할 수 없을 때는 이동을 막지 않고, 각 화면이 직접 상태를 처리한다.
+    // (실제 데이터 접근 권한은 RLS가 보호한다.)
+    if (unavailable) {
+        return response;
+    }
 
     if (!user && isAuthRequiredRoute(pathname)) {
         const requestedPath = `${pathname}${request.nextUrl.search}`;

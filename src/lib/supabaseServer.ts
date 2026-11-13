@@ -2,6 +2,10 @@ import {createServerClient} from "@supabase/ssr";
 import {cookies} from "next/headers";
 import type {RunningRecord} from "@/types";
 import {assertSupabaseEnv, supabaseUrl, supabaseAnonKey} from "@/lib/supabaseEnv";
+import {withTimeout} from "@/lib/withTimeout";
+
+// Supabase가 응답하지 않을 때 서버 렌더링이 무한정 멈추지 않도록 하는 상한
+const SERVER_QUERY_TIMEOUT_MS = 5000;
 
 export async function getSupabaseServerClient() {
     assertSupabaseEnv();
@@ -32,10 +36,14 @@ export async function getSupabaseServerClient() {
 
 export async function getRunningHistoryServer(): Promise<RunningRecord[]> {
     const supabase = await getSupabaseServerClient();
-    const {data, error} = await supabase
-        .from("running_records")
-        .select("*")
-        .order("created_at", {ascending: false});
+    const {data, error} = await withTimeout(
+        supabase
+            .from("running_records")
+            .select("*")
+            .order("created_at", {ascending: false}),
+        SERVER_QUERY_TIMEOUT_MS,
+        "기록 조회",
+    );
 
     if (error) throw error;
     return (data ?? []) as RunningRecord[];
@@ -47,13 +55,21 @@ export async function getProfileWeightServer(): Promise<number> {
         const supabase = await getSupabaseServerClient();
         const {
             data: {user},
-        } = await supabase.auth.getUser();
+        } = await withTimeout(
+            supabase.auth.getUser(),
+            SERVER_QUERY_TIMEOUT_MS,
+            "로그인 확인",
+        );
         if (!user) return 70;
-        const {data} = await supabase
-            .from("user_profiles")
-            .select("weight")
-            .eq("user_id", user.id)
-            .single();
+        const {data} = await withTimeout(
+            supabase
+                .from("user_profiles")
+                .select("weight")
+                .eq("user_id", user.id)
+                .single(),
+            SERVER_QUERY_TIMEOUT_MS,
+            "프로필 조회",
+        );
         return (data?.weight as number | null) ?? 70;
     } catch {
         return 70;

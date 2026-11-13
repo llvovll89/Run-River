@@ -68,6 +68,8 @@ export default async function HistoryPage() {
     let records: RunningRecord[] = [];
     let fetchError = "";
 
+    // 두 조회를 동시에 시작해 Supabase가 느릴 때 대기 시간이 겹치지 않게 한다.
+    const weightPromise = getProfileWeightServer();
     try {
         records = await getRunningHistoryServer();
     } catch (e) {
@@ -75,7 +77,7 @@ export default async function HistoryPage() {
             e instanceof Error ? e.message : "기록을 불러올 수 없습니다.";
     }
 
-    const weightKg = await getProfileWeightServer();
+    const weightKg = await weightPromise;
 
     const totalDist = records.reduce((s, r) => s + r.distance_km, 0);
     const totalDays = new Set(records.map((r) => r.created_at.slice(0, 10)))
