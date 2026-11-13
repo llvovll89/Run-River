@@ -805,7 +805,7 @@ export default function ResultPage() {
 
     const isRun = result.activity_type === "running";
     const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-    const label = isRun ? "러닝" : "워킹";
+    const label = isRun ? "러닝" : "걷기";
 
     const dateStr = formatDateFull(new Date());
 
