@@ -194,6 +194,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             assert.equal(api.rows.size, 1);
             assert.equal(api.inserts, 2);
             assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].uploaded), true);
+            await page.getByText(/서버 저장됨/).waitFor();
         } finally { await browser.close(); }
     });
 }

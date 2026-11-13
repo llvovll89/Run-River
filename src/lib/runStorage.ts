@@ -68,6 +68,7 @@ export function saveLocalResult(result: LocalRunResult) {
 export function markLocalResultUploaded(id: string) {
     const entries = readLocalResults().map((entry) => entry.result.id === id ? {...entry, uploaded: true} : entry);
     localStorage.setItem(LOCAL_RESULTS_KEY, JSON.stringify(entries));
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("local-run-uploaded", {detail: id}));
 }
 export function removeLocalResult(id: string) {
     localStorage.setItem(LOCAL_RESULTS_KEY, JSON.stringify(readLocalResults().filter((entry) => entry.result.id !== id)));

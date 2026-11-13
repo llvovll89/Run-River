@@ -511,6 +511,14 @@ export default function ResultPage() {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(false);
     const [offlineSaved, setOfflineSaved] = useState(false);
+    useEffect(() => {
+        const onUploaded = (event: Event) => {
+            const id = (event as CustomEvent<string>).detail;
+            if (id === result?.id) { setSavedId(id); setOfflineSaved(false); }
+        };
+        window.addEventListener("local-run-uploaded", onUploaded);
+        return () => window.removeEventListener("local-run-uploaded", onUploaded);
+    }, [result?.id]);
     const [discarding, setDiscarding] = useState(false);
     const [memo, setMemo] = useState("");
     const [lastSavedMemo, setLastSavedMemo] = useState("");
