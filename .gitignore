@@ -11,6 +11,8 @@
 /out/
 /.mobile-build/
 /mobile-dist/
+/.playwright-cli/
+/output/playwright/
 
 # production
 /build
