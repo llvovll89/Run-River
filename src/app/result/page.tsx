@@ -10,7 +10,8 @@ import {
     getRunningHistory,
     getCurrentUser,
 } from "@/lib/supabase";
-import {enqueue} from "@/lib/offlineQueue";
+import {enqueue, dequeue} from "@/lib/offlineQueue";
+import {saveLocalResult, readLocalResults, markLocalResultUploaded, removeLocalResult, navigatePublic} from "@/lib/runStorage";
 import {
     formatDuration,
     formatPace,
@@ -44,10 +45,13 @@ import {useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
 import {trackGrowthEvent} from "@/lib/growthEvents";
 import TintedButton from "@/components/TintedButton";
+import {OfflineStatus} from "@/components/OfflineSetup";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 
 interface RunResult {
+    id: string;
+    ownerId?: string | null;
     startPoint: LatLng;
     endPoint: LatLng;
     distance_km: number;
@@ -543,6 +547,8 @@ export default function ResultPage() {
         setSaveError(false);
         setOfflineSaved(false);
         const payload = {
+            id: parsed.id,
+            user_id: parsed.ownerId ?? undefined,
             start_point: parsed.startPoint,
             end_point: parsed.endPoint,
             distance_km: parsed.distance_km,
@@ -561,29 +567,46 @@ export default function ResultPage() {
             elevation_gain_m: parsed.elevation_gain_m ?? null,
             elevation_loss_m: parsed.elevation_loss_m ?? null,
         };
-        saveRunningRecord(payload)
+        try {
+            saveLocalResult(parsed);
+            setIsAuthenticated(Boolean(parsed.ownerId));
+            if (readLocalResults().find((entry) => entry.result.id === parsed.id)?.uploaded) {
+                setSavedId(parsed.id);
+                setSaving(false);
+                return;
+            }
+            if (parsed.ownerId) enqueue(payload);
+            setOfflineSaved(true);
+        } catch {
+            setSaveError(true);
+            setSaving(false);
+            return;
+        }
+        if (!parsed.ownerId || !navigator.onLine) { setSaving(false); return; }
+        getCurrentUser().then((user) => {
+            if (user?.id !== parsed.ownerId) throw new Error("기록을 시작한 계정으로 로그인해주세요.");
+            return saveRunningRecord(payload);
+        })
             .then(async (record) => {
+                markLocalResultUploaded(parsed.id);
+                dequeue(parsed.id);
                 setSavedId(record.id);
                 setLastSavedMemo(record.memo ?? "");
 
+                try {
                 const records = await getRunningHistory();
                 const {personalRecords: prs, earnedBadges: badges} =
                     derivePerformance(record, records);
                 setPersonalRecords(prs);
                 setEarnedBadges(badges);
+                } catch { /* Optional statistics must not retry an already saved run. */ }
 
                 sessionStorage.removeItem("runResult");
                 sessionStorage.removeItem("runConfig");
             })
             .catch(() => {
-                try {
-                    enqueue(payload);
-                    setOfflineSaved(true);
-                    sessionStorage.removeItem("runResult");
-                    sessionStorage.removeItem("runConfig");
-                } catch {
-                    setSaveError(true);
-                }
+                // The durable device copy and owned upload queue already exist.
+                setOfflineSaved(true);
             })
             .finally(() => setSaving(false));
     }, []);
@@ -592,7 +615,14 @@ export default function ResultPage() {
         let mounted = true;
 
         async function initResultPage() {
-            const raw = sessionStorage.getItem("runResult");
+            const id = new URLSearchParams(window.location.search).get("id");
+            let raw: string | null = sessionStorage.getItem("runResult");
+            try {
+                if (id) {
+                    const entry = readLocalResults().find((item) => item.result.id === id);
+                    if (entry) raw = JSON.stringify(entry.result);
+                }
+            } catch { setSaveError(true); }
             if (!raw) {
                 router.replace("/");
                 return;
@@ -605,6 +635,8 @@ export default function ResultPage() {
                     throw new Error("invalid runResult payload");
                 }
                 parsed = decoded;
+                parsed.id ??= crypto.randomUUID();
+                sessionStorage.setItem("runResult", JSON.stringify(parsed));
             } catch {
                 sessionStorage.removeItem("runResult");
                 sessionStorage.removeItem("runConfig");
@@ -614,26 +646,7 @@ export default function ResultPage() {
             if (!mounted) return;
             setResult(parsed);
 
-            try {
-                const user = await getCurrentUser();
-                if (!mounted) return;
-
-                const authenticated = Boolean(user);
-                setIsAuthenticated(authenticated);
-
-                if (authenticated) {
-                    doSave(parsed);
-                    return;
-                }
-
-                sessionStorage.removeItem("runResult");
-                sessionStorage.removeItem("runConfig");
-            } catch {
-                if (!mounted) return;
-                setIsAuthenticated(false);
-                sessionStorage.removeItem("runResult");
-                sessionStorage.removeItem("runConfig");
-            }
+            doSave(parsed);
         }
 
         void initResultPage();
@@ -659,6 +672,7 @@ export default function ResultPage() {
         setDiscarding(true);
         try {
             await deleteRunningRecord(savedId);
+            removeLocalResult(savedId);
         } catch {
             // 삭제 실패해도 메인으로 이동
         } finally {
@@ -819,7 +833,7 @@ export default function ResultPage() {
             goalTime: null,
         };
         sessionStorage.setItem("runConfig", JSON.stringify(runConfig));
-        router.push("/running");
+        navigatePublic("/running");
     }
 
     return (
@@ -828,6 +842,7 @@ export default function ResultPage() {
             style={{background: "var(--c-bg)"}}
         >
             {/* 헤더 */}
+            <OfflineStatus />
             <div
                 className="px-5"
                 style={{
@@ -839,7 +854,7 @@ export default function ResultPage() {
             >
                 <div className="flex items-center justify-between mb-4">
                     <button
-                        onClick={() => router.push("/")}
+                        onClick={() => navigatePublic("/")}
                         className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
                         style={{
                             background: "var(--c-elevated)",
@@ -894,7 +909,7 @@ export default function ResultPage() {
                                     className="text-xs font-semibold"
                                     style={{color: "var(--c-text-2)"}}
                                 >
-                                    오프라인 저장됨 · 연결 시 자동 업로드
+                                    {result.ownerId ? "기기에 저장됨 · 같은 계정 연결 시 자동 업로드" : "기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요"}
                                 </span>
                             </div>
                         ) : saveError ? (
@@ -1998,7 +2013,7 @@ export default function ResultPage() {
                         기록 보기
                     </button>
                     <button
-                        onClick={() => router.push("/")}
+                        onClick={() => navigatePublic("/")}
                         className="py-4 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-transform"
                         style={{
                             background: "var(--c-elevated)",

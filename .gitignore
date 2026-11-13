@@ -9,6 +9,15 @@
 # next.js
 /.next/
 /out/
+/.playwright-cli/
+/output/playwright/
+/test-results/
+/.mobile-build/
+/mobile-dist/
+/android/**/build/
+/android/app/src/main/assets/
+/android/capacitor-cordova-android-plugins/
+/android/app/src/main/res/xml/config.xml
 
 # production
 /build

@@ -5,6 +5,7 @@ import PWAUpdateBanner from "@/components/PWAUpdateBanner";
 import OfflineSyncBanner from "@/components/OfflineSyncBanner";
 import AppRecovery from "@/components/AppRecovery";
 import PageTransition from "@/components/PageTransition";
+import OfflineSetup from "@/components/OfflineSetup";
 import { UserProfileProvider } from "@/hooks/useUserProfile";
 import { OfflineSyncProvider } from "@/hooks/useOfflineSync";
 
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           style={{ background: "var(--c-bg)" }}
         >
           <ThemeProvider>
+            <OfflineSetup>
             <AppRecovery />
             <UserProfileProvider>
               <OfflineSyncProvider>
@@ -87,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <PageTransition>{children}</PageTransition>
               </OfflineSyncProvider>
             </UserProfileProvider>
+            </OfflineSetup>
           </ThemeProvider>
         </div>
       </body>

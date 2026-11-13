@@ -41,6 +41,8 @@ export type {RunTuning};
 
 /** sessionStorage에 저장되는 런 시작 설정 */
 export interface RunConfig {
+    runId?: string;
+    ownerId?: string | null;
     startPoint: LatLng;
     endPoint: LatLng | null;
     routePath?: LatLng[];

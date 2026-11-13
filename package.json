@@ -6,13 +6,13 @@
     "dev": "next dev",
     "check:env": "node scripts/validate-env.mjs",
     "verify:deploy": "npm run check:env && npm run build",
-    "build": "cross-env NEXT_DISABLE_PWA=1 next build",
-    "build:pwa": "next build",
-    "build:pwa:debug": "cross-env NEXT_DISABLE_PWA=0 NODE_OPTIONS=--trace-uncaught next build",
+    "build": "next build && node scripts/generate-service-worker.mjs",
+    "build:pwa": "npm run build",
+    "test:unit": "node --import tsx --test tests/offline.test.ts",
+    "test:offline": "node scripts/verify-offline.mjs",
     "start": "next start"
   },
   "dependencies": {
-    "@ducanh2912/next-pwa": "^10.2.9",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tailwindcss/postcss": "^4.2.4",
@@ -26,9 +26,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "cross-env": "^7.0.3",
+    "playwright": "1.65.0",
     "postcss": "^8",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.4",
+    "tsx": "4.23.15",
     "typescript": "^5"
   }
 }

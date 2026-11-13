@@ -20,6 +20,7 @@ function shouldRecoverFromMessage(message: string): boolean {
 
 async function recoverOnce(reason: string): Promise<void> {
   if (typeof window === "undefined") return;
+  if (!navigator.onLine || localStorage.getItem("rr_active_run")) return;
   if (sessionStorage.getItem(RECOVERY_FLAG) === "1") return;
 
   const attempts = Number.parseInt(
@@ -32,11 +33,6 @@ async function recoverOnce(reason: string): Promise<void> {
   sessionStorage.setItem(RECOVERY_FLAG, "1");
 
   try {
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
-
     if ("serviceWorker" in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((reg) => reg.update()));

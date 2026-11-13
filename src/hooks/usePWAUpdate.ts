@@ -5,10 +5,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 function reloadWithBuster() {
   const doReload = async () => {
     try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((key) => caches.delete(key)));
-      }
+      // The new worker has already prepared its offline assets. Keep them.
     } catch {
       // 캐시 삭제 실패 시에도 새 버전 로드는 진행한다.
     }

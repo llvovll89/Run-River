@@ -100,6 +100,11 @@ export function useGeolocation(): UseGeolocationReturn {
   const startWatch = useCallback(() => {
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        if (!Number.isFinite(pos.coords.latitude) || !Number.isFinite(pos.coords.longitude) ||
+            !Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 40) {
+          setState((prev) => ({...prev, error: "GPS 정확도가 낮아요. 하늘이 보이는 곳에서 기다려주세요."}));
+          return;
+        }
         const currentTs = pos.timestamp;
         const prevSampleTs = lastSampleTimestampRef.current;
         if (prevSampleTs !== null) {
@@ -115,7 +120,7 @@ export function useGeolocation(): UseGeolocationReturn {
           lng: pos.coords.longitude,
         };
 
-        setState((prev) => ({ ...prev, position: newPos }));
+        setState((prev) => ({ ...prev, position: newPos, error: null }));
         setSpeed(Number.isFinite(pos.coords.speed) ? pos.coords.speed : null);
 
         const altitude = Number.isFinite(pos.coords.altitude) ? pos.coords.altitude : null;
@@ -148,6 +153,8 @@ export function useGeolocation(): UseGeolocationReturn {
         }
 
         if (lastPositionRef.current === null) {
+          setPathPoints((prev) => [...prev, newPos]);
+          lastPathPointRef.current = newPos;
           // 최초 포인트: 그대로 앵커로 채택
           appendTrackPoint({
             ...newPos,
@@ -197,7 +204,7 @@ export function useGeolocation(): UseGeolocationReturn {
       (err) => {
         setState((prev) => ({ ...prev, error: err.message }));
       },
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }
     );
   }, []);
 

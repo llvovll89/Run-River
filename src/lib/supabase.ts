@@ -83,6 +83,8 @@ export async function signOut(): Promise<void> {
 }
 
 export async function saveRunningRecord(record: {
+    id?: string;
+    user_id?: string;
     start_point: LatLng;
     end_point: LatLng;
     distance_km: number;
@@ -108,6 +110,11 @@ export async function saveRunningRecord(record: {
         .select()
         .single();
 
+    if (error?.code === "23505" && record.id) {
+        const existing = await supabase.from("running_records").select("*").eq("id", record.id).single();
+        if (existing.error) throw existing.error;
+        return existing.data as RunningRecord;
+    }
     if (error) throw error;
     return data as RunningRecord;
 }

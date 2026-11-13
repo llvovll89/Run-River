@@ -14,10 +14,10 @@ import {
     getQueue,
     getQueueSummary,
     markRetry,
-    resetRetry,
     resetAllExhaustedRetries,
     RETRY_EXHAUSTED_AT,
 } from "@/lib/offlineQueue";
+import {markLocalResultUploaded} from "@/lib/runStorage";
 
 async function getSupabaseSyncApi() {
     return import("@/lib/supabase");
@@ -66,7 +66,7 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
         let latestError: string | null = null;
 
         try {
-            const {saveRunningRecord} = await getSupabaseSyncApi();
+            const {saveRunningRecord, getCurrentUser} = await getSupabaseSyncApi();
             const now = Date.now();
 
             if (force) {
@@ -74,8 +74,20 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
             }
 
             const queue = getQueue();
+            if (queue.length === 0) return;
+            const user = await getCurrentUser();
+            if (!user) return;
 
             for (const item of queue) {
+                // Legacy/guest records have no proven owner; never assign them silently.
+                if (!item.record.id || !item.record.user_id) {
+                    latestError = "기존 대기 기록의 계정을 확인할 수 없어 자동 업로드하지 않았어요.";
+                    continue;
+                }
+                if (item.record.user_id !== user.id) {
+                    latestError = "운동을 시작한 계정으로 로그인하면 업로드돼요.";
+                    continue;
+                }
                 if (!force) {
                     if (item.nextRetryAt === RETRY_EXHAUSTED_AT) continue;
                     if (item.nextRetryAt > now) continue;
@@ -83,7 +95,7 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
 
                 try {
                     await saveRunningRecord(item.record);
-                    resetRetry(item.queueId);
+                    if (item.record.id) markLocalResultUploaded(item.record.id);
                     dequeue(item.queueId);
                     succeeded = true;
                 } catch (e) {
@@ -94,6 +106,8 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
                     continue;
                 }
             }
+        } catch (error) {
+            latestError = error instanceof Error ? error.message : "동기화 연결 실패";
         } finally {
             if (succeeded) setLastSyncedAt(Date.now());
             setLastError(latestError);
