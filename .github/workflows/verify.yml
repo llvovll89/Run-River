@@ -9,6 +9,53 @@ permissions:
   contents: read
 
 jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+      NEXT_PUBLIC_KAKAO_MAP_KEY: ci-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)
+          test -n "$XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+      - run: npm ci
+      - run: npm run ios:sync
+      - name: Generate native project and test targets
+        run: |
+          command -v xcodegen || brew install xcodegen
+          cd ios/App && xcodegen generate
+      - name: Build and test on iPhone Simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const d=Object.values(JSON.parse(s).devices).flat().find(d=>d.name.startsWith("iPhone"));if(!d)process.exit(1);process.stdout.write(d.udid)})')
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl location "$DEVICE" set 37.66,126.98
+          xcodebuild test -project ios/App/App.xcodeproj -scheme App -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/DerivedData -resultBundlePath output/ios/Hiking.xcresult CODE_SIGNING_ALLOWED=NO
+      - run: npx playwright install webkit
+      - name: Safari engine offline maps, KMZ and native bridge flows
+        env:
+          TEST_BROWSER: webkit
+          TEST_NATIVE_PLATFORM: ios
+        run: node --test tests/maps-browser.test.mjs tests/mobile-browser.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-verification
+          path: |
+            output/ios/
+            output/playwright/
+            ios/App/App.xcodeproj/
+          retention-days: 7
   hiking-schema:
     runs-on: ubuntu-latest
     services:

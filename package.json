@@ -16,11 +16,15 @@
     "build:mobile": "node scripts/build-mobile.mjs",
     "android:sync": "npm run build:mobile && cap sync android",
     "android:open": "cap open android",
-    "android:run": "npm run android:sync && cap run android"
+    "android:run": "npm run android:sync && cap run android",
+    "ios:sync": "npm run build:mobile && cap sync ios",
+    "ios:open": "cap open ios",
+    "ios:run": "npm run ios:sync && cap run ios"
   },
   "dependencies": {
     "@capacitor/android": "8.6.2",
     "@capacitor/core": "8.6.2",
+    "@capacitor/ios": "8.6.2",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tailwindcss/postcss": "^4.2.4",

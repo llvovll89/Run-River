@@ -20,7 +20,7 @@ const NativeMaps = registerPlugin<{
     read(options: {id: string; offset: number; length: number}): Promise<{base64: string}>;
     delete(options: {id: string}): Promise<void>;
 }>("NativeMaps");
-const native = () => Capacitor.getPlatform() === "android";
+const native = () => ["android", "ios"].includes(Capacitor.getPlatform());
 
 async function db() {
     return new Promise<IDBDatabase>((resolve, reject) => {

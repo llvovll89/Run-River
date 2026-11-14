@@ -29,7 +29,7 @@ interface NativeRunPlugin {
 }
 
 export const NativeRun = registerPlugin<NativeRunPlugin>("NativeRun");
-export function hasNativeRun() { return Capacitor.getPlatform() === "android"; }
+export function hasNativeRun() { return ["android", "ios"].includes(Capacitor.getPlatform()); }
 
 export function nativeRunResult(run: NativeRunSnapshot) {
     const duration = Math.floor(run.elapsedMs / 1000);

@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {readFile, mkdir} from "node:fs/promises";
 import path from "node:path";
-import {chromium} from "playwright";
+import {chromium, webkit} from "playwright";
+const browserType = process.env.TEST_BROWSER === "webkit" ? webkit : chromium;
 import {kmzFixture, kmlFixture} from "./kmz-fixture.mjs";
 
 test("downloaded trail map renders after network loss and survives reopening", {timeout: 90000}, async () => {
@@ -32,7 +33,7 @@ test("downloaded trail map renders after network loss and survives reopening", {
     const origin = `http://127.0.0.1:${server.address().port}`;
     let browser;
     try {
-        browser = await chromium.launch({args: ["--enable-webgl", "--enable-unsafe-swiftshader"]});
+        browser = await browserType.launch({args: ["--enable-webgl", "--enable-unsafe-swiftshader"]});
         const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         const externalRequests = [];
         await context.route("**/*", route => {

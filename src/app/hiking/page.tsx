@@ -84,7 +84,7 @@ export default function HikingPage() {
                 <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>KMZ 최대 10MB · GPX·KML 최대 5MB. 사진·이미지 오버레이·외부 링크·원본 스타일은 가져오지 않아요.</p>
                 {(pack || course) && <div style={{height: 330, overflow: "hidden", borderRadius: 20}}><OfflineTrailMap pack={pack} course={course?.points} overlay={course?.overlay} /></div>}
             </section>
-            <section className="space-y-3"><TintedButton tone="accent" disabled={busy || importing || active} onClick={() => void start()}>{busy ? "현재 위치 확인 중…" : "현재 위치에서 하이킹 시작"}</TintedButton><p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>천천히 올라가도 자동으로 일시정지하지 않아요. 쉬어갈 때 직접 일시정지를 눌러주세요. 하이킹 기록은 우선 이 기기에 저장돼요.</p><p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>화면 잠금 중 기록은 Android 앱의 위치 서비스를 사용해요. 웹에서는 화면을 켜두세요. 코스 안내는 자동 길찾기를 대신하지 않아요.</p></section>
+            <section className="space-y-3"><TintedButton tone="accent" disabled={busy || importing || active} onClick={() => void start()}>{busy ? "현재 위치 확인 중…" : "현재 위치에서 하이킹 시작"}</TintedButton><p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>천천히 올라가도 자동으로 일시정지하지 않아요. 쉬어갈 때 직접 일시정지를 눌러주세요. 하이킹 기록은 우선 이 기기에 저장돼요.</p><p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>아이폰·Android 앱은 화면 잠금 중에도 위치 기록을 이어가요. Safari 등 웹에서는 화면을 켜두세요. 코스 안내는 자동 길찾기를 대신하지 않아요.</p></section>
         </div>
         <AppNavigation />
     </main>;
