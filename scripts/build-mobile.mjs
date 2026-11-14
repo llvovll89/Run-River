@@ -53,7 +53,7 @@ if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
 
 // Fail instead of producing a partial app when a required route stops exporting.
-for (const route of ["index.html", "running/index.html", "result/index.html", "history/index.html", "settings/index.html", "auth/index.html", "local-history/index.html"]) {
+for (const route of ["index.html", "running/index.html", "result/index.html", "history/index.html", "settings/index.html", "auth/index.html", "local-history/index.html", "maps/index.html", "hiking/index.html"]) {
     await readFile(path.join(stage, "out", route));
 }
 await cp(path.join(stage, "out"), output, {recursive: true});
