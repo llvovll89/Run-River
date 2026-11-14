@@ -2,6 +2,9 @@ import XCTest
 
 final class HikingUITests: XCTestCase {
     private func tapVisible(_ element: XCUIElement, in app: XCUIApplication) {
+        // A tap can return before WKWebView commits the next document. Do not
+        // start swiping the old page while the destination is still loading.
+        _ = element.waitForExistence(timeout: 10)
         for _ in 0..<8 {
             if element.exists && element.isHittable { break }
             app.swipeUp()
@@ -48,8 +51,9 @@ final class HikingUITests: XCTestCase {
         hiking.tap()
         XCTAssertTrue(app.webViews.staticTexts["산길에서도 나의 페이스로"].waitForExistence(timeout: 30))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-hiking"; shot.lifetime = .keepAlways; add(shot)
-        let maps = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "지도")).firstMatch
-        XCTAssertTrue(maps.waitForExistence(timeout: 20)); maps.tap()
+        let maps = app.webViews.links["오프라인 지도 저장·관리"]
+        tapVisible(maps, in: app)
+        XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
         let picker = app.webViews.buttons["지도 파일 가져오기"]
         tapVisible(picker, in: app)
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "Native Files picker must be presented")
