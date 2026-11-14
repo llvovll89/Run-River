@@ -111,6 +111,10 @@ public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManag
         DispatchQueue.main.async {
             guard self.exportCall == nil, let gpx = call.getString("gpx"), gpx.utf8.count <= 20_000_000, let controller = self.bridge?.viewController else { call.reject("GPX 파일을 저장할 수 없어요."); return }
             do {
+                // Expose a local destination in Files even on a fresh device with
+                // no iCloud account or other document-provider apps installed.
+                let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                try FileManager.default.createDirectory(at: documents.appendingPathComponent("GPX"), withIntermediateDirectories: true)
                 let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let name = URL(fileURLWithPath: call.getString("filename") ?? "hiking.gpx").lastPathComponent

@@ -42,6 +42,29 @@ final class HikingUITests: XCTestCase {
         tapVisible(export, in: app)
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "GPX export must present the native Files picker")
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-GPX-export"; shot.lifetime = .keepAlways; add(shot)
+        let folder = app.staticTexts["Run River"]
+        XCTAssertTrue(folder.waitForExistence(timeout: 15)); folder.tap()
+        let gpx = app.staticTexts["GPX"]
+        XCTAssertTrue(gpx.waitForExistence(timeout: 15)); gpx.tap()
+        let saveFile = app.buttons["Save"]
+        XCTAssertTrue(saveFile.waitForExistence(timeout: 10)); XCTAssertTrue(saveFile.isEnabled); saveFile.tap()
+        XCTAssertTrue(app.webViews.buttons["이동 경로 GPX 내보내기"].waitForExistence(timeout: 15), "Files export must finish and return to the stored result")
+    }
+    func testNativeDownloadAndRenderMap() {
+        let app = XCUIApplication(); app.launch()
+        let maps = app.webViews.links["오프라인 지도 준비"]
+        tapVisible(maps, in: app)
+        XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
+        tapVisible(app.webViews.buttons["북한산 지도 저장"], in: app)
+        XCTAssertTrue(app.webViews.staticTexts["북한산 지도를 기기에 저장했어요."].waitForExistence(timeout: 60), "Download must pass the native checksum and metadata validation")
+        let caption = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "갈색 점선은")).firstMatch
+        for _ in 0..<8 {
+            if caption.exists && caption.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(caption.exists)
+        XCTAssertTrue(app.webViews.buttons["Zoom in"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-native-rendered-map"; shot.lifetime = .keepAlways; add(shot)
     }
     func testBundledHikingPagesAndNativeFilePicker() {
         let app = XCUIApplication()
