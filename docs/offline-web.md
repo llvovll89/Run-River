@@ -40,4 +40,4 @@ npm.cmd run build
 
 현재 로컬 환경의 Supabase 연결은 이전 확인에서 DNS ENOTFOUND로 실패했다. 자동 검증은 가짜 서버로 수행하며, 실제 로그인·운영 DB 저장 여부는 별도 연결 확인이 필요하다.
 
-Android/iOS 네이티브 전환은 보류한다. Android draft PR #2의 앱 코드는 이 웹앱 PR에 포함하지 않는다.
+2026-11-14 Android 구현을 재개했다. 최신 [네이티브 구현 범위](native-roadmap.md), [오프라인 지도](offline-maps.md), [하이킹](hiking.md)을 따른다. 기존 PR #2는 최신 기반 PR #5로 대체하고 닫았다. 웹의 화면 잠금 제약은 그대로이며 Android 실제 기기 검증은 별도로 필요하다.

@@ -1,6 +1,7 @@
 "use client";
 
 import type {RunningRecord} from "@/types";
+import {activityLabel} from "@/lib/activities";
 
 export function ExportButton({records}: {records: RunningRecord[]}) {
     function handleExport() {
@@ -10,7 +11,7 @@ export function ExportButton({records}: {records: RunningRecord[]}) {
             .map((r) =>
                 [
                     r.created_at.slice(0, 10),
-                    r.activity_type === "running" ? "러닝" : "워킹",
+                    activityLabel(r.activity_type),
                     r.distance_km.toFixed(2),
                     r.duration_seconds,
                     r.pace.toFixed(2),

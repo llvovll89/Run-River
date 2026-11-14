@@ -47,8 +47,12 @@ import {trackGrowthEvent} from "@/lib/growthEvents";
 import Brand from "@/components/Brand";
 import AppNavigation from "@/components/AppNavigation";
 import TintedButton from "@/components/TintedButton";
+import {activityLabel, canSyncActivity} from "@/lib/activities";
+import ExportGpxButton from "@/components/ExportGpxButton";
+import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
+const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
 
 interface RunResult {
     id: string;
@@ -89,7 +93,7 @@ function isValidRunResult(value: unknown): value is RunResult {
         typeof candidate.pace === "number" && Number.isFinite(candidate.pace);
     const hasActivity =
         candidate.activity_type === "running" ||
-        candidate.activity_type === "walking";
+        candidate.activity_type === "walking" || candidate.activity_type === "hiking";
     return hasDistance && hasDuration && hasPace && hasActivity;
 }
 
@@ -177,7 +181,7 @@ async function generateShareImage(
 
     const isRun = result.activity_type === "running";
     const accent = isRun ? "#216d74" : "#627c50";
-    const actLabel = isRun ? "러닝" : "워킹";
+    const actLabel = activityLabel(result.activity_type);
 
     await document.fonts.ready;
 
@@ -501,6 +505,7 @@ function deriveRunAnalysis(result: RunResult): RunAnalysis | null {
 }
 
 export default function ResultPage() {
+    const mapPack = useOfflineMapPack();
     const MEMO_MAX_LENGTH = 300;
     const router = useRouter();
     const {profile} = useUserProfile();
@@ -579,6 +584,11 @@ export default function ResultPage() {
         try {
             saveLocalResult(parsed);
             setIsAuthenticated(Boolean(parsed.ownerId));
+            if (!canSyncActivity(parsed.activity_type)) {
+                setOfflineSaved(true);
+                setSaving(false);
+                return;
+            }
             if (readLocalResults().find((entry) => entry.result.id === parsed.id)?.uploaded) {
                 setSavedId(parsed.id);
                 setSaving(false);
@@ -715,8 +725,7 @@ export default function ResultPage() {
         if (!result || isSharing) return;
         setIsSharing(true);
 
-        const activityLabel =
-            result.activity_type === "running" ? "러닝" : "워킹";
+        const activityName = activityLabel(result.activity_type);
         const cals = calcCaloriesByPace(
             result.pace,
             result.activity_type,
@@ -732,7 +741,7 @@ export default function ResultPage() {
         const shareUrl = `${window.location.origin}/?ref=share&challenge=${challenge}`;
         const shareText =
             [
-                `Run River ${activityLabel} 완료`,
+                `Run River ${activityName} 완료`,
                 `거리 ${result.distance_km.toFixed(2)}km`,
                 `시간 ${formatDuration(result.duration_seconds)}`,
                 `페이스 ${formatPace(result.pace)}/km`,
@@ -805,7 +814,7 @@ export default function ResultPage() {
 
     const isRun = result.activity_type === "running";
     const accent = isRun ? "var(--c-toss-blue)" : "var(--c-walk)";
-    const label = isRun ? "러닝" : "걷기";
+    const label = activityLabel(result.activity_type);
 
     const dateStr = formatDateFull(new Date());
 
@@ -904,7 +913,7 @@ export default function ResultPage() {
                                     className="text-xs font-semibold"
                                     style={{color: "var(--c-text-2)"}}
                                 >
-                                    {result.ownerId ? "기기에 저장됨 · 같은 계정 연결 시 자동 업로드" : "기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요"}
+                                    {!canSyncActivity(result.activity_type) ? "하이킹 기록은 이 기기에 저장돼요 · 서버 동기화 준비 중" : result.ownerId ? "기기에 저장됨 · 같은 계정 연결 시 자동 업로드" : "기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요"}
                                 </span>
                             </div>
                         ) : saveError ? (
@@ -942,6 +951,7 @@ export default function ResultPage() {
                                 </TintedButton>
                             </div>
                         ) : null}</div>
+                <ExportGpxButton name={label} points={result.trackPoints?.length ? result.trackPoints : result.pathPoints ?? []} />
                 {adjustedDistanceKm > 0 && (
                     <div className="mt-2">
                         <span
@@ -961,7 +971,7 @@ export default function ResultPage() {
                         </span>
                     </div>
                 )}
-                {(pendingCount > 0 || (offlineSaved && Boolean(result.ownerId))) && (
+                {canSyncActivity(result.activity_type) && (pendingCount > 0 || (offlineSaved && Boolean(result.ownerId))) && (
                     <>
                         <p
                             className="mt-1"
@@ -1083,13 +1093,13 @@ export default function ResultPage() {
                         className="card rounded-2xl overflow-hidden"
                         style={{height: 200}}
                     >
-                        <KakaoMap
+                        {mapPack ? <OfflineTrailMap pack={mapPack} points={result.trackPoints?.length ? result.trackPoints : result.pathPoints} /> : <KakaoMap
                             center={result.startPoint}
                             startPoint={result.startPoint}
                             endPoint={result.endPoint}
                             pathPoints={result.pathPoints}
                             className="w-full h-full"
-                        />
+                        />}
                     </div>
                 </div>
             )}
@@ -1229,7 +1239,7 @@ export default function ResultPage() {
                 )}
 
             {/* 페이스 존 분석 */}
-            {analysis && (
+            {analysis && result.activity_type !== "hiking" && (
                 <div className="px-4 mt-3">
                     <div className="card rounded-2xl p-4">
                         <p

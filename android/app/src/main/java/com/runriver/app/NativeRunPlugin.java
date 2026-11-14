@@ -33,7 +33,7 @@ public final class NativeRunPlugin extends Plugin {
                 JSObject config = call.getObject("config");
                 if (config == null || config.optJSONObject("startPoint") == null) throw new IllegalArgumentException("운동 설정이 없어요.");
                 String type = config.optString("activityType");
-                if (!"running".equals(type) && !"walking".equals(type)) throw new IllegalArgumentException("지원하지 않는 운동 종류입니다.");
+                if (!"running".equals(type) && !"walking".equals(type) && !"hiking".equals(type)) throw new IllegalArgumentException("지원하지 않는 운동 종류입니다.");
                 if (config.has("intervalPreset")) throw new IllegalArgumentException("네이티브 인터벌 기록은 아직 지원하지 않아요. 거리·시간 목표를 선택해주세요.");
                 if (!config.has("runId")) config.put("runId", UUID.randomUUID().toString());
                 store.save(new JSONObject().put("config", config).put("status", "paused").put("elapsedMs", 0)

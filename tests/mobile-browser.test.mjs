@@ -61,7 +61,7 @@ test("packaged app opens and navigates without external network or a service wor
             };
             if (!sessionStorage.getItem("native-config-created")) {
                 sessionStorage.setItem("native-config-created", "true");
-                sessionStorage.setItem("runConfig", JSON.stringify({runId: "native-test-1", startPoint: {lat: 37.6, lng: 127}, endPoint: null, activityType: "walking", goalDistance: 3, goalTime: null}));
+                sessionStorage.setItem("runConfig", JSON.stringify({runId: "native-test-1", ownerId: "owner-native-test", startPoint: {lat: 37.6, lng: 127}, endPoint: null, activityType: "hiking", goalDistance: null, goalTime: null}));
             }
         });
         const nativePage = await nativeContext.newPage();
@@ -89,6 +89,9 @@ test("packaged app opens and navigates without external network or a service wor
         await nativePage.waitForURL("**/result?id=native-test-1");
         assert.equal(await nativePage.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].result.distance_km), 0.1);
         assert.equal(await nativePage.evaluate(() => localStorage.getItem("native-export-acknowledged")), "true");
+        await nativePage.getByText("하이킹 기록은 이 기기에 저장돼요 · 서버 동기화 준비 중", {exact: true}).waitFor();
+        assert.equal(await nativePage.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].result.activity_type), "hiking");
+        assert.equal(await nativePage.evaluate(() => JSON.parse(localStorage.getItem("pendingRunRecords") || "[]").length), 0);
         assert.deepEqual(errors, []);
     } finally {
         await browser?.close();

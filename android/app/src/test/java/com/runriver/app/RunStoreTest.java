@@ -46,4 +46,26 @@ public class RunStoreTest {
             assertEquals(1, store.points().length());
         }
     }
+
+    @Test public void legacyDatabaseUpgradePreservesConfigAndPoints() throws Exception {
+        android.content.Context context = RuntimeEnvironment.getApplication();
+        try (android.database.sqlite.SQLiteDatabase db = context.openOrCreateDatabase("run-river.db", 0, null)) {
+            db.execSQL("CREATE TABLE session (id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL)");
+            db.execSQL("CREATE TABLE fixes (id INTEGER PRIMARY KEY AUTOINCREMENT, json TEXT NOT NULL)");
+            JSONObject legacy = new JSONObject().put("status", "paused").put("elapsedMs", 12000)
+                .put("config", new JSONObject().put("runId", "legacy-run"));
+            db.execSQL("INSERT INTO session VALUES(1,?)", new Object[]{legacy.toString()});
+            db.execSQL("INSERT INTO fixes(json) VALUES(?)", new Object[]{new JSONObject().put("lat", 37.6).toString()});
+            db.setVersion(1);
+        }
+        try (RunStore store = new RunStore(context)) {
+            assertEquals("legacy-run", store.state().getJSONObject("config").getString("runId"));
+            assertEquals(12000, store.state().getLong("elapsedMs"));
+            assertEquals(1, store.points().length());
+            try (android.database.Cursor cursor = store.getReadableDatabase().rawQuery("SELECT json FROM session", null)) {
+                assertTrue(cursor.moveToFirst());
+                assertFalse(new JSONObject(cursor.getString(0)).has("config"));
+            }
+        }
+    }
 }

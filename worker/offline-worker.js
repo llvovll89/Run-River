@@ -1,7 +1,7 @@
 /* VERSION and ASSETS are injected by the build. Cache only public app shells. */
 const PREFIX = "run-river-offline-";
 const CACHE = PREFIX + VERSION;
-const PAGES = ["/", "/running", "/result", "/local-history", "/maps"];
+const PAGES = ["/", "/running", "/result", "/local-history", "/maps", "/hiking"];
 
 self.addEventListener("install", (event) => {
     event.waitUntil((async () => {
