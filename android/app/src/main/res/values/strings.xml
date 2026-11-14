@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Run River</string>
+    <string name="title_activity_main">Run River</string>
+    <string name="package_name">com.runriver.app</string>
+    <string name="custom_url_scheme">com.runriver.app</string>
+</resources>

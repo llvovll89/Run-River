@@ -159,7 +159,7 @@ export default function AuthPage() {
                     email,
                     password,
                     options: {
-                        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+                        emailRedirectTo: `${process.env.NEXT_PUBLIC_NATIVE_APP === "1" ? (process.env.NEXT_PUBLIC_SITE_URL || "https://run-river.vercel.app") : window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
                     },
                 });
 
@@ -208,7 +208,7 @@ export default function AuthPage() {
                 type: "signup",
                 email: email.trim(),
                 options: {
-                    emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+                    emailRedirectTo: `${process.env.NEXT_PUBLIC_NATIVE_APP === "1" ? (process.env.NEXT_PUBLIC_SITE_URL || "https://run-river.vercel.app") : window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
                 },
             });
 
