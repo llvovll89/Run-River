@@ -1246,7 +1246,7 @@ export default function RunningPage() {
             style={{background: "var(--c-bg)"}}
         >
             <h1 className="sr-only">운동 실시간 기록</h1>
-            {mapPack ? <div className="absolute inset-0"><OfflineTrailMap pack={mapPack} currentPosition={position} points={trackPoints} course={config.routePath} follow={followUser} /></div> : <KakaoMap
+            {mapPack || config.courseOverlay ? <div className="absolute inset-0"><OfflineTrailMap pack={mapPack} overlay={config.courseOverlay} currentPosition={position} points={trackPoints} course={config.routePath} follow={followUser} /></div> : <KakaoMap
                 offlineRouteTop={topPanelCollapsed ? "24%" : "54%"}
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??

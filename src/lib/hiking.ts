@@ -1,8 +1,22 @@
-import type {LatLng, TrackPoint} from "@/types";
+import type {LatLng, TrackPoint, CourseOverlay} from "@/types";
 
-export interface HikingCourse {name: string; points: LatLng[]}
+export interface HikingCourse {name: string; points: LatLng[]; overlay?: CourseOverlay; selectedLine?: number}
 const KEY = "rr_hiking_course_v1";
 const valid = (point: LatLng) => Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180;
+
+function validOverlay(value: CourseOverlay) {
+    let count = 0;
+    const position = (point: number[]) => Array.isArray(point) && point.length === 2 && ++count <= 10000 && valid({lng: point[0], lat: point[1]});
+    if (!value || value.type !== "FeatureCollection" || !Array.isArray(value.features) || !value.features.length || value.features.length > 500) return false;
+    return value.features.every(feature => {
+        if (feature?.type !== "Feature" || typeof feature.properties?.name !== "string" || !feature.geometry) return false;
+        const geometry = feature.geometry;
+        if (geometry.type === "Point") return position(geometry.coordinates);
+        if (geometry.type === "LineString") return Array.isArray(geometry.coordinates) && geometry.coordinates.length >= 2 && geometry.coordinates.every(position);
+        if (geometry.type === "Polygon") return Array.isArray(geometry.coordinates) && geometry.coordinates.length > 0 && geometry.coordinates.every(ring => Array.isArray(ring) && ring.length >= 4 && ring.every(position) && ring[0][0] === ring.at(-1)![0] && ring[0][1] === ring.at(-1)![1]);
+        return false;
+    });
+}
 
 export function parseGpx(xml: string, fallbackName = "나의 산행 코스"): HikingCourse {
     if (xml.length > 5 * 1024 * 1024) throw new Error("GPX는 5MB 이하 파일을 사용해주세요.");
@@ -31,7 +45,8 @@ export function readHikingCourse(): HikingCourse | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const course = JSON.parse(raw) as HikingCourse;
-    if (typeof course.name !== "string" || !Array.isArray(course.points) || course.points.length < 2 || course.points.length > 10000 || !course.points.every(valid)) throw new Error("저장한 코스를 읽지 못했어요. GPX를 다시 가져와주세요.");
+    if (course.overlay && !validOverlay(course.overlay)) throw new Error("저장한 지도 표시를 읽지 못했어요. 코스 파일을 다시 가져와주세요.");
+    if (typeof course.name !== "string" || !Array.isArray(course.points) || (course.points.length < 2 && !course.overlay?.features?.length) || course.points.length > 10000 || !course.points.every(valid)) throw new Error("저장한 코스를 읽지 못했어요. 코스 파일을 다시 가져와주세요.");
     return course;
 }
 export function clearHikingCourse() { localStorage.removeItem(KEY); }

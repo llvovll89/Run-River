@@ -4,6 +4,7 @@ import {createServer} from "node:http";
 import {readFile, mkdir} from "node:fs/promises";
 import path from "node:path";
 import {chromium} from "playwright";
+import {kmzFixture, kmlFixture} from "./kmz-fixture.mjs";
 
 test("downloaded trail map renders after network loss and survives reopening", {timeout: 90000}, async () => {
     const root = path.resolve("mobile-dist");
@@ -67,9 +68,31 @@ test("downloaded trail map renders after network loss and survives reopening", {
         // Check the offline-map flow before opening the no-map hiking fallback.
         assert.equal(externalRequests.filter(url => !url.includes("cdn.jsdelivr.net")).length, 0);
         await page.goto(origin + "/hiking/", {waitUntil: "networkidle"});
-        await page.getByLabel("GPX 코스 파일").setInputFiles({name: "course.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><name>북한산 테스트 코스</name><trkseg><trkpt lat="37.66" lon="126.98"/><trkpt lat="37.661" lon="126.98"/></trkseg></trk></gpx>')});
+        await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "map.kmz", mimeType: "application/vnd.google-earth.kmz", buffer: Buffer.from(kmzFixture)});
+        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        assert.equal(await page.getByLabel("따라갈 경로").inputValue(), "");
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_hiking_course_v1")).points.length), 0);
+        await page.getByLabel("따라갈 경로").selectOption("1");
+        await page.reload({waitUntil: "networkidle"});
+        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        assert.equal(await page.getByLabel("따라갈 경로").inputValue(), "1");
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_hiking_course_v1")).points[0].lat), 37.675);
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/kmz-overlay.png"});
+        assert.equal(externalRequests.some(url => url.includes("kmz-resource.invalid")), false);
+        await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "broken.kmz", mimeType: "application/vnd.google-earth.kmz", buffer: Buffer.from(kmzFixture.subarray(0, 20))});
+        await page.getByText("KMZ 압축 파일이 손상되었어요.", {exact: true}).waitFor();
+        await page.getByText("북한산 KMZ 표시", {exact: true}).waitFor();
+        await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "bad.kml", mimeType: "application/vnd.google-earth.kml+xml", buffer: Buffer.from(kmlFixture.replace("126.98,37.66,300", "126.98,999,300"))});
+        await page.getByText("KML 좌표 범위를 확인해주세요.", {exact: true}).waitFor();
+        await page.getByText("북한산 KMZ 표시", {exact: true}).waitFor();
+        await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "multi.kml", mimeType: "application/vnd.google-earth.kml+xml", buffer: Buffer.from('<k:kml xmlns:k="http://www.opengis.net/kml/2.2"><k:Folder><k:Placemark><k:name>멀티 표시</k:name><k:MultiGeometry><k:Point><k:coordinates>126.98,37.66</k:coordinates></k:Point><k:LineString><k:coordinates>126.98,37.66 126.99,37.67</k:coordinates></k:LineString></k:MultiGeometry></k:Placemark></k:Folder></k:kml>')});
+        await page.getByText("경로 1개 · 장소 1개 · 구역 0개", {exact: true}).waitFor();
+        assert.equal(await page.getByLabel("따라갈 경로").inputValue(), "0");
+        await page.getByLabel("코스 파일").setInputFiles({name: "course.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><name>북한산 테스트 코스</name><trkseg><trkpt lat="37.66" lon="126.98"/><trkpt lat="37.661" lon="126.98"/></trkseg></trk></gpx>')});
         await page.getByText("북한산 테스트 코스", {exact: true}).waitFor();
-        await page.getByLabel("GPX 코스 파일").setInputFiles({name: "invalid.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<!DOCTYPE gpx><gpx/>')});
+        await page.getByLabel("코스 파일").setInputFiles({name: "invalid.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<!DOCTYPE gpx><gpx/>')});
         await page.getByText("외부 정의가 포함된 GPX는 사용할 수 없어요.", {exact: true}).waitFor();
         await page.getByText("북한산 테스트 코스", {exact: true}).waitFor();
         await context.grantPermissions(["geolocation"]);

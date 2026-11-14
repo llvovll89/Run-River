@@ -22,7 +22,7 @@ test("packaged app opens and navigates without external network or a service wor
     const origin = `http://127.0.0.1:${server.address().port}`;
     let browser;
     try {
-        browser = await chromium.launch();
+        browser = await chromium.launch({args: ["--enable-unsafe-swiftshader"]});
         const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await context.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         const page = await context.newPage();
@@ -51,6 +51,7 @@ test("packaged app opens and navigates without external network or a service wor
                     let run = read();
                     if (method === "saveGpx") { localStorage.setItem("mock-gpx-export", options.gpx); return {}; }
                     if (method === "start") {
+                        options.config.courseOverlay = {type: "FeatureCollection", features: [{type: "Feature", properties: {name: "기기 장소"}, geometry: {type: "Point", coordinates: [127, 37.6]}}]};
                         run = {config: options.config, status: "recording", elapsedMs: 120000, distanceKm: 0.1, elevationGain: 15, elevationLoss: 0, trackPoints: [{lat: 37.6, lng: 127, timestamp: Date.now(), distance_km: 0.1, elapsed_seconds: 120, altitude_m: 100}], position: {lat: 37.6, lng: 127}, lastFixAt: Date.now(), accuracy: 5};
                     } else if (method === "pause") run.status = "paused";
                     else if (method === "resume") run.status = "recording";
@@ -69,6 +70,7 @@ test("packaged app opens and navigates without external network or a service wor
         nativePage.setDefaultTimeout(15000);
         nativePage.on("pageerror", error => errors.push(error.message));
         await nativePage.goto(origin + "/running/", {waitUntil: "networkidle"});
+        await nativePage.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         await nativePage.getByRole("button", {name: "일시정지", exact: true}).click();
         await nativePage.reload({waitUntil: "networkidle"});
         await nativePage.getByRole("button", {name: "기록 재개", exact: true}).click();
