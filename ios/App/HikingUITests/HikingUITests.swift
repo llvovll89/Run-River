@@ -17,6 +17,8 @@ final class HikingUITests: XCTestCase {
             scrollPage(app)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 15))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 30), .completed)
         element.tap()
     }
     func testStartPauseFinishSaveAndExportHiking() {
