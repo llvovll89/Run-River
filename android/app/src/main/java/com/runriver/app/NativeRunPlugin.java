@@ -7,12 +7,42 @@ import com.getcapacitor.*;
 import com.getcapacitor.annotation.*;
 import org.json.JSONObject;
 import java.util.UUID;
+import androidx.activity.result.ActivityResult;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 @CapacitorPlugin(name = "NativeRun", permissions = {
     @Permission(alias = "location", strings = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}),
     @Permission(alias = "notifications", strings = {Manifest.permission.POST_NOTIFICATIONS})
 })
 public final class NativeRunPlugin extends Plugin {
+    @PluginMethod public void saveGpx(PluginCall call) {
+        String xml = call.getString("gpx", "");
+        String filename = call.getString("filename", "run-river.gpx");
+        if (xml.isEmpty() || xml.length() > 5 * 1024 * 1024 || !filename.matches("[a-zA-Z0-9._-]{1,120}\\.gpx")) {
+            call.reject("내보낼 GPX 파일을 확인해주세요."); return;
+        }
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/gpx+xml")
+            .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, filename);
+        startActivityForResult(call, intent, "gpxDestination");
+    }
+    @ActivityCallback private void gpxDestination(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        if (result.getResultCode() != android.app.Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) {
+            call.reject("GPX 저장을 취소했어요."); return;
+        }
+        android.net.Uri destination = result.getData().getData();
+        getBridge().execute(() -> {
+            try {
+                try (OutputStream output = getContext().getContentResolver().openOutputStream(destination, "wt")) {
+                    if (output == null) throw new java.io.IOException("선택한 위치에 GPX를 저장하지 못했어요.");
+                    output.write(call.getString("gpx", "").getBytes(StandardCharsets.UTF_8));
+                    output.flush();
+                }
+                call.resolve();
+            } catch (Exception error) { call.reject(error.getMessage(), error); }
+        });
+    }
     @PluginMethod public void start(PluginCall call) {
         if (getPermissionState("location") != PermissionState.GRANTED ||
             (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") == PermissionState.PROMPT)) {
