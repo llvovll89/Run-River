@@ -40,7 +40,8 @@ jobs:
       - name: Boot iPhone Simulator
         timeout-minutes: 8
         run: |
-          DEVICE=$(xcrun simctl list devices available -j | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const d=Object.values(JSON.parse(s).devices).flat().find(d=>d.name.startsWith("iPhone"));if(!d)process.exit(1);process.stdout.write(d.udid)})')
+          xcrun simctl list runtimes
+          DEVICE=$(xcrun simctl list devices available -j | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const entries=Object.entries(JSON.parse(s).devices).filter(([key])=>key.includes("iOS")).sort(([a],[b])=>b.localeCompare(a,undefined,{numeric:true}));const d=entries.flatMap(([,devices])=>devices).find(d=>d.name.startsWith("iPhone"));if(!d)process.exit(1);process.stdout.write(d.udid)})')
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
           xcrun simctl location "$DEVICE" set 37.66,126.98
@@ -58,6 +59,9 @@ jobs:
         run: |
           mkdir -p output/ios
           xcrun simctl io "$DEVICE" screenshot output/ios/iphone.png
+          if [ -d output/ios/Hiking.xcresult ]; then
+            xcrun xcresulttool export attachments --path output/ios/Hiking.xcresult --output-path output/ios/attachments
+          fi
       - run: npx playwright install webkit
       - name: Safari engine offline maps, KMZ and native bridge flows
         env:

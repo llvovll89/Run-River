@@ -42,6 +42,9 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        # Xcode's WebKit Swift overlay is absent from older Simulator runtimes.
+        # These tests use the original WKWebView APIs, which do not need that dylib.
+        OTHER_LDFLAGS: '$(inherited) -weak-lswiftWebKit'
     dependencies:
       - target: App
   HikingUITests:
