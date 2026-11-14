@@ -42,10 +42,12 @@ final class HikingUITests: XCTestCase {
         tapVisible(export, in: app)
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "GPX export must present the native Files picker")
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-GPX-export"; shot.lifetime = .keepAlways; add(shot)
-        let folder = app.staticTexts["Run River"]
-        XCTAssertTrue(folder.waitForExistence(timeout: 15)); folder.tap()
-        let gpx = app.staticTexts["GPX"]
-        XCTAssertTrue(gpx.waitForExistence(timeout: 15)); gpx.tap()
+        if !app.navigationBars["GPX"].waitForExistence(timeout: 5) {
+            let folder = app.staticTexts["Run River"]
+            if folder.exists { folder.tap() }
+            let gpx = app.staticTexts["GPX"]
+            XCTAssertTrue(gpx.waitForExistence(timeout: 15)); gpx.tap()
+        }
         let saveFile = app.buttons["Save"]
         XCTAssertTrue(saveFile.waitForExistence(timeout: 10)); XCTAssertTrue(saveFile.isEnabled); saveFile.tap()
         XCTAssertTrue(app.webViews.buttons["이동 경로 GPX 내보내기"].waitForExistence(timeout: 15), "Files export must finish and return to the stored result")
@@ -64,6 +66,9 @@ final class HikingUITests: XCTestCase {
         }
         XCTAssertTrue(caption.exists)
         XCTAssertTrue(app.webViews.buttons["Zoom in"].exists)
+        let loading = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "기기에서 지도를 읽는 중")).firstMatch
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: loading)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-native-rendered-map"; shot.lifetime = .keepAlways; add(shot)
     }
     func testBundledHikingPagesAndNativeFilePicker() {

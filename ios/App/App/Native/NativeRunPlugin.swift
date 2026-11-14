@@ -122,6 +122,7 @@ public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManag
                 try Data(gpx.utf8).write(to: url, options: .atomic)
                 self.exportCall = call; self.exportURL = url
                 let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+                picker.directoryURL = documents.appendingPathComponent("GPX")
                 picker.delegate = self; controller.present(picker, animated: true)
             } catch { call.reject(error.localizedDescription) }
         }
