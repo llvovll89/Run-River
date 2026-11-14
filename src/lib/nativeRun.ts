@@ -19,6 +19,7 @@ export interface NativeRunSnapshot {
 }
 
 interface NativeRunPlugin {
+    saveGpx(options: {gpx: string; filename: string}): Promise<void>;
     start(options: {config: RunConfig}): Promise<void>;
     snapshot(): Promise<{run: NativeRunSnapshot | null}>;
     pause(): Promise<void>;

@@ -45,10 +45,11 @@ test("packaged app opens and navigates without external network or a service wor
         await nativeContext.addInitScript(() => {
             window.androidBridge = {};
             window.Capacitor = {
-                PluginHeaders: [{name: "NativeRun", methods: ["start", "snapshot", "pause", "resume", "finish", "acknowledge"].map(name => ({name, rtype: "promise"}))}],
+                PluginHeaders: [{name: "NativeRun", methods: ["start", "snapshot", "pause", "resume", "finish", "acknowledge", "saveGpx"].map(name => ({name, rtype: "promise"}))}],
                 nativePromise: async (plugin, method, options) => {
                     const read = () => JSON.parse(localStorage.getItem("mock-native-run") || "null");
                     let run = read();
+                    if (method === "saveGpx") { localStorage.setItem("mock-gpx-export", options.gpx); return {}; }
                     if (method === "start") {
                         run = {config: options.config, status: "recording", elapsedMs: 120000, distanceKm: 0.1, elevationGain: 15, elevationLoss: 0, trackPoints: [{lat: 37.6, lng: 127, timestamp: Date.now(), distance_km: 0.1, elapsed_seconds: 120, altitude_m: 100}], position: {lat: 37.6, lng: 127}, lastFixAt: Date.now(), accuracy: 5};
                     } else if (method === "pause") run.status = "paused";
@@ -92,6 +93,9 @@ test("packaged app opens and navigates without external network or a service wor
         await nativePage.getByText("하이킹 기록은 이 기기에 저장돼요 · 서버 동기화 준비 중", {exact: true}).waitFor();
         assert.equal(await nativePage.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].result.activity_type), "hiking");
         assert.equal(await nativePage.evaluate(() => JSON.parse(localStorage.getItem("pendingRunRecords") || "[]").length), 0);
+        await nativePage.getByRole("button", {name: "이동 경로 GPX 내보내기", exact: true}).click();
+        await nativePage.waitForFunction(() => Boolean(localStorage.getItem("mock-gpx-export")));
+        assert.ok((await nativePage.evaluate(() => localStorage.getItem("mock-gpx-export"))).includes('<trkpt lat="37.6" lon="127">'));
         assert.deepEqual(errors, []);
     } finally {
         await browser?.close();
