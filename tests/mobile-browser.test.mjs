@@ -26,6 +26,7 @@ test("packaged app opens and navigates without external network or a service wor
         const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await context.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         const page = await context.newPage();
+        page.setDefaultTimeout(15000);
         const errors = [];
         page.on("pageerror", error => errors.push(error.message));
         await page.goto(origin, {waitUntil: "networkidle"});
@@ -35,7 +36,7 @@ test("packaged app opens and navigates without external network or a service wor
         await page.goto(origin + "/running/", {waitUntil: "networkidle"});
         await page.getByText("일시정지", {exact: true}).first().waitFor();
         await page.goto(origin + "/local-history/", {waitUntil: "networkidle"});
-        await page.getByRole("heading", {name: "활동 기록", exact: true}).waitFor();
+        await page.getByRole("heading", {name: "이 기기의 운동 기록", exact: true}).waitFor();
         await mkdir("output/playwright", {recursive: true});
         await page.screenshot({path: "output/playwright/mobile-bundle.png"});
         assert.deepEqual(errors, []);
