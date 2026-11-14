@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1E84A24DEA9ED29B1EFAA5D5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C8DD9413F8BE445C2E1DCE57 /* PrivacyInfo.xcprivacy */; };
+		FB190CDE411E4BD86F4BD8DC /* bukhansan.pmtiles in Resources */ = {isa = PBXBuildFile; fileRef = E8D6D19A36FE84C3CAD66981 /* bukhansan.pmtiles */; };
 		19AD2CF218141253A1995BAD /* MapFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D15C12125272A82DF53416 /* MapFiles.swift */; };
 		1CA998C627766237F2232BEB /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = FD127B870EFB46EFAC91834E /* CapApp-SPM */; };
 		2700A5422E45C887BEAE5B76 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CC6C49B810BBC284BCED483 /* Main.storyboard */; };
@@ -46,6 +48,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C8DD9413F8BE445C2E1DCE57 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E8D6D19A36FE84C3CAD66981 /* bukhansan.pmtiles */ = {isa = PBXFileReference; name = bukhansan.pmtiles; path = "../../public/offline-maps/bukhansan.pmtiles"; sourceTree = SOURCE_ROOT; };
 		00974E067C806B76249CC31E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		0FB9CE334499AB3F36636491 /* NativeMapsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMapsPlugin.swift; sourceTree = "<group>"; };
 		1613B4CACB108E77F6BBEFAA /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -87,6 +91,7 @@
 			isa = PBXGroup;
 			children = (
 				96EA92B290714B8BA4600873 /* HikingTests.swift */,
+				E8D6D19A36FE84C3CAD66981 /* bukhansan.pmtiles */,
 				32F74FF07EE9C886DB1ED70A /* Fixtures */,
 			);
 			path = HikingTests;
@@ -130,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				9420949282AB92AA28A975D3 /* AppDelegate.swift */,
+				C8DD9413F8BE445C2E1DCE57 /* PrivacyInfo.xcprivacy */,
 				76989E05CECAD7B8B3C424A7 /* Assets.xcassets */,
 				68ED4E8FE0185474B6E8E85B /* capacitor.config.json */,
 				8776CD2CC1249496A6F18C86 /* config.xml */,
@@ -279,6 +285,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CAEB423C7859F4201EF7B4BE /* course.kmz in Resources */,
+				FB190CDE411E4BD86F4BD8DC /* bukhansan.pmtiles in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,6 +294,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3FB3C8C0634A765EE81D042E /* Assets.xcassets in Resources */,
+				1E84A24DEA9ED29B1EFAA5D5 /* PrivacyInfo.xcprivacy in Resources */,
 				4FB34C264C0E482A4F3BA9EA /* LaunchScreen.storyboard in Resources */,
 				2700A5422E45C887BEAE5B76 /* Main.storyboard in Resources */,
 				81138B00431411BE1EF97D97 /* capacitor.config.json in Resources */,
