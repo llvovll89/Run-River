@@ -1,0 +1,68 @@
+name: App
+options:
+  bundleIdPrefix: com.runriver
+  deploymentTarget:
+    iOS: '15.0'
+packages:
+  CapApp-SPM:
+    path: CapApp-SPM
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '15.0'
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  App:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: [public, capacitor.config.json, config.xml, Info.plist]
+      - path: App/public
+        type: folder
+        buildPhase: resources
+      - path: App/capacitor.config.json
+        buildPhase: resources
+      - path: App/config.xml
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.runriver.app
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: '1,2'
+    dependencies:
+      - package: CapApp-SPM
+      - sdk: libsqlite3.tbd
+  HikingTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HikingTests
+      - path: ../../public/offline-maps/bukhansan.pmtiles
+        buildPhase: resources
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        # Xcode's WebKit Swift overlay is absent from older Simulator runtimes.
+        # These tests use the original WKWebView APIs, which do not need that dylib.
+        OTHER_LDFLAGS: '$(inherited) -weak-lswiftWebKit'
+    dependencies:
+      - target: App
+  HikingUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [HikingUITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: App
+schemes:
+  App:
+    build:
+      targets:
+        App: all
+    test:
+      targets: [HikingTests, HikingUITests]
