@@ -1,13 +1,20 @@
 import XCTest
 
 final class HikingUITests: XCTestCase {
+    private func scrollPage(_ app: XCUIApplication) {
+        // Drag the page margin; swiping through a MapLibre canvas pans the map
+        // instead of scrolling to the control below it.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.8))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25))
+        start.press(forDuration: 0.01, thenDragTo: end)
+    }
     private func tapVisible(_ element: XCUIElement, in app: XCUIApplication) {
         // A tap can return before WKWebView commits the next document. Do not
         // start swiping the old page while the destination is still loading.
         _ = element.waitForExistence(timeout: 10)
         for _ in 0..<8 {
             if element.exists && element.isHittable { break }
-            app.swipeUp()
+            scrollPage(app)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 15))
         element.tap()
@@ -62,7 +69,7 @@ final class HikingUITests: XCTestCase {
         let caption = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "갈색 점선은")).firstMatch
         for _ in 0..<8 {
             if caption.exists && caption.isHittable { break }
-            app.swipeUp()
+            scrollPage(app)
         }
         XCTAssertTrue(caption.exists)
         XCTAssertTrue(app.webViews.buttons["Zoom in"].exists)
