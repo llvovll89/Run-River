@@ -139,8 +139,16 @@ final class HikingTests: XCTestCase {
             try await Task.sleep(nanoseconds: 200_000_000)
         }
         XCTAssertTrue(rendered, "The real iOS WebView must render its native PMTiles file and KMZ with HTTP/HTTPS requests blocked")
+        _ = try await webView.evaluateJavaScript("document.querySelector('[data-testid=offline-trail-map]').scrollIntoView({block: 'center'})")
         let image = try await webView.takeSnapshot(configuration: nil)
         let screenshot = XCTAttachment(image: image); screenshot.name = "iPhone-native-offline-map-KMZ"; screenshot.lifetime = .keepAlways; add(screenshot)
+        // Unmount the map before removing its fixture, and leave a clean app for UI tests.
+        _ = try await webView.callAsyncJavaScript("localStorage.removeItem('rr_offline_map'); localStorage.removeItem('rr_map_meta_' + id); localStorage.removeItem('rr_hiking_course_v1');", arguments: ["id": id], in: nil, contentWorld: .page)
+        webView.load(URLRequest(url: URL(string: "capacitor://localhost/")!))
+        for _ in 0..<100 {
+            if (try? await webView.evaluateJavaScript("!!Array.from(document.querySelectorAll('a')).find(a => a.getAttribute('href') === '/hiking')")) as? Bool == true { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
     }
     @MainActor
     func testRealCoreLocationRecordingThroughWKBridge() async throws {

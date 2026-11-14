@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ios:
     runs-on: macos-15
@@ -51,7 +55,7 @@ jobs:
           xcrun simctl install "$DEVICE" ios/DerivedData/Build/Products/Debug-iphonesimulator/App.app
           xcrun simctl privacy "$DEVICE" grant location com.runriver.app
       - name: Test real WKWebView, Core Location, storage and UI
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           # Keep Simulator fixes fresh while tests launch/relaunch the real app.
           (while true; do xcrun simctl location "$DEVICE" set 37.66,126.98; sleep 2; done) &

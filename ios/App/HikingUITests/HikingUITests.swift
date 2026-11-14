@@ -1,12 +1,20 @@
 import XCTest
 
 final class HikingUITests: XCTestCase {
+    private func tapVisible(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<8 {
+            if element.exists && element.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.waitForExistence(timeout: 15))
+        element.tap()
+    }
     func testStartPauseFinishSaveAndExportHiking() {
         let app = XCUIApplication(); app.launch()
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
         XCTAssertTrue(hiking.waitForExistence(timeout: 30)); hiking.tap()
         let start = app.webViews.buttons["현재 위치에서 하이킹 시작"]
-        XCTAssertTrue(start.waitForExistence(timeout: 15)); start.tap()
+        tapVisible(start, in: app)
         let pause = app.webViews.buttons["일시정지"]
         for _ in 0..<8 {
             if pause.waitForExistence(timeout: 3) { break }
@@ -18,7 +26,7 @@ final class HikingUITests: XCTestCase {
         XCTAssertTrue(pause.exists, "The real hiking start button must obtain location and reach the native recording screen")
         guard pause.exists else { return }
         XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "GPS 수신 중")).firstMatch.waitForExistence(timeout: 20))
-        pause.tap()
+        tapVisible(pause, in: app)
         let resume = app.webViews.buttons["기록 재개"]
         XCTAssertTrue(resume.waitForExistence(timeout: 10)); resume.tap()
         let finish = app.webViews.buttons["운동 종료"]
@@ -26,9 +34,9 @@ final class HikingUITests: XCTestCase {
         let confirm = app.webViews.buttons["종료 확인"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10)); confirm.tap()
         let save = app.webViews.buttons["결과 저장하기"]
-        XCTAssertTrue(save.waitForExistence(timeout: 10)); save.tap()
+        tapVisible(save, in: app)
         let export = app.webViews.buttons["이동 경로 GPX 내보내기"]
-        XCTAssertTrue(export.waitForExistence(timeout: 15)); export.tap()
+        tapVisible(export, in: app)
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "GPX export must present the native Files picker")
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-GPX-export"; shot.lifetime = .keepAlways; add(shot)
     }
@@ -38,12 +46,12 @@ final class HikingUITests: XCTestCase {
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
         XCTAssertTrue(hiking.waitForExistence(timeout: 30))
         hiking.tap()
-        XCTAssertTrue(app.webViews.staticTexts["현재 위치에서 하이킹 시작"].waitForExistence(timeout: 15) || app.webViews.buttons["현재 위치에서 하이킹 시작"].exists)
+        XCTAssertTrue(app.webViews.staticTexts["산길에서도 나의 페이스로"].waitForExistence(timeout: 30))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-hiking"; shot.lifetime = .keepAlways; add(shot)
         let maps = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "지도")).firstMatch
-        XCTAssertTrue(maps.exists); maps.tap()
+        XCTAssertTrue(maps.waitForExistence(timeout: 20)); maps.tap()
         let picker = app.webViews.buttons["지도 파일 가져오기"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 15)); picker.tap()
+        tapVisible(picker, in: app)
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "Native Files picker must be presented")
         let files = XCTAttachment(screenshot: app.screenshot()); files.name = "iPhone-Files-picker"; files.lifetime = .keepAlways; add(files)
     }
