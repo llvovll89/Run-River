@@ -24,6 +24,7 @@ public class RunLocationServiceTest {
     private RunLocationService service;
 
     @Before public void start() throws Exception {
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1));
         Application app = RuntimeEnvironment.getApplication();
         app.deleteDatabase("run-river.db");
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION);
