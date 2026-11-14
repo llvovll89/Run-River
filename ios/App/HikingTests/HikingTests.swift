@@ -104,6 +104,19 @@ final class HikingTests: XCTestCase {
         XCTAssertEqual(platform, "ios")
         let result = try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeRun', 'snapshot', {})", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertNotNil(result)
+        let fixture = try Data(contentsOf: XCTUnwrap(Bundle(for: Self.self).url(forResource: "course", withExtension: "kmz")))
+        _ = try await webView.callAsyncJavaScript("""
+            const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+            const transfer = new DataTransfer(); transfer.items.add(new File([bytes], 'course.kmz'));
+            const input = document.querySelector('input[type=file]'); input.files = transfer.files;
+            input.dispatchEvent(new Event('change', {bubbles:true}));
+            """, arguments: ["base64": fixture.base64EncodedString()], in: nil, contentWorld: .page)
+        var imported = false
+        for _ in 0..<100 {
+            if let count = try? await webView.evaluateJavaScript("JSON.parse(localStorage.getItem('rr_hiking_course_v1') || 'null')?.overlay?.features?.length || 0"), (count as? Int ?? 0) == 4 { imported = true; break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertTrue(imported, "Actual WKWebView must parse and retain the KMZ routes, place and polygon")
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let maps = try MapFiles(directory: root.appendingPathComponent("OfflineMaps"))
         var data = Data(repeating: 0, count: 512)
@@ -115,5 +128,38 @@ final class HikingTests: XCTestCase {
         XCTAssertTrue((listed?["maps"] as? [[String: Any]])?.contains(where: { $0["id"] as? String == id }) == true)
         let read = try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeMaps', 'read', {id, offset: 0, length: 8})", arguments: ["id": id], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertEqual(read?["base64"] as? String, data.prefix(8).base64EncodedString())
+    }
+    @MainActor
+    func testRealCoreLocationRecordingThroughWKBridge() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let controller = try XCTUnwrap(scene.windows.first(where: { $0.isKeyWindow })?.rootViewController as? HikingBridgeViewController)
+        let webView = try XCTUnwrap(controller.webView)
+        for _ in 0..<100 {
+            if (try? await webView.evaluateJavaScript("typeof window.Capacitor?.nativePromise")) as? String == "function" { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        func call(_ method: String, _ options: [String: Any] = [:]) async throws -> Any? {
+            try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeRun', method, options)", arguments: ["method": method, "options": options], in: nil, contentWorld: .page)
+        }
+        _ = try await call("start", ["config": config])
+        var received = false
+        for _ in 0..<100 {
+            let response = try await call("snapshot") as? [String: Any]
+            if let run = response?["run"] as? [String: Any], let points = run["trackPoints"] as? [[String: Any]], !points.isEmpty {
+                XCTAssertEqual(run["status"] as? String, "recording")
+                XCTAssertEqual(points[0]["lat"] as? Double ?? 0, 37.66, accuracy: 0.001)
+                received = true; break
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        _ = try await call("pause")
+        let paused = try await call("snapshot") as? [String: Any]
+        XCTAssertEqual((paused?["run"] as? [String: Any])?["status"] as? String, "paused")
+        _ = try await call("resume")
+        _ = try await call("finish")
+        _ = try await call("acknowledge", ["runId": "ios-test"])
+        let completed = try await call("snapshot") as? [String: Any]
+        XCTAssertTrue(completed?["run"] is NSNull)
+        XCTAssertTrue(received, "Core Location must deliver the Simulator's location into the native SQLite recording")
     }
 }
