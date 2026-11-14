@@ -74,6 +74,7 @@ jobs:
       - name: Safari engine offline maps, KMZ and native bridge flows
         env:
           TEST_BROWSER: webkit
+          TEST_MAP_ENGINE: canvas
           TEST_NATIVE_PLATFORM: ios
         run: node --test tests/maps-browser.test.mjs tests/mobile-browser.test.mjs
       - uses: actions/upload-artifact@v4

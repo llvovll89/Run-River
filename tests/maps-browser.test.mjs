@@ -34,7 +34,7 @@ test("downloaded trail map renders after network loss and survives reopening", {
     let browser;
     try {
         browser = await browserType.launch({args: ["--enable-webgl", "--enable-unsafe-swiftshader"]});
-        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
+        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce", ...(process.env.TEST_MAP_ENGINE === "canvas" ? {userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"} : {})});
         const externalRequests = [];
         await context.route("**/*", route => {
             const url = route.request().url();
@@ -51,11 +51,12 @@ test("downloaded trail map renders after network loss and survives reopening", {
             throw new Error(`${error.message}\n${await page.locator("body").innerText()}\n${errors.join("\n")}\nExternal: ${externalRequests.join(", ")}`);
         });
         assert.equal(mapRequests, 1);
+        if (process.env.TEST_MAP_ENGINE === "canvas") assert.equal(await page.getByTestId("offline-trail-map").getAttribute("data-map-engine"), "canvas");
         allowDownload = false;
         await page.reload({waitUntil: "networkidle"});
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         assert.equal(mapRequests, 1, "Stored map must not be fetched again");
-        assert.ok(await page.locator(".maplibregl-map").evaluate(element => element.clientHeight >= 300), "The rendered map must have a visible viewport");
+        assert.ok(await page.getByTestId("offline-trail-map").evaluate(element => element.clientHeight >= 300), "The rendered map must have a visible viewport");
         await mkdir("output/playwright", {recursive: true});
         await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/offline-trail-map.png"});
         assert.deepEqual(await page.getByRole("alert").allTextContents(), [""]);

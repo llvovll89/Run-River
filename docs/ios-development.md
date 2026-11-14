@@ -24,6 +24,7 @@ npm run ios:open
 - 좌표·거리·시간은 SQLite 트랜잭션으로 저장한다. KMZ 코스 설정은 한 번만 저장한다. 화면의 타이머는 GPS 기록의 실행 주체가 아니다.
 - 일시정지·종료 시 위치 업데이트를 멈춘다. 프로세스 종료 후에는 마지막 저장 지점에서 일시정지 상태로 복구한다. 종료되거나 GPS가 끊긴 구간의 거리를 추정해 더하지 않는다.
 - PMTiles는 Files 선택기에서 가져오거나 HTTPS로 다운로드한다. 200MB 제한, 헤더·선택적 SHA-256 검증, 임시 파일 후 원자적 게시, 범위 읽기를 사용한다. 지도는 iCloud 백업 대상에서 제외하며 앱 삭제 시 함께 지워진다.
+- iPhone·iPad는 Leaflet과 Protomaps의 Canvas2D 렌더러로 같은 PMTiles를 표시한다. iOS WebView에서 확인된 빈 WebGL 지도 문제를 피하며, KMZ와 현재 위치·기록·코스도 2D로 표시한다. Android와 데스크톱의 기존 MapLibre 렌더러는 유지한다.
 - KMZ/KML/GPX 코스는 앱 화면의 파일 입력에서 가져온다. 완성한 기록의 GPX는 Files 내보내기를 사용한다. 완료 기록은 화면 저장 성공 후에만 네이티브 저장소에서 정리한다.
 - GPX는 iCloud 없이도 Files의 `나의 iPhone → Run River → GPX`에 저장할 수 있다. 앱이 이 로컬 폴더를 마련하며, 운동 SQLite와 지도 파일은 Files에 노출하지 않는 별도 앱 전용 공간에 남는다.
 
