@@ -43,6 +43,10 @@ public class StaticPageRequestTest {
         }) assertSame(original, StaticPageRequest.rewrite(original, "https", "localhost"));
     }
     @Test public void capacitorServerServesTheCorrectPackagedHtml() throws Exception {
+        android.content.pm.PackageInfo webView = new android.content.pm.PackageInfo();
+        webView.packageName = "com.google.android.webview";
+        webView.versionName = "130.0.0";
+        org.robolectric.shadows.ShadowWebView.setCurrentWebViewPackage(webView);
         try (ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup()) {
             MainActivity activity = controller.get();
             assertNotNull(activity.getBridge());
