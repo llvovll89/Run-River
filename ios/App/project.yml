@@ -38,7 +38,10 @@ targets:
   HikingTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [HikingTests]
+    sources:
+      - path: HikingTests
+      - path: ../../public/offline-maps/bukhansan.pmtiles
+        buildPhase: resources
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

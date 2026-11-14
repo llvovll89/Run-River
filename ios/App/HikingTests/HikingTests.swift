@@ -93,6 +93,11 @@ final class HikingTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let controller = try XCTUnwrap(scene.windows.first(where: { $0.isKeyWindow })?.rootViewController as? HikingBridgeViewController)
         let webView = try XCTUnwrap(controller.webView)
+        let rules = try await WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "offline-hiking", encodedContentRuleList: """
+            [{"trigger":{"url-filter":"^https?://"},"action":{"type":"block"}}]
+            """)
+        webView.configuration.userContentController.add(try XCTUnwrap(rules))
+        defer { webView.configuration.userContentController.removeAllContentRuleLists() }
         webView.load(URLRequest(url: URL(string: "capacitor://localhost/hiking/")!))
         var loaded = false
         for _ in 0..<100 {
@@ -119,15 +124,23 @@ final class HikingTests: XCTestCase {
         XCTAssertTrue(imported, "Actual WKWebView must parse and retain the KMZ routes, place and polygon")
         let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let maps = try MapFiles(directory: root.appendingPathComponent("OfflineMaps"))
-        var data = Data(repeating: 0, count: 512)
-        data.replaceSubrange(0..<8, with: Data("PMTiles".utf8) + [3]); data[99] = 1
-        let source = directory.appendingPathComponent("bridge.pmtiles"); try data.write(to: source)
+        let source = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "bukhansan", withExtension: "pmtiles"))
+        let data = try Data(contentsOf: source)
         let id = try maps.importFile(source)
         defer { try? maps.remove(id) }
         let listed = try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeMaps', 'list', {})", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertTrue((listed?["maps"] as? [[String: Any]])?.contains(where: { $0["id"] as? String == id }) == true)
         let read = try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeMaps', 'read', {id, offset: 0, length: 8})", arguments: ["id": id], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertEqual(read?["base64"] as? String, data.prefix(8).base64EncodedString())
+        _ = try await webView.callAsyncJavaScript("localStorage.setItem('rr_offline_map', id); window.dispatchEvent(new Event('offline-map-changed'));", arguments: ["id": id], in: nil, contentWorld: .page)
+        var rendered = false
+        for _ in 0..<150 {
+            if (try? await webView.evaluateJavaScript("!!document.querySelector('[data-testid=offline-trail-map][data-map-ready=true]')")) as? Bool == true { rendered = true; break }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        XCTAssertTrue(rendered, "The real iOS WebView must render its native PMTiles file and KMZ with HTTP/HTTPS requests blocked")
+        let image = try await webView.takeSnapshot(configuration: nil)
+        let screenshot = XCTAttachment(image: image); screenshot.name = "iPhone-native-offline-map-KMZ"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
     @MainActor
     func testRealCoreLocationRecordingThroughWKBridge() async throws {
