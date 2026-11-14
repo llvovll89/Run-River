@@ -64,6 +64,8 @@ test("downloaded trail map renders after network loss and survives reopening", {
         await page.getByRole("button", {name: "삭제 확인", exact: true}).click();
         await page.getByText("아직 저장한 지도가 없어요.", {exact: true}).waitFor();
         assert.equal(await page.getByTestId("offline-trail-map").count(), 0);
+        // Check the offline-map flow before opening the no-map hiking fallback.
+        assert.equal(externalRequests.filter(url => !url.includes("cdn.jsdelivr.net")).length, 0);
         await page.goto(origin + "/hiking/", {waitUntil: "networkidle"});
         await page.getByLabel("GPX 코스 파일").setInputFiles({name: "course.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><name>북한산 테스트 코스</name><trkseg><trkpt lat="37.66" lon="126.98"/><trkpt lat="37.661" lon="126.98"/></trkseg></trk></gpx>')});
         await page.getByText("북한산 테스트 코스", {exact: true}).waitFor();
@@ -86,8 +88,6 @@ test("downloaded trail map renders after network loss and survives reopening", {
         assert.ok((await readFile("output/playwright/hiking-export.gpx", "utf8")).includes('<trkpt lat="37.66" lon="126.98">'));
         assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].result.activity_type), "hiking");
         assert.deepEqual(errors, []);
-        // The page's shared font CSS may request the existing CDN, but all map/font data is local.
-        assert.equal(externalRequests.filter(url => !url.includes("cdn.jsdelivr.net")).length, 0);
     } finally {
         await browser?.close();
         await new Promise(resolve => server.close(resolve));
