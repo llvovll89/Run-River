@@ -31,11 +31,13 @@ await cp(path.join(root, "postcss.config.js"), path.join(stage, "postcss.config.
 
 // The web app keeps its server routes. Replace them only in this generated build.
 await rm(path.join(stage, "src/middleware.ts"));
+await cp(path.join(stage, "src/app/running/page.tsx"), path.join(stage, "src/components/WebRunningPage.tsx"));
 await rm(path.join(stage, "src/app/auth/callback"), {recursive: true});
 await mkdir(path.join(stage, "src/app/auth/callback"), {recursive: true});
 for (const [source, destination] of [
     ["home.tsx", "page.tsx"],
     ["history.tsx", "history/page.tsx"],
+    ["running.tsx", "running/page.tsx"],
     ["auth-callback.tsx", "auth/callback/page.tsx"],
 ]) {
     await cp(path.join(root, "mobile/pages", source), path.join(stage, "src/app", destination));
