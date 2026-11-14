@@ -51,7 +51,19 @@ test("downloaded trail map renders after network loss and survives reopening", {
             throw new Error(`${error.message}\n${await page.locator("body").innerText()}\n${errors.join("\n")}\nExternal: ${externalRequests.join(", ")}`);
         });
         assert.equal(mapRequests, 1);
-        if (process.env.TEST_MAP_ENGINE === "canvas") assert.equal(await page.getByTestId("offline-trail-map").getAttribute("data-map-engine"), "canvas");
+        if (process.env.TEST_MAP_ENGINE === "canvas") {
+            assert.equal(await page.getByTestId("offline-trail-map").getAttribute("data-map-engine"), "canvas");
+            await page.waitForFunction(() => [...document.querySelectorAll("canvas.leaflet-tile")].some(canvas => {
+                if (!canvas.width || !canvas.height) return false;
+                const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+                const colors = new Set();
+                for (let i = 0; i < data.length; i += 64) {
+                    if (data[i+3]) colors.add((data[i]<<16) | (data[i+1]<<8) | data[i+2]);
+                    if (colors.size > 4) return true;
+                }
+                return false;
+            }));
+        }
         allowDownload = false;
         await page.reload({waitUntil: "networkidle"});
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();

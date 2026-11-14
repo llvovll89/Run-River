@@ -142,10 +142,24 @@ final class HikingTests: XCTestCase {
         _ = try await webView.callAsyncJavaScript("localStorage.setItem('rr_offline_map', id); window.dispatchEvent(new Event('offline-map-changed'));", arguments: ["id": id], in: nil, contentWorld: .page)
         var rendered = false
         for _ in 0..<150 {
-            if (try? await webView.evaluateJavaScript("!!document.querySelector('[data-testid=offline-trail-map][data-map-ready=true]')")) as? Bool == true { rendered = true; break }
+            if (try? await webView.evaluateJavaScript("""
+                (() => {
+                    if (!document.querySelector('[data-map-engine=canvas][data-map-ready=true]')) return false;
+                    return [...document.querySelectorAll('canvas.leaflet-tile')].some(canvas => {
+                        const context = canvas.getContext('2d'); if (!context || !canvas.width || !canvas.height) return false;
+                        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+                        const colors = new Set();
+                        for (let i = 0; i < pixels.length; i += 64) {
+                            if (pixels[i+3]) colors.add((pixels[i]<<16) | (pixels[i+1]<<8) | pixels[i+2]);
+                            if (colors.size > 4) return true;
+                        }
+                        return false;
+                    });
+                })()
+                """)) as? Bool == true { rendered = true; break }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
-        XCTAssertTrue(rendered, "The real iOS WebView must render its native PMTiles file and KMZ with HTTP/HTTPS requests blocked")
+        XCTAssertTrue(rendered, "With HTTP/HTTPS blocked, native PMTiles must produce actual multicolor Canvas pixels, not an empty map widget")
         _ = try await webView.evaluateJavaScript("document.querySelector('[data-testid=offline-trail-map]').scrollIntoView({block: 'center'})")
         let image = try await webView.takeSnapshot(configuration: nil)
         let screenshot = XCTAttachment(image: image); screenshot.name = "iPhone-native-offline-map-KMZ"; screenshot.lifetime = .keepAlways; add(screenshot)
