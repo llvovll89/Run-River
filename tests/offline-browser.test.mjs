@@ -51,7 +51,7 @@ before(async () => {
 after(async () => { server?.kill(); await new Promise((resolve) => proxy?.close(resolve)); });
 
 async function prepare(browserType) {
-    const browser = await browserType.launch();
+    const browser = await browserType.launch({args: browserType === chromium ? ["--enable-unsafe-swiftshader"] : []});
     const context = await browser.newContext({
         ...devices["iPhone 13"], defaultBrowserType: undefined,
         reducedMotion: "reduce",
@@ -82,6 +82,19 @@ async function prepare(browserType) {
     await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
     return {browser, context, page};
 }
+
+test("Chromium: saved map and bundled font render with the network completely offline", {timeout: 120000}, async () => {
+    const {browser, context, page} = await prepare(chromium);
+    try {
+        await page.goto(`${origin}/maps`);
+        await page.getByRole("button", {name: "북한산 지도 저장", exact: true}).click();
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        await context.setOffline(true);
+        await page.reload();
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/pwa-map-offline.png"});
+    } finally { await browser.close(); }
+});
 
 for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
     test(`${name}: offline GPS, tab restart, paused recovery, durable guest result`, {timeout: 120000}, async () => {

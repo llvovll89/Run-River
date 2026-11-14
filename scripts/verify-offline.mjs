@@ -1,4 +1,5 @@
 import {spawnSync} from "node:child_process";
+import "./prepare-map-assets.mjs";
 
 // Use a local mocked API so browser tests cannot touch production accounts/data.
 const env = {...process.env, NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:3137", NEXT_PUBLIC_SUPABASE_ANON_KEY: "offline-test-placeholder", NEXT_PUBLIC_KAKAO_MAP_KEY: "offline-test-placeholder"};
