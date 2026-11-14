@@ -21,7 +21,8 @@ final class HikingUITests: XCTestCase {
         pause.tap()
         let resume = app.webViews.buttons["기록 재개"]
         XCTAssertTrue(resume.waitForExistence(timeout: 10)); resume.tap()
-        app.webViews.buttons["이동 종료"].tap()
+        let finish = app.webViews.buttons["운동 종료"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 10)); finish.tap()
         let confirm = app.webViews.buttons["종료 확인"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 10)); confirm.tap()
         let save = app.webViews.buttons["결과 저장하기"]
