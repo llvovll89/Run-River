@@ -74,6 +74,7 @@ test("packaged app opens and navigates without external network or a service wor
         await nativePage.getByRole("button", {name: "운동 종료", exact: true}).click();
         await nativePage.getByRole("button", {name: "종료 확인", exact: true}).click();
         await nativePage.getByRole("button", {name: "결과 저장하기", exact: true}).waitFor();
+        await nativePage.evaluate(() => window.scrollTo(0, 0));
         await nativePage.screenshot({path: "output/playwright/native-recording.png", fullPage: true});
         await nativePage.evaluate(() => {
             const original = Storage.prototype.setItem;
