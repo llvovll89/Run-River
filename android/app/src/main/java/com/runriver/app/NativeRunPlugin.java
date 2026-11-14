@@ -33,10 +33,13 @@ public final class NativeRunPlugin extends Plugin {
         }
         android.net.Uri destination = result.getData().getData();
         getBridge().execute(() -> {
-            try (OutputStream output = getContext().getContentResolver().openOutputStream(destination, "wt")) {
-                if (output == null) throw new java.io.IOException("선택한 위치에 GPX를 저장하지 못했어요.");
-                output.write(call.getString("gpx", "").getBytes(StandardCharsets.UTF_8));
-                output.flush(); call.resolve();
+            try {
+                try (OutputStream output = getContext().getContentResolver().openOutputStream(destination, "wt")) {
+                    if (output == null) throw new java.io.IOException("선택한 위치에 GPX를 저장하지 못했어요.");
+                    output.write(call.getString("gpx", "").getBytes(StandardCharsets.UTF_8));
+                    output.flush();
+                }
+                call.resolve();
             } catch (Exception error) { call.reject(error.getMessage(), error); }
         });
     }
