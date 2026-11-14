@@ -14,7 +14,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         if (bridge != null) bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                WebResourceRequest page = StaticPageRequest.rewrite(request, bridge.getScheme(), bridge.getConfig().getHostname());
+                WebResourceRequest page = StaticPageRequest.rewrite(request, MainActivity.this.bridge.getScheme(), MainActivity.this.bridge.getConfig().getHostname());
                 return super.shouldInterceptRequest(view, page);
             }
         });
