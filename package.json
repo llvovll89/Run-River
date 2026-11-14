@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-map-assets.mjs",
+    "prebuild": "node scripts/prepare-map-assets.mjs",
     "dev": "next dev",
     "check:env": "node scripts/validate-env.mjs",
     "verify:deploy": "npm run check:env && npm run build",
@@ -17,17 +19,20 @@
     "android:run": "npm run android:sync && cap run android"
   },
   "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tailwindcss/postcss": "^4.2.4",
+    "maplibre-gl": "6.18.0",
     "next": "^15.0.0",
+    "pmtiles": "4.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.8.1",
-    "@capacitor/android": "8.6.2",
-    "@capacitor/core": "8.6.2"
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.6.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -37,7 +42,6 @@
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.4",
     "tsx": "4.23.15",
-    "typescript": "^5",
-    "@capacitor/cli": "8.6.2"
+    "typescript": "^5"
   }
 }

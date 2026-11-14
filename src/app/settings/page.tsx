@@ -336,6 +336,7 @@ export default function SettingsPage() {
     return (
         <main className="app-screen settings-screen min-h-dvh" style={{background: "var(--c-bg)"}}>
             <ScreenHeader title="나에게 맞는 러닝" description="목표와 기록 방식을 내 몸에 맞춰 조절해요." />
+            <a href="/maps" className="resume-record block m-5"><strong>오프라인 지도 준비</strong><span>산에 가기 전에 지도를 저장하고 관리해요.</span></a>
             <div className="px-5 py-4">
                 <div className="mt-2 flex items-center gap-2">
                     <span

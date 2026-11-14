@@ -8,10 +8,13 @@ import {formatDuration, formatPace} from "@/lib/utils";
 import type {RunConfig} from "@/types";
 import ScreenHeader from "@/components/ScreenHeader";
 import TintedButton from "@/components/TintedButton";
+import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
+const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
 
 export default function NativeRunScreen() {
+    const mapPack = useOfflineMapPack();
     const [run, setRun] = useState<NativeRunSnapshot | null>(null);
     const [error, setError] = useState("");
     const [ready, setReady] = useState(false);
@@ -97,7 +100,7 @@ export default function NativeRunScreen() {
             {run && <>
                 <p className="text-sm" role="status">{run.status === "recording" ? stale ? "GPS 수신을 기다리고 있어요 · 하늘이 보이는 곳에서 잠시 기다려주세요" : `GPS 수신 중 · 정확도 약 ${Math.round(run.accuracy ?? 0)}m` : run.status === "paused" ? "기록 일시정지 · 재개를 누르면 이어서 기록해요" : "기기에 기록을 보관했어요 · 결과를 저장해주세요"}</p>
                 <div style={{position: "relative", height: "36vh", minHeight: 230, overflow: "hidden", borderRadius: 24}}>
-                    <KakaoMap className="h-full" center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={run.config.startPoint} pathPoints={points} routePath={run.config.routePath} activityType={run.config.activityType} followUser />
+                    {mapPack ? <OfflineTrailMap pack={mapPack} currentPosition={run.position} points={points} course={run.config.routePath} follow /> : <KakaoMap className="h-full" center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={run.config.startPoint} pathPoints={points} routePath={run.config.routePath} activityType={run.config.activityType} followUser />}
                 </div>
                 <dl className="grid grid-cols-2 gap-5 py-3" aria-label="운동 측정값">
                     {[["이동 거리", `${run.distanceKm.toFixed(2)} km`], ["이동 시간", formatDuration(seconds)], ["현재 고도", run.currentAltitude == null ? "수신 대기" : `${Math.round(run.currentAltitude)} m`], ["누적 상승", `${Math.round(run.elevationGain)} m`], ["평균 페이스", formatPace(nativeRunResult(run).pace)], ["누적 하강", `${Math.round(run.elevationLoss)} m`]].map(([label, value]) => <div key={label}><dt className="text-xs mb-1" style={{color: "var(--c-text-2)"}}>{label}</dt><dd className="num text-2xl font-bold">{value}</dd></div>)}
@@ -107,7 +110,7 @@ export default function NativeRunScreen() {
                     <TintedButton disabled={busy} tone="danger-solid" onClick={() => setConfirmFinish(true)}>운동 종료</TintedButton>
                 </div> : <TintedButton tone="accent" disabled={busy} onClick={() => void exportResult()}>결과 저장하기</TintedButton>}
                 {confirmFinish && <div role="dialog" aria-modal="true" aria-label="운동 종료 확인" className="rounded-2xl p-5 space-y-4" style={{background: "var(--c-surface)"}}><p>운동을 마치고 현재까지의 기록을 보관할까요?</p><div className="flex gap-3"><TintedButton disabled={busy} tone="neutral" onClick={() => setConfirmFinish(false)}>계속 운동</TintedButton><TintedButton disabled={busy} tone="danger-solid" onClick={() => void act("finish")}>종료 확인</TintedButton></div></div>}
-                <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>화면을 꺼도 Android 위치 서비스가 기록해요. 앱 강제 종료·권한 해제·GPS 수신 불량 구간은 기록이 끊길 수 있어요. 지도 배경은 아직 인터넷 연결이 필요해요.</p>
+                <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>화면을 꺼도 Android 위치 서비스가 기록해요. 앱 강제 종료·권한 해제·GPS 수신 불량 구간은 기록이 끊길 수 있어요. {mapPack ? `저장한 지도 · ${mapPack.name}` : "오프라인 지도는 출발 전에 지도 준비 화면에서 저장해주세요."}</p>
             </>}
             <a href="/" className="inline-block underline text-sm">홈으로 돌아가기</a>
         </section>

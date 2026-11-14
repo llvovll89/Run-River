@@ -7,7 +7,7 @@ import {chromium} from "playwright";
 
 test("packaged app opens and navigates without external network or a service worker", async () => {
     const root = path.resolve("mobile-dist");
-    const mime = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".woff2": "font/woff2"};
+    const mime = {".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".woff2": "font/woff2"};
     const server = createServer(async (req, res) => {
         try {
             let file = path.resolve(root, "." + decodeURIComponent(new URL(req.url, "http://localhost").pathname));

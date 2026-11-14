@@ -3,6 +3,7 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawnSync} from "node:child_process";
 import nextEnv from "@next/env";
+import "./prepare-map-assets.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const stage = path.resolve(root, ".mobile-build");
@@ -20,7 +21,7 @@ await mkdir(stage, {recursive: true});
 await cp(path.join(root, "src"), path.join(stage, "src"), {recursive: true});
 await cp(path.join(root, "public"), path.join(stage, "public"), {
     recursive: true,
-    filter: (source) => !/^(sw|workbox-.*|worker-.*)\.js$/.test(path.basename(source)),
+    filter: (source) => !/^(sw|workbox-.*|worker-.*)\.js$/.test(path.basename(source)) && path.basename(source) !== "offline-maps",
 });
 await cp(path.join(root, "mobile/next.config.mjs"), path.join(stage, "next.config.mjs"));
 await cp(path.join(root, "package.json"), path.join(stage, "package.json"));
