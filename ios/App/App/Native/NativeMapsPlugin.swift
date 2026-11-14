@@ -1,5 +1,6 @@
 import Capacitor
 import UniformTypeIdentifiers
+import UIKit
 
 @objc(NativeMapsPlugin)
 public final class NativeMapsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate, URLSessionDownloadDelegate {

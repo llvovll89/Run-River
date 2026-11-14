@@ -1,6 +1,7 @@
 import Capacitor
 import CoreLocation
 import UniformTypeIdentifiers
+import UIKit
 
 @objc(NativeRunPlugin)
 public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate, UIDocumentPickerDelegate {
@@ -92,8 +93,12 @@ public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManag
         if let call = permissionCall, manager.authorizationStatus != .notDetermined {
             let action = permissionAction!; permissionCall = nil; permissionAction = nil
             authorized(call, action: action)
-        } else if recorder?.recording == true, manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
-            stopOnError("위치 권한이 해제되어 기록을 일시정지했어요.")
+        } else if recorder?.recording == true {
+            if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
+                stopOnError("위치 권한이 해제되어 기록을 일시정지했어요.")
+            } else if manager.accuracyAuthorization != .fullAccuracy {
+                stopOnError("정확한 위치가 꺼져 기록을 일시정지했어요. 아이폰 설정을 확인해주세요.")
+            }
         }
     }
     public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {

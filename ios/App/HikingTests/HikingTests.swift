@@ -1,6 +1,7 @@
 import XCTest
 import CoreLocation
 import WebKit
+import UIKit
 @testable import App
 
 final class HikingTests: XCTestCase {
