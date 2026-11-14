@@ -112,11 +112,11 @@ export default function NativeRunScreen() {
             {(error || run?.error) && <p role="alert" className="rounded-2xl p-4" style={{background: "var(--c-elevated)", color: "var(--c-danger)"}}>{error || run?.error}</p>}
             {!ready && <p role="status">기기에 저장된 운동을 확인하고 있어요…</p>}
             {run && <>
-                {run.config.courseName && <p className="text-sm font-semibold">따라가는 코스 · {run.config.courseName}</p>}
+                {run.config.courseName && <p className="text-sm font-semibold">{(run.config.routePath?.length ?? 0) >= 2 ? "따라가는 코스" : "가져온 표시"} · {run.config.courseName}</p>}
                 {offCourse && <p role="alert" className="rounded-xl p-3 text-sm" style={{background: "var(--c-elevated)"}}>준비한 코스에서 벗어나 있어요. GPS 위치와 실제 길을 함께 확인해주세요.</p>}
                 <p className="text-sm" role="status">{run.status === "recording" ? stale ? "GPS 수신을 기다리고 있어요 · 하늘이 보이는 곳에서 잠시 기다려주세요" : `GPS 수신 중 · 정확도 약 ${Math.round(run.accuracy ?? 0)}m` : run.status === "paused" ? "기록 일시정지 · 재개를 누르면 이어서 기록해요" : "기기에 기록을 보관했어요 · 결과를 저장해주세요"}</p>
                 <div style={{position: "relative", height: "36vh", minHeight: 230, overflow: "hidden", borderRadius: 24}}>
-                    {mapPack ? <OfflineTrailMap pack={mapPack} currentPosition={run.position} points={points} course={run.config.routePath} follow /> : <KakaoMap className="h-full" center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={run.config.startPoint} pathPoints={points} routePath={run.config.routePath} activityType={run.config.activityType} followUser />}
+                    {mapPack || run.config.courseOverlay ? <OfflineTrailMap pack={mapPack} overlay={run.config.courseOverlay} currentPosition={run.position} points={points} course={run.config.routePath} follow /> : <KakaoMap className="h-full" center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={run.config.startPoint} pathPoints={points} routePath={run.config.routePath} activityType={run.config.activityType} followUser />}
                 </div>
                 <dl className="grid grid-cols-2 gap-5 py-3" aria-label="운동 측정값">
                     {[["이동 거리", `${run.distanceKm.toFixed(2)} km`], ["기록 시간", formatDuration(seconds)], ["현재 고도", run.currentAltitude == null ? "수신 대기" : `${Math.round(run.currentAltitude)} m`], ["누적 상승", `${Math.round(run.elevationGain)} m`], ["평균 페이스", formatPace(nativeRunResult(run).pace)], ["누적 하강", `${Math.round(run.elevationLoss)} m`]].map(([label, value]) => <div key={label}><dt className="text-xs mb-1" style={{color: "var(--c-text-2)"}}>{label}</dt><dd className="num text-2xl font-bold">{value}</dd></div>)}

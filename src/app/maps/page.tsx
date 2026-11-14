@@ -50,6 +50,7 @@ export default function MapsPage() {
             {pack && <section className="space-y-2" aria-label="오프라인 지도 미리보기"><h2 className="text-lg font-bold">{pack.name} 미리보기</h2><div style={{height: 400, borderRadius: 20, overflow: "hidden"}}><OfflineTrailMap key={pack.id} pack={pack} /></div><p className="text-xs" style={{color: "var(--c-text-2)"}}>갈색 점선은 산길·보행로예요. 지도 범위 밖은 추가로 저장해야 해요.</p></section>}
             <section className="space-y-3"><h2 className="text-lg font-bold">다른 지역 지도 가져오기</h2><p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>Protomaps 형식의 PMTiles 파일을 가져올 수 있어요. 지도별 최대 200MB를 지원해요.</p><TintedButton tone="neutral" disabled={busy} onClick={() => { if (Capacitor.getPlatform() === "android") void action(() => importOfflineMap(), "지도를 가져왔어요."); else fileInput.current?.click(); }}>지도 파일 가져오기</TintedButton><input ref={fileInput} type="file" accept=".pmtiles" className="sr-only" aria-label="PMTiles 지도 파일" onChange={event => { const file = event.target.files?.[0]; if (file) void action(() => importOfflineMap(file), "지도를 가져왔어요."); event.target.value = ""; }} /></section>
             <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>Android 앱은 앱 전용 공간에 지도를 보관해요. 웹에서는 브라우저 데이터 정리로 지도가 지워질 수 있어요. 이동 기록은 지도 삭제와 별도로 보관돼요. 현장의 통제·표지판을 먼저 확인해주세요.</p>
+            <a href="/hiking" className="block underline text-sm">GPX·KMZ 파일을 지도에 겹쳐보기</a>
             <a href="/" className="inline-block underline text-sm">운동 시작 화면으로</a>
         </div>
         <AppNavigation />

@@ -4,6 +4,7 @@ import {spawn} from "node:child_process";
 import {mkdir} from "node:fs/promises";
 import http from "node:http";
 import {chromium, webkit, devices} from "playwright";
+import {kmzFixture} from "./kmz-fixture.mjs";
 import nextEnv from "@next/env";
 
 nextEnv.loadEnvConfig(process.cwd(), false);
@@ -93,6 +94,14 @@ test("Chromium: saved map and bundled font render with the network completely of
         await page.reload();
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/pwa-map-offline.png"});
+        await page.goto(`${origin}/hiking`);
+        await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "offline.kmz", mimeType: "application/vnd.google-earth.kmz", buffer: Buffer.from(kmzFixture)});
+        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        await page.reload();
+        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/kmz-offline-background.png"});
     } finally { await browser.close(); }
 });
 

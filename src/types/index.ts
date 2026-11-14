@@ -1,3 +1,6 @@
+import type {FeatureCollection, Point, LineString, Polygon} from "geojson";
+export type CourseOverlay = FeatureCollection<Point | LineString | Polygon, {name: string}>;
+
 export interface LatLng {
     lat: number;
     lng: number;
@@ -48,6 +51,7 @@ export interface RunConfig {
     endPoint: LatLng | null;
     routePath?: LatLng[];
     courseName?: string;
+    courseOverlay?: CourseOverlay;
     activityType: ActivityType;
     /** 목표 거리 모드일 때 설정 (km). null이면 지도/시간 모드 */
     goalDistance: number | null;
