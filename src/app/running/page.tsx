@@ -30,8 +30,11 @@ import {
 } from "@/lib/runTuning";
 import {SheetHandle, SheetActionGrid} from "@/components/RunSheetParts";
 import {readActiveRun, writeActiveRun, clearActiveRun, saveLocalResult, navigatePublic} from "@/lib/runStorage";
+import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
+import {distanceToCourseMeters} from "@/lib/hiking";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
+const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
 
 const PACE_COACHING_INTERVAL_MS = 1000 * 120;
 
@@ -137,6 +140,7 @@ function calcMinDistanceToPathKm(
 }
 
 export default function RunningPage() {
+    const mapPack = useOfflineMapPack();
     const router = useRouter();
     const [config, setConfig] = useState<RunConfig | null>(null);
     const [configError, setConfigError] = useState(false);
@@ -609,7 +613,7 @@ export default function RunningPage() {
                         showToast(
                             `화면이 ${secs}초 꺼져 있었어요. 이 구간은 추적되지 않았어요.`,
                         );
-                        if (!isPausedRef.current && config) {
+                        if (!isPausedRef.current && config && config.activityType !== "hiking") {
                             const suggestedDistanceKm = estimateGapDistanceKm(
                                 trackPoints,
                                 totalDistance,
@@ -727,7 +731,7 @@ export default function RunningPage() {
         const ALERT_COOLDOWN_MS = runTuning.offRouteAlertCooldownMs;
         const now = Date.now();
 
-        const minDistanceToRoute = calcMinDistanceToPathKm(
+        const minDistanceToRoute = config.activityType === "hiking" ? distanceToCourseMeters(position, config.routePath) / 1000 : calcMinDistanceToPathKm(
             position,
             config.routePath,
             nearestRouteIdxRef,
@@ -1008,7 +1012,7 @@ export default function RunningPage() {
         const MIN_MOVE_DISTANCE_KM = runTuning.autoPauseMinMoveKm;
         const REQUIRED_STILLNESS_MS = runTuning.autoPauseStillnessMs;
 
-        if (!profile.autoPause || isPaused || !isTracking) {
+        if (!profile.autoPause || config?.activityType === "hiking" || isPaused || !isTracking) {
             if (autoPauseTimerRef.current)
                 clearTimeout(autoPauseTimerRef.current);
             autoPauseTimerRef.current = null;
@@ -1086,7 +1090,7 @@ export default function RunningPage() {
 
     // 음성 안내: 매 1km 스플릿 + 직전 구간 대비 코칭
     useEffect(() => {
-        if (!voiceEnabled || isPaused) return;
+        if (!voiceEnabled || isPaused || config?.activityType === "hiking") return;
         const km = Math.floor(effectiveDistance);
         if (km > 0 && km > lastAnnouncedKmRef.current) {
             lastAnnouncedKmRef.current = km;
@@ -1126,7 +1130,7 @@ export default function RunningPage() {
 
     // 음성 코칭: 주기적으로 현재 페이스 존과 가이드를 간단히 안내
     useEffect(() => {
-        if (!voiceEnabled || isPaused || arrived || !config) return;
+        if (!voiceEnabled || isPaused || arrived || !config || config.activityType === "hiking") return;
         if (effectiveDistance < 0.3 || elapsed < 90) return;
 
         const now = Date.now();
@@ -1242,7 +1246,7 @@ export default function RunningPage() {
             style={{background: "var(--c-bg)"}}
         >
             <h1 className="sr-only">운동 실시간 기록</h1>
-            <KakaoMap
+            {mapPack ? <div className="absolute inset-0"><OfflineTrailMap pack={mapPack} currentPosition={position} points={trackPoints} course={config.routePath} follow={followUser} /></div> : <KakaoMap
                 offlineRouteTop={topPanelCollapsed ? "24%" : "54%"}
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??
@@ -1255,12 +1259,13 @@ export default function RunningPage() {
                 }
                 heading={isPaused ? undefined : heading}
                 pathPoints={pathPoints}
+                routePath={config.routePath}
                 showArrivalRadius
                 activityType={config.activityType}
                 followUser={followUser}
                 onUserDrag={() => setFollowUser(false)}
                 className="absolute inset-0 h-full"
-            />
+            />}
 
             {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
             {!followUser && (
@@ -1448,7 +1453,7 @@ export default function RunningPage() {
                             >
                                 {isPaused
                                     ? "일시정지"
-                                    : (isRun ? "러닝" : "걷기") + " 중"}
+                                    : (config.activityType === "hiking" ? "하이킹" : isRun ? "러닝" : "걷기") + " 중"}
                             </span>
                             {/* 페이스존 밽지 */}
                             {!isPaused && pace > 0 && (

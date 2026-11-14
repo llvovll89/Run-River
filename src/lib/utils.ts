@@ -40,11 +40,12 @@ export function calcPace(distanceKm: number, seconds: number): number {
  */
 export function getPaceZone(
   pace: number,
-  activityType: "running" | "walking"
+  activityType: "running" | "walking" | "hiking"
 ): { label: string; color: string } {
   if (!pace || !isFinite(pace) || pace === 0) {
     return { label: "대기", color: "#636366" };
   }
+  if (activityType === "hiking") return {label: "산행", color: "#627c50"};
   if (activityType === "running") {
     if (pace < 4.5) return { label: "빠름", color: "#ff453a" };
     if (pace < 6.5) return { label: "적정", color: "#89ac71" };
@@ -58,7 +59,7 @@ export function getPaceZone(
 
 export function calcCaloriesByPace(
   pace: number,
-  activityType: "running" | "walking",
+  activityType: "running" | "walking" | "hiking",
   weightKg: number,
   durationSeconds: number,
 ): number {
@@ -78,8 +79,9 @@ export function calcCaloriesByPace(
 
 export function getPaceGuidance(
   pace: number,
-  activityType: "running" | "walking"
+  activityType: "running" | "walking" | "hiking"
 ): string {
+  if (activityType === "hiking") return "경사와 노면에 맞춰 편안하게 이동해주세요";
   if (!pace || !isFinite(pace) || pace === 0) return "페이스 측정 중";
 
   if (activityType === "running") {

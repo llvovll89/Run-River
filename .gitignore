@@ -15,6 +15,7 @@
 /.mobile-build/
 /mobile-dist/
 /public/map-runtime/
+/supabase/.temp/
 /android/**/build/
 /android/app/src/main/assets/
 /android/capacitor-cordova-android-plugins/

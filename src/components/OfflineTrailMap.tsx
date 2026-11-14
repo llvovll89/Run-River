@@ -52,7 +52,7 @@ export default function OfflineTrailMap({pack, currentPosition, points = [], cou
                     container: container.current,
                     style: style(`pmtiles://${archive.source.getKey()}`, pack.bounds, pack.maxZoom),
                     center: inside ? [initialPosition.current!.lng, initialPosition.current!.lat] : [(pack.bounds[0] + pack.bounds[2]) / 2, (pack.bounds[1] + pack.bounds[3]) / 2],
-                    zoom: 12, maxZoom: Math.min(pack.maxZoom + 3, 20), localIdeographFontFamily: "sans-serif", attributionControl: false,
+                    zoom: 13, maxZoom: Math.min(pack.maxZoom + 3, 20), localIdeographFontFamily: "sans-serif", attributionControl: false,
                 });
                 mapRef.current = map;
                 map.addControl(new maplibregl.NavigationControl({showCompass: true}), "top-right");
@@ -75,7 +75,14 @@ export default function OfflineTrailMap({pack, currentPosition, points = [], cou
     useEffect(() => {
         const map = mapRef.current;
         if (!loaded || !map) return;
-        const line = (id: string, path: LatLng[]) => (map.getSource(id) as GeoJSONSource)?.setData({type: "FeatureCollection", features: path.length > 1 ? [{type: "Feature", properties: {}, geometry: {type: "LineString", coordinates: path.map(point => [point.lng, point.lat])}}] : []});
+        const line = (id: string, path: LatLng[]) => {
+            const segments: LatLng[][] = [[]];
+            for (const point of path) {
+                if ("segment_start" in point && point.segment_start && segments.at(-1)!.length) segments.push([]);
+                segments.at(-1)!.push(point);
+            }
+            (map.getSource(id) as GeoJSONSource)?.setData({type: "FeatureCollection", features: segments.filter(segment => segment.length > 1).map(segment => ({type: "Feature", properties: {}, geometry: {type: "LineString", coordinates: segment.map(point => [point.lng, point.lat])}}))});
+        };
         line("recorded", points); line("course", course);
         (map.getSource("position") as GeoJSONSource)?.setData({type: "FeatureCollection", features: currentPosition ? [{type: "Feature", properties: {}, geometry: {type: "Point", coordinates: [currentPosition.lng, currentPosition.lat]}}] : []});
         if (follow && currentPosition && contains(pack, currentPosition)) map.easeTo({center: [currentPosition.lng, currentPosition.lat], duration: 500});

@@ -17,7 +17,7 @@ create table if not exists public.running_records (
   gap_adjustment_auto_enabled boolean,
   duration_seconds integer not null default 0,
   pace double precision not null default 0,
-  activity_type text not null default 'running' check (activity_type in ('running', 'walking')),
+  activity_type text not null default 'running' check (activity_type in ('running', 'walking', 'hiking')),
   altitude_start_m double precision,
   altitude_end_m double precision,
   elevation_gain_m double precision,

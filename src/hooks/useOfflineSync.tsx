@@ -18,6 +18,7 @@ import {
     RETRY_EXHAUSTED_AT,
 } from "@/lib/offlineQueue";
 import {markLocalResultUploaded} from "@/lib/runStorage";
+import {canSyncActivity} from "@/lib/activities";
 
 async function getSupabaseSyncApi() {
     return import("@/lib/supabase");
@@ -80,6 +81,7 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
 
             for (const item of queue) {
                 // Legacy/guest records have no proven owner; never assign them silently.
+                if (!canSyncActivity(item.record.activity_type)) continue;
                 if (!item.record.id || !item.record.user_id) {
                     latestError = "기존 대기 기록의 계정을 확인할 수 없어 자동 업로드하지 않았어요.";
                     continue;

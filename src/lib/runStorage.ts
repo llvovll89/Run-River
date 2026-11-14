@@ -17,7 +17,7 @@ export interface LocalRunResult {
     distance_km: number;
     duration_seconds: number;
     pace: number;
-    activity_type: "running" | "walking";
+    activity_type: "running" | "walking" | "hiking";
     pathPoints?: LatLng[];
 }
 export interface LocalResultEntry {
@@ -32,7 +32,7 @@ export function readActiveRun(): RunRecoverySnapshot | null {
     const value = JSON.parse(raw) as RunRecoverySnapshot;
     if (!value || value.version !== 1 || !value.config || !isPoint(value.config.startPoint) ||
         (value.config.endPoint !== null && !isPoint(value.config.endPoint)) ||
-        !["running", "walking"].includes(value.config.activityType) ||
+        !["running", "walking", "hiking"].includes(value.config.activityType) ||
         !Array.isArray(value.pathPoints) || !value.pathPoints.every(isPoint) ||
         !Number.isFinite(value.elapsed) || !Number.isFinite(value.totalDistance) ||
         !Number.isFinite(value.updatedAt) || typeof value.isPaused !== "boolean") {

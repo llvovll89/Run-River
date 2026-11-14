@@ -3,9 +3,10 @@ export interface LatLng {
     lng: number;
 }
 
-export type ActivityType = "running" | "walking";
+export type ActivityType = "running" | "walking" | "hiking";
 
 export interface TrackPoint extends LatLng {
+    segment_start?: boolean;
     timestamp: number;
     elapsed_seconds: number;
     distance_km: number;
@@ -46,6 +47,7 @@ export interface RunConfig {
     startPoint: LatLng;
     endPoint: LatLng | null;
     routePath?: LatLng[];
+    courseName?: string;
     activityType: ActivityType;
     /** 목표 거리 모드일 때 설정 (km). null이면 지도/시간 모드 */
     goalDistance: number | null;

@@ -49,7 +49,7 @@ function isLatLng(value: unknown): value is LatLng {
 }
 
 function isActivityType(value: unknown): value is ActivityType {
-  return value === "running" || value === "walking";
+  return value === "running" || value === "walking" || value === "hiking";
 }
 
 function isSaveRecordPayload(value: unknown): value is SaveRecordPayload {

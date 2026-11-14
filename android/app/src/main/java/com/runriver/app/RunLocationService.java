@@ -95,6 +95,7 @@ public final class RunLocationService extends Service implements LocationListene
             if (!fix.hasAccuracy() || fix.getAccuracy() > 40 || !Double.isFinite(fix.getLatitude()) || !Double.isFinite(fix.getLongitude())) return;
             // Reject old or out-of-order fixes. A gap is re-anchored, never filled with an estimate.
             if (Math.abs(SystemClock.elapsedRealtimeNanos() - fix.getElapsedRealtimeNanos()) > 30_000_000_000L) return;
+            state.put("lastFixAt", fix.getTime()).put("accuracy", fix.getAccuracy());
             double distance = state.optDouble("distanceKm", 0);
             if (anchor != null) {
                 double seconds = (fix.getElapsedRealtimeNanos() - anchor.getElapsedRealtimeNanos()) / 1e9;
@@ -103,16 +104,17 @@ public final class RunLocationService extends Service implements LocationListene
                 if (seconds > 30) { anchor = null; altitudeAnchor = Double.NaN; }
                 else {
                     double maxSpeed = "running".equals(state.getJSONObject("config").optString("activityType")) ? 25 : 9;
-                    if (meters < 1 || meters > 50 || meters / seconds * 3.6 > maxSpeed) return;
+                    if (meters < 1 || meters > 50 || meters / seconds * 3.6 > maxSpeed) { save(null); return; }
                     distance += meters / 1000d;
                 }
             }
+            boolean newSegment = anchor == null;
             anchor = new Location(fix);
             state.put("distanceKm", distance);
             JSONObject point = new JSONObject().put("lat", fix.getLatitude()).put("lng", fix.getLongitude())
                 .put("timestamp", fix.getTime()).put("distance_km", distance)
                 .put("elapsed_seconds", snapshot().optLong("elapsedMs") / 1000)
-                .put("altitude_m", JSONObject.NULL);
+                .put("altitude_m", JSONObject.NULL).put("segment_start", newSegment);
             if (fix.hasAltitude() && (Build.VERSION.SDK_INT < 26 || !fix.hasVerticalAccuracy() || fix.getVerticalAccuracyMeters() <= 15)) {
                 double altitude = fix.getAltitude();
                 if (Double.isFinite(altitude)) {

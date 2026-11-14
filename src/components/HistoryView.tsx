@@ -15,6 +15,7 @@ import DeleteRecordButton from "@/components/DeleteRecordButton";
 import EditableMemo from "@/components/EditableMemo";
 import {deriveAllBadges} from "@/lib/badges";
 import {ExportButton} from "@/components/ExportButton";
+import {activityLabel} from "@/lib/activities";
 
 
 function parseDayLocal(day: string): Date {
@@ -572,7 +573,7 @@ function RecordCard({record, rank}: {record: RunningRecord; rank: number}) {
                         className="text-xs font-bold px-2.5 py-1 rounded-full"
                         style={{background: `${accent}18`, color: accent}}
                     >
-                        {isRun ? "러닝" : "워킹"}
+                        {activityLabel(record.activity_type)}
                     </span>
                     {hasGapAdjustment && (
                         <span

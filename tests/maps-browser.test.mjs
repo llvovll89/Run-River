@@ -64,6 +64,27 @@ test("downloaded trail map renders after network loss and survives reopening", {
         await page.getByRole("button", {name: "삭제 확인", exact: true}).click();
         await page.getByText("아직 저장한 지도가 없어요.", {exact: true}).waitFor();
         assert.equal(await page.getByTestId("offline-trail-map").count(), 0);
+        await page.goto(origin + "/hiking/", {waitUntil: "networkidle"});
+        await page.getByLabel("GPX 코스 파일").setInputFiles({name: "course.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><name>북한산 테스트 코스</name><trkseg><trkpt lat="37.66" lon="126.98"/><trkpt lat="37.661" lon="126.98"/></trkseg></trk></gpx>')});
+        await page.getByText("북한산 테스트 코스", {exact: true}).waitFor();
+        await page.getByLabel("GPX 코스 파일").setInputFiles({name: "invalid.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<!DOCTYPE gpx><gpx/>')});
+        await page.getByText("외부 정의가 포함된 GPX는 사용할 수 없어요.", {exact: true}).waitFor();
+        await page.getByText("북한산 테스트 코스", {exact: true}).waitFor();
+        await context.grantPermissions(["geolocation"]);
+        await context.setGeolocation({latitude: 37.66, longitude: 126.98, accuracy: 5});
+        await page.getByRole("button", {name: "현재 위치에서 하이킹 시작", exact: true}).click();
+        await page.waitForURL("**/running");
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem("rr_active_run") || "null")?.trackPoints?.length > 0);
+        await page.getByRole("button", {name: "종료", exact: true}).click();
+        await page.waitForURL("**/result?id=*");
+        await page.getByText("하이킹 기록은 이 기기에 저장돼요 · 서버 동기화 준비 중", {exact: true}).waitFor();
+        const downloadReady = page.waitForEvent("download");
+        await page.getByRole("button", {name: "이동 경로 GPX 내보내기", exact: true}).click();
+        const download = await downloadReady;
+        assert.ok(download.suggestedFilename().endsWith(".gpx"));
+        await download.saveAs("output/playwright/hiking-export.gpx");
+        assert.ok((await readFile("output/playwright/hiking-export.gpx", "utf8")).includes('<trkpt lat="37.66" lon="126.98">'));
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].result.activity_type), "hiking");
         assert.deepEqual(errors, []);
         // The page's shared font CSS may request the existing CDN, but all map/font data is local.
         assert.equal(externalRequests.filter(url => !url.includes("cdn.jsdelivr.net")).length, 0);

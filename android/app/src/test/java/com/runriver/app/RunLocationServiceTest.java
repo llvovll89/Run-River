@@ -71,8 +71,18 @@ public class RunLocationServiceTest {
         ShadowSystemClock.advanceBy(Duration.ofSeconds(40));
         service.onLocationChanged(fix(37.61));
         assertEquals(0, service.snapshot().getDouble("distanceKm"), 0.000001);
+        try (RunStore store = new RunStore(service)) { assertTrue(store.points().getJSONObject(1).getBoolean("segment_start")); }
         ShadowSystemClock.advanceBy(Duration.ofSeconds(5));
         service.onLocationChanged(fix(37.6101));
         assertTrue(service.snapshot().getDouble("distanceKm") > 0.01);
+    }
+
+    @Test public void stationaryFixKeepsGpsStatusFreshWithoutAddingDistance() throws Exception {
+        service.onLocationChanged(fix(37.6));
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(20));
+        Location stationary = fix(37.6);
+        service.onLocationChanged(stationary);
+        assertEquals(stationary.getTime(), service.snapshot().getLong("lastFixAt"));
+        assertEquals(0, service.snapshot().getDouble("distanceKm"), 0.000001);
     }
 }

@@ -9,6 +9,7 @@ import type {RunConfig} from "@/types";
 import ScreenHeader from "@/components/ScreenHeader";
 import TintedButton from "@/components/TintedButton";
 import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
+import {distanceToCourseMeters} from "@/lib/hiking";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
@@ -24,6 +25,19 @@ export default function NativeRunScreen() {
     const mounted = useRef(false);
     const polling = useRef(false);
     const [now, setNow] = useState(Date.now());
+    const offCourseSince = useRef<number | null>(null);
+    const [offCourse, setOffCourse] = useState(false);
+
+    useEffect(() => {
+        const course = run?.config.routePath;
+        if (!run?.position || !course || course.length < 2 || run.status !== "recording" || !run.lastFixAt || now - run.lastFixAt > 30000) {
+            offCourseSince.current = null; setOffCourse(false); return;
+        }
+        const distance = distanceToCourseMeters(run.position, course);
+        if (distance <= Math.max(80, (run.accuracy ?? 40) * 2)) { offCourseSince.current = null; setOffCourse(false); return; }
+        offCourseSince.current ??= now;
+        setOffCourse(now - offCourseSince.current >= 15000);
+    }, [run, now]);
 
     const refresh = useCallback(async () => {
         if (polling.current) return;
@@ -89,15 +103,17 @@ export default function NativeRunScreen() {
     }
 
     const seconds = Math.floor((run?.elapsedMs ?? 0) / 1000);
-    const points = run?.trackPoints.map(({lat, lng}) => ({lat, lng})) ?? [];
+    const points = run?.trackPoints ?? [];
     const stale = !run?.lastFixAt || now - run.lastFixAt > 30000;
     return <main className="app-screen min-h-dvh" style={{background: "var(--c-bg)", paddingBottom: 36}}>
         <ScreenHeader title={run?.status === "finished" ? "운동을 마쳤어요" : run?.status === "paused" ? "잠시 쉬어가는 중" : "나의 길을 기록해요"}
-            description="위치와 이동 경로를 휴대폰에 저장해요." />
+            description={run?.config.activityType === "hiking" ? "하이킹 · 위치와 이동 경로를 휴대폰에 저장해요." : "위치와 이동 경로를 휴대폰에 저장해요."} />
         <section className="px-5 space-y-5">
             {(error || run?.error) && <p role="alert" className="rounded-2xl p-4" style={{background: "var(--c-elevated)", color: "var(--c-danger)"}}>{error || run?.error}</p>}
             {!ready && <p role="status">기기에 저장된 운동을 확인하고 있어요…</p>}
             {run && <>
+                {run.config.courseName && <p className="text-sm font-semibold">따라가는 코스 · {run.config.courseName}</p>}
+                {offCourse && <p role="alert" className="rounded-xl p-3 text-sm" style={{background: "var(--c-elevated)"}}>준비한 코스에서 벗어나 있어요. GPS 위치와 실제 길을 함께 확인해주세요.</p>}
                 <p className="text-sm" role="status">{run.status === "recording" ? stale ? "GPS 수신을 기다리고 있어요 · 하늘이 보이는 곳에서 잠시 기다려주세요" : `GPS 수신 중 · 정확도 약 ${Math.round(run.accuracy ?? 0)}m` : run.status === "paused" ? "기록 일시정지 · 재개를 누르면 이어서 기록해요" : "기기에 기록을 보관했어요 · 결과를 저장해주세요"}</p>
                 <div style={{position: "relative", height: "36vh", minHeight: 230, overflow: "hidden", borderRadius: 24}}>
                     {mapPack ? <OfflineTrailMap pack={mapPack} currentPosition={run.position} points={points} course={run.config.routePath} follow /> : <KakaoMap className="h-full" center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={run.config.startPoint} pathPoints={points} routePath={run.config.routePath} activityType={run.config.activityType} followUser />}

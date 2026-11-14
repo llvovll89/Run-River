@@ -45,5 +45,6 @@ export function OfflineStatus() {
         <p>{ready ? "오프라인 기록 준비 완료" : status || "화면을 켜두고 운동해주세요"}</p>
         {active && <a href="/running">진행 중인 운동 복구</a>}
         <a href="/maps">오프라인 지도 준비</a>
+        <a href="/hiking">하이킹 시작</a>
     </div>;
 }
