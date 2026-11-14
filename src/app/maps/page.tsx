@@ -23,7 +23,7 @@ export default function MapsPage() {
     async function action(task: () => Promise<unknown>, message: string) {
         setBusy(true); setError(""); setStatus("");
         try { await task(); await refresh(); setStatus(message); }
-        catch (error) { setError(error instanceof Error ? error.message : "지도 작업을 완료하지 못했어요."); }
+        catch (error) { setError(error instanceof Error || error instanceof DOMException ? error.message : "지도 작업을 완료하지 못했어요."); }
         finally { setBusy(false); }
     }
     const pack = packs.find(pack => pack.id === selected);

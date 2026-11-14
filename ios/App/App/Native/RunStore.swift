@@ -9,10 +9,12 @@ enum HikingError: LocalizedError {
 // A fix and its distance/time checkpoint commit together, including while WKWebView is suspended.
 final class RunStore {
     private var db: OpaquePointer?
+    private var configured = false
     init(url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard sqlite3_open(url.path, &db) == SQLITE_OK else { throw HikingError.message("기록 저장소를 열 수 없어요.") }
-        try execute("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS fixes(id INTEGER PRIMARY KEY, json TEXT NOT NULL)")
+        try execute("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS session(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS fixes(id INTEGER PRIMARY KEY, json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS config(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL)")
+        configured = !(try read("SELECT json FROM config WHERE id=1")).isEmpty
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)
     }
     deinit { sqlite3_close(db) }
@@ -29,11 +31,15 @@ final class RunStore {
         guard sqlite3_bind_text(statement, 1, json, -1, transient) == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else { throw HikingError.message("저장 공간을 확인해주세요. 기록을 저장할 수 없어요.") }
     }
     func save(_ state: [String: Any], point: [String: Any]? = nil) throws {
+        var metrics = state
+        let config = metrics.removeValue(forKey: "config") as? [String: Any]
         try execute("BEGIN IMMEDIATE")
         do {
-            try write("INSERT OR REPLACE INTO session(id,json) VALUES(1,?)", state)
+            if !configured, let config { try write("INSERT INTO config(id,json) VALUES(1,?)", config) }
+            try write("INSERT OR REPLACE INTO session(id,json) VALUES(1,?)", metrics)
             if let point { try write("INSERT INTO fixes(json) VALUES(?)", point) }
             try execute("COMMIT")
+            if config != nil { configured = true }
         } catch { try? execute("ROLLBACK"); throw error }
     }
     private func read(_ sql: String) throws -> [[String: Any]] {
@@ -50,11 +56,15 @@ final class RunStore {
         guard step == SQLITE_DONE else { throw HikingError.message("기록을 읽을 수 없어요.") }
         return rows
     }
-    func state() throws -> [String: Any]? { try read("SELECT json FROM session WHERE id=1").first }
+    func state() throws -> [String: Any]? {
+        guard var state = try read("SELECT json FROM session WHERE id=1").first else { return nil }
+        state["config"] = try read("SELECT json FROM config WHERE id=1").first
+        return state
+    }
     func points() throws -> [[String: Any]] { try read("SELECT json FROM fixes ORDER BY id") }
     func clear(runId: String) throws {
         guard let state = try state(), state["status"] as? String == "finished", (state["config"] as? [String: Any])?["runId"] as? String == runId else { throw HikingError.message("완료한 기록만 정리할 수 있어요.") }
         try execute("BEGIN IMMEDIATE")
-        do { try execute("DELETE FROM session; DELETE FROM fixes; COMMIT") } catch { try? execute("ROLLBACK"); throw error }
+        do { try execute("DELETE FROM session; DELETE FROM fixes; DELETE FROM config; COMMIT"); configured = false } catch { try? execute("ROLLBACK"); throw error }
     }
 }
