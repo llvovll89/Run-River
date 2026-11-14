@@ -14,6 +14,7 @@ export default function DeleteRecordButton({ id }: { id: string }) {
   async function handleDelete() {
     try {
       await deleteRunningRecord(id);
+      window.dispatchEvent(new Event("run-record-deleted"));
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "삭제 실패");

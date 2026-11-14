@@ -33,6 +33,7 @@ export function usePWAInstall(): PWAInstallState {
   const [mode, setMode] = useState<InstallMode>("unsupported");
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_NATIVE_APP === "1") return;
     if (isStandalone()) return;
 
     if (isIOS()) {

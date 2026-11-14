@@ -10,7 +10,11 @@
     "build:pwa": "npm run build",
     "test:unit": "node --import tsx --test tests/offline.test.ts",
     "test:offline": "node scripts/verify-offline.mjs",
-    "start": "next start"
+    "start": "next start",
+    "build:mobile": "node scripts/build-mobile.mjs",
+    "android:sync": "npm run build:mobile && cap sync android",
+    "android:open": "cap open android",
+    "android:run": "npm run android:sync && cap run android"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.0",
@@ -19,7 +23,9 @@
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -31,6 +37,7 @@
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.4",
     "tsx": "4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@capacitor/cli": "8.6.2"
   }
 }

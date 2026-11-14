@@ -25,6 +25,7 @@ export function usePWAUpdate() {
   const applyingRef = useRef(false);
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_NATIVE_APP === "1") return;
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
     navigator.serviceWorker.ready.then((registration) => {

@@ -8,6 +8,10 @@ const OfflineStatusContext = createContext("");
 export default function OfflineSetup({children}: {children: React.ReactNode}) {
     const [status, setStatus] = useState("");
     useEffect(() => {
+        if (process.env.NEXT_PUBLIC_NATIVE_APP === "1") {
+            setStatus("앱 화면은 기기에 저장돼요 · 지도는 인터넷 연결이 필요해요");
+            return;
+        }
         if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
         let disposed = false;
         const update = (message: string) => { if (!disposed) setStatus(message); };
