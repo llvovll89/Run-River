@@ -105,6 +105,13 @@ final class HikingTests: XCTestCase {
             try await Task.sleep(nanoseconds: 200_000_000)
         }
         XCTAssertTrue(loaded, "WKWebView must load the bundled hiking page, rather than the home fallback")
+        var hydrated = false
+        for _ in 0..<600 {
+            if (try? await webView.evaluateJavaScript("typeof window.Capacitor?.nativePromise === 'function' && document.querySelector('input[type=file]')?.disabled === false")) as? Bool == true { hydrated = true; break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertTrue(hydrated, "The real client must finish hydration before file interaction")
+        guard hydrated else { return }
         let platform = try await webView.evaluateJavaScript("window.Capacitor.getPlatform()") as? String
         XCTAssertEqual(platform, "ios")
         let result = try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeRun', 'snapshot', {})", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
@@ -155,10 +162,13 @@ final class HikingTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let controller = try XCTUnwrap(scene.windows.first(where: { $0.isKeyWindow })?.rootViewController as? HikingBridgeViewController)
         let webView = try XCTUnwrap(controller.webView)
-        for _ in 0..<100 {
-            if (try? await webView.evaluateJavaScript("typeof window.Capacitor?.nativePromise")) as? String == "function" { break }
+        var ready = false
+        for _ in 0..<600 {
+            if !webView.isLoading, (try? await webView.evaluateJavaScript("typeof window.Capacitor?.nativePromise")) as? String == "function" { ready = true; break }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
+        XCTAssertTrue(ready, "Wait for the native bridge on a cold Simulator launch")
+        guard ready else { return }
         func call(_ method: String, _ options: [String: Any] = [:]) async throws -> Any? {
             try await webView.callAsyncJavaScript("return await window.Capacitor.nativePromise('NativeRun', method, options)", arguments: ["method": method, "options": options], in: nil, contentWorld: .page)
         }
