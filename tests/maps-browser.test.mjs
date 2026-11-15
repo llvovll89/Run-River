@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {readFile, mkdir} from "node:fs/promises";
 import path from "node:path";
-import {chromium} from "playwright";
+import {chromium, webkit} from "playwright";
+const browserType = process.env.TEST_BROWSER === "webkit" ? webkit : chromium;
 import {kmzFixture, kmlFixture} from "./kmz-fixture.mjs";
 
 test("downloaded trail map renders after network loss and survives reopening", {timeout: 90000}, async () => {
@@ -32,8 +33,8 @@ test("downloaded trail map renders after network loss and survives reopening", {
     const origin = `http://127.0.0.1:${server.address().port}`;
     let browser;
     try {
-        browser = await chromium.launch({args: ["--enable-webgl", "--enable-unsafe-swiftshader"]});
-        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
+        browser = await browserType.launch({args: ["--enable-webgl", "--enable-unsafe-swiftshader"]});
+        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce", ...(process.env.TEST_MAP_ENGINE === "canvas" ? {userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"} : {})});
         const externalRequests = [];
         await context.route("**/*", route => {
             const url = route.request().url();
@@ -50,11 +51,24 @@ test("downloaded trail map renders after network loss and survives reopening", {
             throw new Error(`${error.message}\n${await page.locator("body").innerText()}\n${errors.join("\n")}\nExternal: ${externalRequests.join(", ")}`);
         });
         assert.equal(mapRequests, 1);
+        if (process.env.TEST_MAP_ENGINE === "canvas") {
+            assert.equal(await page.getByTestId("offline-trail-map").getAttribute("data-map-engine"), "canvas");
+            await page.waitForFunction(() => [...document.querySelectorAll("canvas.leaflet-tile")].some(canvas => {
+                if (!canvas.width || !canvas.height) return false;
+                const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+                const colors = new Set();
+                for (let i = 0; i < data.length; i += 64) {
+                    if (data[i+3]) colors.add((data[i]<<16) | (data[i+1]<<8) | data[i+2]);
+                    if (colors.size > 4) return true;
+                }
+                return false;
+            }));
+        }
         allowDownload = false;
         await page.reload({waitUntil: "networkidle"});
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         assert.equal(mapRequests, 1, "Stored map must not be fetched again");
-        assert.ok(await page.locator(".maplibregl-map").evaluate(element => element.clientHeight >= 300), "The rendered map must have a visible viewport");
+        assert.ok(await page.getByTestId("offline-trail-map").evaluate(element => element.clientHeight >= 300), "The rendered map must have a visible viewport");
         await mkdir("output/playwright", {recursive: true});
         await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/offline-trail-map.png"});
         assert.deepEqual(await page.getByRole("alert").allTextContents(), [""]);

@@ -19,7 +19,7 @@ export interface NativeRunSnapshot {
 }
 
 interface NativeRunPlugin {
-    saveGpx(options: {gpx: string; filename: string}): Promise<void>;
+    saveGpx(options: {gpx: string; filename: string}): Promise<{savedTo?: string} | void>;
     start(options: {config: RunConfig}): Promise<void>;
     snapshot(): Promise<{run: NativeRunSnapshot | null}>;
     pause(): Promise<void>;
@@ -29,7 +29,7 @@ interface NativeRunPlugin {
 }
 
 export const NativeRun = registerPlugin<NativeRunPlugin>("NativeRun");
-export function hasNativeRun() { return Capacitor.getPlatform() === "android"; }
+export function hasNativeRun() { return ["android", "ios"].includes(Capacitor.getPlatform()); }
 
 export function nativeRunResult(run: NativeRunSnapshot) {
     const duration = Math.floor(run.elapsedMs / 1000);

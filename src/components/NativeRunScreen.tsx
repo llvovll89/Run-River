@@ -66,7 +66,7 @@ export default function NativeRunScreen() {
                             throw new Error("시작할 운동이 없어요. 홈에서 목표를 선택해주세요.");
                         }
                         const config = JSON.parse(raw) as RunConfig;
-                        if (config.intervalPreset) throw new Error("Android 위치 기록은 거리·시간·목적지 운동부터 지원해요. 홈에서 목표를 다시 선택해주세요.");
+                        if (config.intervalPreset) throw new Error("앱 위치 기록은 거리·시간·목적지 운동부터 지원해요. 홈에서 목표를 다시 선택해주세요.");
                         await NativeRun.start({config: {...config, runId: config.runId ?? crypto.randomUUID()}});
                         sessionStorage.removeItem("runConfig");
                         await refresh();
@@ -126,7 +126,7 @@ export default function NativeRunScreen() {
                     <TintedButton disabled={busy} tone="danger-solid" onClick={() => setConfirmFinish(true)}>운동 종료</TintedButton>
                 </div> : <TintedButton tone="accent" disabled={busy} onClick={() => void exportResult()}>결과 저장하기</TintedButton>}
                 {confirmFinish && <div role="dialog" aria-modal="true" aria-label="운동 종료 확인" className="rounded-2xl p-5 space-y-4" style={{background: "var(--c-surface)"}}><p>운동을 마치고 현재까지의 기록을 보관할까요?</p><div className="flex gap-3"><TintedButton disabled={busy} tone="neutral" onClick={() => setConfirmFinish(false)}>계속 운동</TintedButton><TintedButton disabled={busy} tone="danger-solid" onClick={() => void act("finish")}>종료 확인</TintedButton></div></div>}
-                <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>화면을 꺼도 Android 위치 서비스가 기록해요. 앱 강제 종료·권한 해제·GPS 수신 불량 구간은 기록이 끊길 수 있어요. {mapPack ? `저장한 지도 · ${mapPack.name}` : "오프라인 지도는 출발 전에 지도 준비 화면에서 저장해주세요."}</p>
+                <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>화면을 잠가도 앱의 위치 서비스로 기록을 이어가요. 앱 강제 종료·권한 해제·GPS 수신 불량 구간은 기록이 끊길 수 있어요. 아이폰에서는 정확한 위치를 켜주세요. {mapPack ? `저장한 지도 · ${mapPack.name}` : "오프라인 지도는 출발 전에 지도 준비 화면에서 저장해주세요."}</p>
             </>}
             <a href="/" className="inline-block underline text-sm">홈으로 돌아가기</a>
         </section>

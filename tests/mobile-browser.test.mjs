@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {readFile, mkdir} from "node:fs/promises";
 import path from "node:path";
-import {chromium} from "playwright";
+import {chromium, webkit} from "playwright";
+const browserType = process.env.TEST_BROWSER === "webkit" ? webkit : chromium;
 
 test("packaged app opens and navigates without external network or a service worker", async () => {
     const root = path.resolve("mobile-dist");
@@ -22,7 +23,7 @@ test("packaged app opens and navigates without external network or a service wor
     const origin = `http://127.0.0.1:${server.address().port}`;
     let browser;
     try {
-        browser = await chromium.launch({args: ["--enable-unsafe-swiftshader"]});
+        browser = await browserType.launch({args: ["--enable-unsafe-swiftshader"]});
         const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await context.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         const page = await context.newPage();
@@ -42,8 +43,9 @@ test("packaged app opens and navigates without external network or a service wor
         assert.deepEqual(errors, []);
         const nativeContext = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await nativeContext.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
-        await nativeContext.addInitScript(() => {
-            window.androidBridge = {};
+        await nativeContext.addInitScript((platform) => {
+            if (platform === "ios") window.webkit = {messageHandlers: {bridge: {postMessage() {}}}};
+            else window.androidBridge = {};
             window.Capacitor = {
                 PluginHeaders: [{name: "NativeRun", methods: ["start", "snapshot", "pause", "resume", "finish", "acknowledge", "saveGpx"].map(name => ({name, rtype: "promise"}))}],
                 nativePromise: async (plugin, method, options) => {

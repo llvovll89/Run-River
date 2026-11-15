@@ -9,7 +9,9 @@ export interface MapPack {
     maxZoom: number;
     createdAt: number;
 }
-interface StoredMap extends MapPack {blob: Blob}
+// Keep reading older Blob records; ArrayBuffer also works in WebKit ports that
+// cannot persist Blob/File values in IndexedDB (their transaction error can be null).
+interface StoredMap extends MapPack {blob: Blob | ArrayBuffer}
 const ACTIVE_KEY = "rr_offline_map";
 const MAX_BYTES = 200 * 1024 * 1024;
 const SAMPLE_SHA256 = "0791c9747ec5eb2450541f01394feb37491050b88ff4415a1d4e7fd4de987189";
@@ -20,7 +22,7 @@ const NativeMaps = registerPlugin<{
     read(options: {id: string; offset: number; length: number}): Promise<{base64: string}>;
     delete(options: {id: string}): Promise<void>;
 }>("NativeMaps");
-const native = () => Capacitor.getPlatform() === "android";
+const native = () => ["android", "ios"].includes(Capacitor.getPlatform());
 
 async function db() {
     return new Promise<IDBDatabase>((resolve, reject) => {
@@ -38,7 +40,7 @@ async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjec
             const request = action(tx.objectStore("maps"));
             tx.oncomplete = () => resolve(request.result);
             tx.onabort = () => reject(tx.error ?? new Error("지도를 저장하지 못했어요. 기기 공간을 확인해주세요."));
-            tx.onerror = () => reject(tx.error);
+            tx.onerror = () => reject(tx.error ?? request.error ?? new Error("지도 저장소 작업에 실패했어요. 기기 공간을 확인해주세요."));
         });
     } finally { database.close(); }
 }
@@ -94,7 +96,8 @@ export async function importOfflineMap(file?: File, name?: string): Promise<MapP
         if (!file || file.size > MAX_BYTES) throw new Error("200MB 이하 지도 파일을 선택해주세요.");
         const id = crypto.randomUUID();
         const pack = await describe(new PMTiles(new FileSource(file)), id, name ?? file.name, file.size);
-        await transaction("readwrite", store => store.put({...pack, blob: file}));
+        const bytes = await file.arrayBuffer();
+        await transaction("readwrite", store => store.put({...pack, blob: bytes}));
         selectOfflineMap(id);
         // Best effort: browsers can still remove site data; native files are app-private.
         await navigator.storage?.persist?.().catch(() => false);
