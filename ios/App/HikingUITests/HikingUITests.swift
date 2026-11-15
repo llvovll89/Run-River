@@ -49,8 +49,10 @@ final class HikingUITests: XCTestCase {
         tapVisible(save, in: app)
         let export = app.webViews.buttons["이동 경로 GPX 내보내기"]
         tapVisible(export, in: app)
-        let saved = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "파일 앱의 나의 iPhone → Run River → GPX/")).firstMatch
+        // WebKit exposes the interpolated filename as a separate AX text node.
+        let saved = app.webViews.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "GPX/run-river-")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: 15), "GPX must be saved locally without an iCloud account")
+        XCTAssertTrue(app.webViews.staticTexts["에 저장했어요."].exists)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-GPX-export"; shot.lifetime = .keepAlways; add(shot)
         XCTAssertTrue(app.webViews.buttons["이동 경로 GPX 내보내기"].isEnabled)
     }
