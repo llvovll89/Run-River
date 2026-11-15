@@ -49,17 +49,10 @@ final class HikingUITests: XCTestCase {
         tapVisible(save, in: app)
         let export = app.webViews.buttons["이동 경로 GPX 내보내기"]
         tapVisible(export, in: app)
-        XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "GPX export must present the native Files picker")
+        let saved = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "파일 앱의 나의 iPhone → Run River → GPX/")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 15), "GPX must be saved locally without an iCloud account")
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-GPX-export"; shot.lifetime = .keepAlways; add(shot)
-        if !app.navigationBars["GPX"].waitForExistence(timeout: 5) {
-            let folder = app.staticTexts["Run River"]
-            if folder.exists { folder.tap() }
-            let gpx = app.staticTexts["GPX"]
-            XCTAssertTrue(gpx.waitForExistence(timeout: 15)); gpx.tap()
-        }
-        let saveFile = app.buttons["Save"]
-        XCTAssertTrue(saveFile.waitForExistence(timeout: 10)); XCTAssertTrue(saveFile.isEnabled); saveFile.tap()
-        XCTAssertTrue(app.webViews.buttons["이동 경로 GPX 내보내기"].waitForExistence(timeout: 15), "Files export must finish and return to the stored result")
+        XCTAssertTrue(app.webViews.buttons["이동 경로 GPX 내보내기"].isEnabled)
     }
     func testNativeDownloadAndRenderMap() {
         let app = XCUIApplication(); app.launch()

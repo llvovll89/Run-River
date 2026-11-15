@@ -1,10 +1,9 @@
 import Capacitor
 import CoreLocation
-import UniformTypeIdentifiers
 import UIKit
 
 @objc(NativeRunPlugin)
-public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate, UIDocumentPickerDelegate {
+public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate {
     public let identifier = "NativeRunPlugin"
     public let jsName = "NativeRun"
     public let pluginMethods: [CAPPluginMethod] = ["start", "snapshot", "pause", "resume", "finish", "acknowledge", "saveGpx"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
@@ -14,8 +13,6 @@ public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManag
     private var permissionCall: CAPPluginCall?
     private var permissionAction: (() throws -> Void)?
     private var timer: Timer?
-    private var exportCall: CAPPluginCall?
-    private var exportURL: URL?
     public override func load() {
         manager.delegate = self
         manager.activityType = .fitness
@@ -109,25 +106,21 @@ public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManag
     }
     @objc public func saveGpx(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            guard self.exportCall == nil, let gpx = call.getString("gpx"), gpx.utf8.count <= 20_000_000, let controller = self.bridge?.viewController else { call.reject("GPX 파일을 저장할 수 없어요."); return }
+            guard let gpx = call.getString("gpx"), gpx.utf8.count <= 20_000_000 else { call.reject("GPX 파일을 저장할 수 없어요."); return }
             do {
-                // Expose a local destination in Files even on a fresh device with
-                // no iCloud account or other document-provider apps installed.
+                // Save a durable, user-visible copy without requiring an iCloud
+                // account or a writable third-party document provider.
                 let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-                try FileManager.default.createDirectory(at: documents.appendingPathComponent("GPX"), withIntermediateDirectories: true)
-                let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                let directory = documents.appendingPathComponent("GPX", isDirectory: true)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let name = URL(fileURLWithPath: call.getString("filename") ?? "hiking.gpx").lastPathComponent
-                let url = directory.appendingPathComponent(name.hasSuffix(".gpx") ? name : "hiking.gpx")
-                try Data(gpx.utf8).write(to: url, options: .atomic)
-                self.exportCall = call; self.exportURL = url
-                let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
-                picker.directoryURL = documents.appendingPathComponent("GPX")
-                picker.delegate = self; controller.present(picker, animated: true)
+                var url = directory.appendingPathComponent(name.hasSuffix(".gpx") ? name : "hiking.gpx")
+                if FileManager.default.fileExists(atPath: url.path) {
+                    url = directory.appendingPathComponent("\(url.deletingPathExtension().lastPathComponent)-\(UUID().uuidString.prefix(8)).gpx")
+                }
+                try Data(gpx.utf8).write(to: url, options: [.atomic, .completeUntilFirstUserAuthentication])
+                call.resolve(["savedTo": "GPX/\(url.lastPathComponent)"])
             } catch { call.reject(error.localizedDescription) }
         }
     }
-    private func clearExport() { if let url = exportURL { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }; exportURL = nil; exportCall = nil }
-    public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { exportCall?.resolve(); clearExport() }
-    public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { exportCall?.reject("GPX 저장을 취소했어요."); clearExport() }
 }

@@ -25,12 +25,12 @@ npm run ios:open
 - 일시정지·종료 시 위치 업데이트를 멈춘다. 프로세스 종료 후에는 마지막 저장 지점에서 일시정지 상태로 복구한다. 종료되거나 GPS가 끊긴 구간의 거리를 추정해 더하지 않는다.
 - PMTiles는 Files 선택기에서 가져오거나 HTTPS로 다운로드한다. 200MB 제한, 헤더·선택적 SHA-256 검증, 임시 파일 후 원자적 게시, 범위 읽기를 사용한다. 지도는 iCloud 백업 대상에서 제외하며 앱 삭제 시 함께 지워진다.
 - iPhone·iPad는 Leaflet과 Protomaps의 Canvas2D 렌더러로 같은 PMTiles를 표시한다. iOS WebView에서 확인된 빈 WebGL 지도 문제를 피하며, KMZ와 현재 위치·기록·코스도 2D로 표시한다. Android와 데스크톱의 기존 MapLibre 렌더러는 유지한다.
-- KMZ/KML/GPX 코스는 앱 화면의 파일 입력에서 가져온다. 완성한 기록의 GPX는 Files 내보내기를 사용한다. 완료 기록은 화면 저장 성공 후에만 네이티브 저장소에서 정리한다.
-- GPX는 iCloud 없이도 Files의 `나의 iPhone → Run River → GPX`에 저장할 수 있다. 앱이 이 로컬 폴더를 마련하며, 운동 SQLite와 지도 파일은 Files에 노출하지 않는 별도 앱 전용 공간에 남는다.
+- KMZ/KML/GPX 코스는 앱 화면의 파일 입력에서 가져온다. 완료 기록은 화면 저장 성공 후에만 네이티브 저장소에서 정리한다.
+- GPX 내보내기를 누르면 iCloud 없이도 Files의 `나의 iPhone → Run River → GPX`에 바로 저장하고 경로를 안내한다. 같은 이름의 기존 파일은 덮어쓰지 않는다. 다른 앱으로 전송하려면 Files에서 공유한다. 운동 SQLite와 지도 파일은 Files에 노출하지 않는 별도 앱 전용 공간에 남는다.
 
 ## 자동 검증 범위
 
-`.github/workflows/verify.yml`의 `ios` 작업에서 Xcode 26으로 실제 앱 코드를 빌드하고 iPhone Simulator에서 XCTest와 UI 테스트를 실행한다. GPS 필터·GPS 단절·일시정지 시간·프로세스 재생성 복구·완료 기록 정리·지도 파일 검증과 범위 읽기·정적 경로를 검증한다. UI 테스트는 번들 하이킹 화면과 네이티브 Files 선택기를 연다. WebKit 테스트는 외부 네트워크를 차단한 지도 재열기, KMZ 경로 선택과 보존, GPX 내보내기 및 iOS 브리지의 화면 흐름을 검사한다. 브라우저 테스트의 네이티브 브리지는 모의 구현이며 Swift 검증은 XCTest에서 별도로 수행한다.
+`.github/workflows/verify.yml`의 `ios` 작업에서 Xcode 26으로 실제 앱 코드를 빌드하고 iPhone Simulator에서 XCTest와 UI 테스트를 실행한다. GPS 필터·GPS 단절·일시정지 시간·프로세스 재생성 복구·완료 기록 정리·지도 파일 검증과 범위 읽기·정적 경로를 검증한다. 실제 WKWebView에서 네트워크를 차단하고 네이티브 PMTiles의 여러 색상 픽셀과 KMZ를 확인한다. UI 테스트는 Files 지도 선택기, 지도 다운로드, 기록·일시정지·종료·저장과 GPX 내보내기를 실행하며, CI가 앱 Documents의 실제 GPX 파일과 좌표도 확인한다. WebKit 테스트는 외부 네트워크를 차단한 지도 재열기, KMZ 경로 선택과 보존, GPX 내보내기 및 iOS 브리지의 화면 흐름을 검사한다. 브라우저 테스트의 네이티브 브리지는 모의 구현이며 Swift 검증은 XCTest에서 별도로 수행한다.
 
 ## 실제 iPhone에서 남는 확인
 
