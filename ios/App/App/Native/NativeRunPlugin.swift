@@ -118,7 +118,7 @@ public final class NativeRunPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManag
                 if FileManager.default.fileExists(atPath: url.path) {
                     url = directory.appendingPathComponent("\(url.deletingPathExtension().lastPathComponent)-\(UUID().uuidString.prefix(8)).gpx")
                 }
-                try Data(gpx.utf8).write(to: url, options: [.atomic, .completeUntilFirstUserAuthentication])
+                try Data(gpx.utf8).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
                 call.resolve(["savedTo": "GPX/\(url.lastPathComponent)"])
             } catch { call.reject(error.localizedDescription) }
         }
