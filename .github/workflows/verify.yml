@@ -13,7 +13,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The iOS job takes ~14 minutes on macOS (simulator boot, real GPS walk, map download).
+  # On pull requests run it only when code the iPhone app depends on changed; every push
+  # to main still runs it, so anything missed here is caught right after merge.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "ios=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed.txt
+          cat changed.txt
+          # Native shell, build pipeline, and the screens/libs the iOS UI tests drive.
+          IOS_PATHS='^(ios/|mobile/|capacitor\.config\.ts$|package(-lock)?\.json$|next\.config\.ts$|scripts/(build-mobile|prepare-map-assets)\.mjs$|\.github/workflows/|tests/(maps|mobile)-browser\.test\.mjs$|src/app/(hiking|maps|running|result)/|src/lib/(nativeRun|offlineMaps|hiking|kmz|runStorage)\.ts$|src/hooks/(useOfflineMapPack|useGeolocation)\.ts$|src/components/(CanvasTrailMap|OfflineTrailMap|MapLibreTrailMap|NativeRun[A-Za-z]*|ExportGpxButton|OfflineSetup)\.tsx$)'
+          if grep -Eq "$IOS_PATHS" changed.txt; then echo "ios=true" >> "$GITHUB_OUTPUT"; else echo "ios=false" >> "$GITHUB_OUTPUT"; fi
+
   ios:
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-15
     timeout-minutes: 35
     env:
@@ -126,13 +152,28 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-web-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.ts') }}
+          restore-keys: next-web-${{ hashFiles('package-lock.json') }}-
       - run: npm run test:unit
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
           NEXT_PUBLIC_KAKAO_MAP_KEY: ci-placeholder
-      - run: npx playwright install --with-deps chromium webkit
+      - id: playwright-version
+        run: echo "version=$(node -p 'require("playwright/package.json").version')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium-webkit
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium webkit
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium webkit
       - run: npm run test:offline
       - uses: actions/upload-artifact@v4
         if: always()
@@ -158,13 +199,24 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+          cache: gradle
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
       - run: npm ci
       - run: npm run android:sync
-      - run: npx playwright install --with-deps chromium
+      - id: playwright-version
+        run: echo "version=$(node -p 'require("playwright/package.json").version')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - run: node --test tests/mobile-browser.test.mjs
       - run: node --test tests/maps-browser.test.mjs
       - run: bash ./gradlew testDebugUnitTest assembleDebug --no-daemon
