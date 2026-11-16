@@ -1,7 +1,7 @@
 "use client";
 
 import {useState, useEffect, useRef} from "react";
-import {useRouter, useSearchParams} from "next/navigation";
+import {useSearchParams} from "next/navigation";
 import dynamicImport from "next/dynamic";
 import type {KakaoMapHandle} from "@/components/KakaoMap";
 import {useTheme} from "@/hooks/useTheme";
@@ -78,7 +78,6 @@ function buildCustomPreset(inputs: {
 }
 
 export default function Home() {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const {profile} = useUserProfile();
     const [isDesktop, setIsDesktop] = useState<boolean | null>(null);
@@ -87,7 +86,7 @@ export default function Home() {
     const [mode, setMode] = useState<PointMode>("start");
     const [activityType, setActivityType] = useState<ActivityType>("running");
     const [userLocation, setUserLocation] = useState<LatLng | null>(null);
-    const [sheetOpen, setSheetOpen] = useState(true);
+    const [sheetOpen, setSheetOpen] = useState(false);
     const [pageMode, setPageMode] = useState<PageMode>("goal");
     const [goal, setGoal] = useState({
         distance: 5,
@@ -137,7 +136,6 @@ export default function Home() {
     const endAddrOverride = useRef<string | null>(null);
     const dragY = useRef(0);
     const didDrag = useRef(false);
-    const sheetRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<KakaoMapHandle>(null);
     const hasCenteredRef = useRef(false);
     const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
@@ -202,9 +200,6 @@ export default function Home() {
         return () => navigator.geolocation.clearWatch(watchId);
     }, []);
 
-    useEffect(() => {
-        router.prefetch("/history");
-    }, [router]);
 
     // 초기 접속 시 내 위치로 지도 이동
     useEffect(() => {
@@ -457,19 +452,14 @@ export default function Home() {
     }
 
     function openAuthFor(path: string) {
+        setShowMore(false);
         const next = encodeURIComponent(path);
-        router.push(`/auth?next=${next}`);
+        navigatePublic(`/auth?next=${next}`);
     }
 
     function handleProtectedRoute(path: ProtectedPath) {
-        if (authUser) {
-            router.push(path);
-            setShowMore(false);
-            return;
-        }
-
-        setPendingProtectedRoute(path);
         setShowMore(false);
+        navigatePublic(path);
     }
 
     const {theme, toggle} = useTheme();
@@ -484,8 +474,16 @@ export default function Home() {
     const [weeklyDistanceKm, setWeeklyDistanceKm] = useState(0);
     const [weeklyLoaded, setWeeklyLoaded] = useState(false);
     const [weeklyChallengeOpen, setWeeklyChallengeOpen] = useState(false);
-    const [pendingProtectedRoute, setPendingProtectedRoute] =
-        useState<ProtectedPath | null>(null);
+    useEffect(() => {
+        const dismiss = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            setShowMore(false);
+            setShowIOSGuide(false);
+            setSearch(previous => ({...previous, open: false}));
+        };
+        window.addEventListener("keydown", dismiss);
+        return () => window.removeEventListener("keydown", dismiss);
+    }, []);
     const canStart =
         pageMode === "goal"
             ? !!(userLocation || startPoint) && goal.distance > 0
@@ -706,6 +704,7 @@ export default function Home() {
                             onClick={() => setShowMore((v) => !v)}
                             className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
                             aria-label="더보기"
+                            aria-expanded={showMore}
                         >
                             <MoreIcon />
                         </button>
@@ -1404,68 +1403,6 @@ export default function Home() {
                 </>
             )}
 
-            {/* 로그인 유도 모달 */}
-            {pendingProtectedRoute && (
-                <div
-                    className="absolute inset-0 z-50 flex items-end"
-                    style={{
-                        background: "rgba(0,0,0,0.5)",
-                        backdropFilter: "blur(4px)",
-                    }}
-                    onClick={() => setPendingProtectedRoute(null)}
-                >
-                    <div
-                        className="w-full rounded-t-3xl p-6"
-                        style={{background: "var(--c-bg)"}}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div
-                            className="w-8 h-1 rounded-full mx-auto"
-                            style={{background: "var(--c-border)"}}
-                        />
-                        <h3
-                            className="text-base font-bold text-center mt-4"
-                            style={{color: "var(--c-text-1)"}}
-                        >
-                            로그인하고 기록을 저장하세요
-                        </h3>
-                        <p
-                            className="text-sm text-center mt-2"
-                            style={{color: "var(--c-text-3)"}}
-                        >
-                            지금은 게스트 모드예요. 로그인하면 활동 기록과
-                            개인화 기능을 사용할 수 있어요.
-                        </p>
-                        <div className="grid grid-cols-2 gap-2 mt-5">
-                            <button
-                                onClick={() => setPendingProtectedRoute(null)}
-                                className="py-3 rounded-2xl text-sm font-semibold"
-                                style={{
-                                    background: "var(--c-elevated)",
-                                    color: "var(--c-text-2)",
-                                    border: "1px solid var(--c-border)",
-                                }}
-                            >
-                                게스트로 계속하기
-                            </button>
-                            <button
-                                onClick={() => {
-                                    openAuthFor(pendingProtectedRoute);
-                                    setPendingProtectedRoute(null);
-                                }}
-                                className="py-3 rounded-2xl text-sm font-semibold"
-                                style={{
-                                    background: "var(--c-toss-blue)",
-                                    color: "#fff",
-                                }}
-                            >
-                                로그인하고 저장하기
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* iOS 설치 안내 모달 */}
             {showIOSGuide && (
                 <div
@@ -1524,58 +1461,38 @@ export default function Home() {
 
             {/* Bottom Sheet */}
             <div
-                ref={sheetRef}
-                className="absolute bottom-0 left-0 right-0 z-10 sheet"
-                style={{
-                    paddingBottom: "16px",
-                    transform: sheetOpen
-                        ? "translateY(0)"
-                        : "translateY(calc(100% - 28px))",
-                    transition: "transform 0.32s cubic-bezier(0.22,1,0.36,1)",
-                }}
+                className="absolute bottom-0 left-0 right-0 home-goal-sheet sheet"
+                data-expanded={sheetOpen}
             >
-                {/* 드래그 핸들 */}
-                <div
-                    className="flex justify-center pt-3 pb-3 cursor-pointer select-none"
+                <button
+                    type="button"
+                    className="home-sheet-toggle"
+                    aria-expanded={sheetOpen}
+                    aria-controls="home-goal-options"
                     onClick={() => {
-                        if (!didDrag.current) setSheetOpen((o) => !o);
+                        if (!didDrag.current) setSheetOpen(open => !open);
                         didDrag.current = false;
                     }}
-                    onTouchStart={(e) => {
+                    onTouchStart={event => {
                         didDrag.current = false;
-                        dragY.current = e.touches[0].clientY;
-                        const el = sheetRef.current;
-                        if (el) el.style.transition = "none";
+                        dragY.current = event.touches[0].clientY;
                     }}
-                    onTouchMove={(e) => {
-                        const el = sheetRef.current;
-                        if (!el) return;
-                        const dy = e.touches[0].clientY - dragY.current;
-                        if (Math.abs(dy) > 5) didDrag.current = true;
-                        const baseY = sheetOpen ? 0 : el.offsetHeight - 36;
-                        const next = Math.max(0, baseY + dy);
-                        el.style.transform = `translateY(${next}px)`;
+                    onTouchEnd={event => {
+                        const dy = event.changedTouches[0].clientY - dragY.current;
+                        if (Math.abs(dy) > 40) {
+                            didDrag.current = true;
+                            setSheetOpen(dy < 0);
+                        }
                     }}
-                    onTouchEnd={(e) => {
-                        const el = sheetRef.current;
-                        if (!el) return;
-                        el.style.transition = "";
-                        const dy = e.changedTouches[0].clientY - dragY.current;
-                        if (dy > 60) setSheetOpen(false);
-                        else if (dy < -40) setSheetOpen(true);
-                        else
-                            el.style.transform = sheetOpen
-                                ? "translateY(0)"
-                                : "translateY(calc(100% - 28px))";
-                    }}
+                    onTouchCancel={() => { didDrag.current = false; }}
                 >
-                    <div
-                        className="w-8 h-1 rounded-full"
-                        style={{background: "var(--c-border)"}}
-                    />
-                </div>
-
-                <div className="home-sheet-content space-y-3">
+                    <span className="home-sheet-grip" aria-hidden="true" />
+                    <span className="home-goal-summary">
+                        <strong>{pageMode === "goal" ? `${goal.distance}km ${startActionText}` : pageMode === "time" ? `${goal.time}분 ${startActionText}` : pageMode === "interval" ? selectedPreset.name : "지도에서 경로 선택"}</strong>
+                        <span>{sheetOpen ? "설정 접기" : "목표 변경"}<span aria-hidden="true"> {sheetOpen ? "⌄" : "⌃"}</span></span>
+                    </span>
+                </button>
+                <div id="home-goal-options" hidden={!sheetOpen} className="home-sheet-content space-y-3">
                     <div className="home-intro">
                         <div><h1>오늘의 운동</h1></div>
                         <button className="home-challenge" onClick={() => setWeeklyChallengeOpen(v => !v)} aria-label={weeklyChallengeOpen ? "이번 주 챌린지 접기" : "이번 주 챌린지 펼치기"} aria-expanded={weeklyChallengeOpen}>

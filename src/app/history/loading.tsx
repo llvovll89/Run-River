@@ -1,22 +1,11 @@
+import AppNavigation from "@/components/AppNavigation";
+import ScreenHeader from "@/components/ScreenHeader";
+
 export default function HistoryLoading() {
   return (
-    <main className="min-h-dvh" style={{ background: "var(--c-bg)" }}>
-      <div
-        className="px-5"
-        style={{
-          paddingTop: "calc(var(--sat) + 10px)",
-          paddingBottom: "16px",
-          background: "var(--c-surface)",
-          borderBottom: "1px solid var(--c-border)",
-        }}
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-9 h-9 rounded-xl" style={{ background: "var(--c-elevated)" }} />
-        </div>
-        <div className="h-7 w-28 rounded-xl mb-2" style={{ background: "var(--c-elevated)" }} />
-        <div className="h-4 w-16 rounded-lg" style={{ background: "var(--c-elevated)" }} />
-      </div>
-
+    <main className="app-screen min-h-dvh" style={{ background: "var(--c-bg)" }}>
+      <ScreenHeader title="활동 기록" />
+      <p role="status" className="px-5 pt-4 text-sm" style={{color: "var(--c-text-2)"}}>기록을 불러오는 중…</p>
       <div className="px-4 pt-4">
         <div className="card rounded-2xl p-4">
           <div className="h-3 w-16 rounded mb-3" style={{ background: "var(--c-elevated)" }} />
@@ -55,6 +44,7 @@ export default function HistoryLoading() {
           </div>
         ))}
       </div>
+      <AppNavigation />
     </main>
   );
 }

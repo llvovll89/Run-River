@@ -4,6 +4,8 @@ import {createServer} from "node:http";
 import {readFile, mkdir} from "node:fs/promises";
 import path from "node:path";
 import {chromium, webkit} from "playwright";
+import nextEnv from "@next/env";
+nextEnv.loadEnvConfig(process.cwd(), false);
 const browserType = process.env.TEST_BROWSER === "webkit" ? webkit : chromium;
 
 test("packaged app opens and navigates without external network or a service worker", async () => {
@@ -24,15 +26,51 @@ test("packaged app opens and navigates without external network or a service wor
     let browser;
     try {
         browser = await browserType.launch({args: ["--enable-unsafe-swiftshader"]});
-        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
+        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce", permissions: ["geolocation"], geolocation: {latitude: 37.5665, longitude: 126.978, accuracy: 5}});
         await context.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         const page = await context.newPage();
         page.setDefaultTimeout(15000);
         const errors = [];
-        page.on("pageerror", error => errors.push(error.message));
+        page.on("pageerror", error => errors.push(`${new URL(page.url()).pathname}: ${error.message}`));
         await page.goto(origin, {waitUntil: "networkidle"});
         await page.getByTestId("offline-setup").filter({hasText: "앱 화면은 기기에 저장돼요"}).waitFor();
         assert.equal(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length), 0);
+        await mkdir("output/playwright", {recursive: true});
+        // Menu navigation must work in exported HTML without an RSC server.
+        // Return from login and repeat: no backdrop may trap the next tap.
+        for (const width of [320, 390]) {
+            await page.setViewportSize({width, height: width === 320 ? 568 : 844});
+            for (const colorScheme of ["light", "dark"]) {
+                await page.emulateMedia({colorScheme});
+                await page.goto(origin);
+                const toggle = page.locator('[aria-controls="home-goal-options"]');
+                assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+                assert.ok(await toggle.evaluate(el => el.getBoundingClientRect().top > innerHeight * (innerHeight < 650 ? .5 : .6)));
+                await toggle.click();
+                await page.getByRole("button", {name: "3km", exact: true}).click();
+                await toggle.click();
+                assert.equal(await page.getByRole("button", {name: "3km", exact: true}).isVisible(), false);
+                assert.ok(await page.getByRole("button", {name: /3km.*시작/}).isVisible());
+                await page.screenshot({path: `output/playwright/home-compact-${width}-${colorScheme}.png`});
+                await page.getByRole("button", {name: "더보기", exact: true}).click();
+                await page.getByRole("button", {name: "기록", exact: true}).click();
+                await page.waitForURL("**/auth/?next=*");
+                await page.getByRole("button", {name: "뒤로가기", exact: true}).click();
+                await page.waitForURL(origin + "/");
+                await page.getByRole("button", {name: "더보기", exact: true}).click();
+                await page.getByRole("button", {name: "설정", exact: true}).click();
+                await page.waitForURL(/\/settings\/?$/);
+                await page.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "운동", exact: true}).click();
+                await page.waitForURL(origin + "/");
+                await page.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "통계", exact: true}).click();
+                await page.waitForURL("**/auth/?next=*");
+                await page.getByRole("button", {name: "뒤로가기", exact: true}).click();
+                await page.waitForURL(origin + "/");
+                await page.getByRole("button", {name: "장소 검색", exact: true}).click();
+                await page.keyboard.press("Escape");
+                await page.locator('[aria-controls="home-goal-options"]').click();
+            }
+        }
         await page.evaluate(() => sessionStorage.setItem("runConfig", JSON.stringify({startPoint: {lat: 37.5665, lng: 126.978}, endPoint: null, activityType: "walking", goalDistance: 3, goalTime: null})));
         await page.goto(origin + "/running/", {waitUntil: "networkidle"});
         await page.getByText("일시정지", {exact: true}).first().waitFor();
@@ -41,6 +79,36 @@ test("packaged app opens and navigates without external network or a service wor
         await mkdir("output/playwright", {recursive: true});
         await page.screenshot({path: "output/playwright/mobile-bundle.png"});
         assert.deepEqual(errors, []);
+        // A stalled auth service must not remove navigation or leave an endless
+        // loading screen. Only fabricated credentials enter this isolated context.
+        const slowContext = await browser.newContext({viewport: {width: 390, height: 844}});
+        await slowContext.route("**/*", route => {
+            if (route.request().url().startsWith(origin + "/")) return route.continue();
+            if (new URL(route.request().url()).pathname === "/auth/v1/user") return;
+            return route.abort();
+        });
+        const storageKey = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token`;
+        await slowContext.addInitScript(({storageKey}) => {
+            const user = {id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated", email: "slow@example.invalid", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z"};
+            const expires_at = Math.floor(Date.now() / 1000) + 3600;
+            const token = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({sub: user.id, exp: expires_at}))}.test`;
+            localStorage.setItem(storageKey, JSON.stringify({access_token: token, refresh_token: "test", token_type: "bearer", expires_at, expires_in: 3600, user}));
+        }, {storageKey});
+        const slowPage = await slowContext.newPage();
+        const authStarted = slowPage.waitForRequest(request => new URL(request.url()).pathname === "/auth/v1/user");
+        await slowPage.goto(origin + "/history/");
+        await authStarted;
+        await slowPage.getByRole("status").filter({hasText: "기록을 불러오는 중"}).waitFor();
+        assert.ok(await slowPage.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "설정", exact: true}).isVisible());
+        try {
+            await slowPage.getByText("연결이 지연되고 있어요. 인터넷 연결을 확인한 뒤 통계를 다시 열어주세요.", {exact: true}).waitFor({timeout: 15000});
+        } catch (error) {
+            throw new Error(`Stalled auth did not reach its recovery state: ${await slowPage.locator("body").innerText()}`, {cause: error});
+        }
+        await slowPage.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "운동", exact: true}).click();
+        await slowPage.waitForURL(origin + "/");
+        await slowPage.locator('[aria-controls="home-goal-options"]').click();
+        await slowContext.close();
         const nativeContext = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await nativeContext.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         await nativeContext.addInitScript((platform) => {

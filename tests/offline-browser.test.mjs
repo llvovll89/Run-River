@@ -111,6 +111,10 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
         try {
             await page.screenshot({path: `output/playwright/home-${name}.png`});
             assert.ok(await page.evaluate(() => document.body.scrollHeight <= window.innerHeight + 1));
+            const goalToggle = page.locator('[aria-controls="home-goal-options"]');
+            assert.equal(await goalToggle.getAttribute("aria-expanded"), "false");
+            assert.ok(await goalToggle.evaluate(el => el.getBoundingClientRect().top > window.innerHeight * .6));
+            await goalToggle.click();
             await page.getByText("직접 거리 설정", {exact: true}).click();
             await page.getByRole("spinbutton", {name: "목표 거리 (km)"}).fill("3");
             await page.getByRole("button", {name: "설정", exact: true}).click();
@@ -127,6 +131,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             await page.goto(origin);
             await context.setOffline(true);
             await page.reload();
+            await page.locator('[aria-controls="home-goal-options"]').click();
             await page.getByRole("button", {name: "거리", exact: true}).click();
             await page.getByRole("button", {name: "5km 달리기 시작", exact: true}).click();
             await page.waitForURL("**/running");
@@ -198,7 +203,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             await recovered.locator('html[data-theme="dark"]').waitFor();
             await recovered.screenshot({path: `output/playwright/records-dark-${name}.png`});
             await recovered.goto(origin);
-            await recovered.getByRole("heading", {name: "오늘의 운동"}).waitFor();
+            await recovered.locator('[aria-controls="home-goal-options"]').waitFor();
             await recovered.screenshot({path: `output/playwright/home-dark-${name}.png`});
             await recovered.setViewportSize({width: 320, height: 700});
             await recovered.screenshot({path: `output/playwright/home-small-${name}.png`});

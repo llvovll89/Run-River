@@ -60,9 +60,7 @@ export default function SettingsPage() {
         prepared: number;
         message: string;
     }>({running: false, total: 0, prepared: 0, message: ""});
-    const [isOnline, setIsOnline] = useState(() =>
-        typeof navigator !== "undefined" ? navigator.onLine : true,
-    );
+    const [isOnline, setIsOnline] = useState(true);
     const [unclaimedCount, setUnclaimedCount] = useState(0);
     const [claiming, setClaiming] = useState(false);
     const [claimMessage, setClaimMessage] = useState("");
@@ -130,6 +128,7 @@ export default function SettingsPage() {
     }, []);
 
     useEffect(() => {
+        setIsOnline(navigator.onLine);
         const onOnline = () => setIsOnline(true);
         const onOffline = () => setIsOnline(false);
         window.addEventListener("online", onOnline);
