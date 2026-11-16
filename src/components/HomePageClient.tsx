@@ -24,6 +24,10 @@ import type {IntervalPreset} from "@/lib/intervalPresets";
 import PCLanding from "@/components/PCLanding";
 import SegmentedControl from "@/components/SegmentedControl";
 import {OfflineStatus} from "@/components/OfflineSetup";
+import {useAuthSession} from "@/hooks/useAuthSession";
+import {useCompass} from "@/hooks/useCompass";
+import RouteElevation from "@/components/RouteElevation";
+import LoginRequiredSheet, {type LoginRequest} from "@/components/LoginRequiredSheet";
 
 const KakaoMap = dynamicImport(() => import("@/components/KakaoMap"), {
     ssr: false,
@@ -137,6 +141,9 @@ export default function Home() {
     const dragY = useRef(0);
     const didDrag = useRef(false);
     const mapRef = useRef<KakaoMapHandle>(null);
+    // "follow": keep the map on me and show which way I face; any drag drops back to "free".
+    const [locateMode, setLocateMode] = useState<"free" | "follow">("free");
+    const compass = useCompass();
     const hasCenteredRef = useRef(false);
     const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
 
@@ -200,6 +207,14 @@ export default function Home() {
         return () => navigator.geolocation.clearWatch(watchId);
     }, []);
 
+
+    // Show the whole planned route once it is calculated.
+    useEffect(() => {
+        const path = route.info?.path;
+        if (pageMode !== "map" || !path || path.length < 2) return;
+        setLocateMode("free");
+        mapRef.current?.fitPoints(path);
+    }, [route.info, pageMode]);
 
     // 초기 접속 시 내 위치로 지도 이동
     useEffect(() => {
@@ -459,6 +474,10 @@ export default function Home() {
 
     function handleProtectedRoute(path: ProtectedPath) {
         setShowMore(false);
+        if (auth.status === "guest") {
+            setLoginRequest({feature: path === "/history" ? "기록" : "설정", next: path});
+            return;
+        }
         navigatePublic(path);
     }
 
@@ -466,7 +485,10 @@ export default function Home() {
     const {mode: installMode, canInstall, promptInstall} = usePWAInstall();
     const [showIOSGuide, setShowIOSGuide] = useState(false);
     const [showMore, setShowMore] = useState(false);
-    const [authUser, setAuthUser] = useState<AuthSummary | null>(null);
+    // Was a never-updated state, so signed-in users were shown as guests in 더보기.
+    const auth = useAuthSession();
+    const authUser: AuthSummary | null = auth.status === "member" ? {name: auth.name, email: auth.email} : null;
+    const [loginRequest, setLoginRequest] = useState<LoginRequest | null>(null);
     const [showReferralBanner, setShowReferralBanner] = useState(false);
     const [growthSummary, setGrowthSummary] = useState<GrowthSummary | null>(
         null,
@@ -658,6 +680,10 @@ export default function Home() {
                 startPoint={pageMode === "map" ? startPoint : null}
                 endPoint={pageMode === "map" ? endPoint : null}
                 currentPosition={userLocation}
+                heading={locateMode === "follow" ? compass.heading : null}
+                followUser={locateMode === "follow"}
+                onUserDrag={() => setLocateMode("free")}
+                showControls={!search.open}
                 routePath={pageMode === "map" ? (route.info?.path ?? []) : []}
                 previewLine={pageMode === "map"}
                 previewPoint={
@@ -692,9 +718,16 @@ export default function Home() {
                     </button>
                     {userLocation && (
                         <button
-                            onClick={() => mapRef.current?.panTo(userLocation)}
-                            className="glass rounded-2xl p-2.5 active:scale-95 transition-transform"
-                            aria-label="내 위치로 이동"
+                            onClick={() => {
+                                if (locateMode === "follow") { setLocateMode("free"); return; }
+                                mapRef.current?.panTo(userLocation);
+                                setLocateMode("follow");
+                                if (compass.needsPermission) void compass.requestPermission();
+                            }}
+                            className="locate-button glass rounded-2xl p-2.5 active:scale-95 transition-transform"
+                            data-mode={locateMode}
+                            aria-pressed={locateMode === "follow"}
+                            aria-label={locateMode === "follow" ? "내 위치 따라가기 끄기" : "내 위치 따라가기"}
                         >
                             <LocateIcon />
                         </button>
@@ -916,7 +949,7 @@ export default function Home() {
                 <span
                     className="text-xs font-semibold px-4 py-1.5 rounded-full whitespace-nowrap"
                     style={{
-                        background: `${theme === "dark" ? "#F5F7F8" : "rgba(0,0,0,0.07)"}`,
+                        background: "var(--c-glass)",
                         backdropFilter: "blur(12px)",
                         border: `1px solid ${guide.color}50`,
                         color: guide.color,
@@ -934,8 +967,8 @@ export default function Home() {
                     <div
                         className="rounded-2xl px-4 py-3"
                         style={{
-                            background: "rgba(33,109,116,0.14)",
-                            border: "1px solid rgba(33,109,116,0.35)",
+                            background: "rgba(47,71,102,0.14)",
+                            border: "1px solid rgba(47,71,102,0.35)",
                             backdropFilter: "blur(12px)",
                         }}
                     >
@@ -1351,7 +1384,7 @@ export default function Home() {
                                             style={{
                                                 background:
                                                     search.pointMode === "start"
-                                                        ? "rgba(33,109,116,0.15)"
+                                                        ? "rgba(47,71,102,0.15)"
                                                         : "rgba(255,159,10,0.15)",
                                             }}
                                         >
@@ -1561,7 +1594,7 @@ export default function Home() {
                                         width: `${Math.round(weeklyProgress * 100)}%`,
                                         height: "100%",
                                         background:
-                                            "linear-gradient(90deg, #216d74, #627c50)",
+                                            "linear-gradient(90deg, #2f4766, #627c50)",
                                         transition: "width 220ms ease",
                                     }}
                                 />
@@ -1570,7 +1603,9 @@ export default function Home() {
                                 className="mt-2"
                                 style={{fontSize: 11, color: "var(--c-text-3)"}}
                             >
-                                {weeklyLoaded
+                                {auth.status === "guest"
+                                    ? <>로그인하면 이번 주 기록이 여기에 쌓여요. <a href={`/auth?next=${encodeURIComponent("/")}`} style={{color: "var(--c-accent-text)", fontWeight: 600}}>로그인</a></>
+                                    : weeklyLoaded
                                     ? weeklyRemainKm > 0
                                         ? `목표까지 ${weeklyRemainKm.toFixed(1)}km 남았어요.`
                                         : "이번 주 목표를 달성했어요. 훌륭해요!"
@@ -1806,7 +1841,7 @@ export default function Home() {
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
                                                 style={{
-                                                    color: "#216d74",
+                                                    color: "#2f4766",
                                                     flexShrink: 0,
                                                 }}
                                             >
@@ -1821,7 +1856,7 @@ export default function Home() {
                                             </svg>
                                             <span
                                                 className="text-xs font-bold"
-                                                style={{color: "#216d74"}}
+                                                style={{color: "#2f4766"}}
                                             >
                                                 도보
                                             </span>
@@ -1888,6 +1923,9 @@ export default function Home() {
                                         </>
                                     )}
                                 </div>
+                            )}
+                            {route.info && !route.loading && route.info.path.length > 1 && (
+                                <RouteElevation path={route.info.path} />
                             )}
                         </div>
                     )}
@@ -2411,6 +2449,7 @@ export default function Home() {
                 </div>
             </div>
         <AppNavigation />
+        <LoginRequiredSheet request={loginRequest} onClose={() => setLoginRequest(null)} />
         </main>
     );
 }

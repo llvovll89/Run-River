@@ -7,12 +7,13 @@ import "leaflet/dist/leaflet.css";
 import {openOfflineMap, type MapPack} from "@/lib/offlineMaps";
 import type {LatLng, CourseOverlay} from "@/types";
 import type {TrailMapProps} from "./OfflineTrailMap";
+import {headingCone} from "@/lib/routeGeometry";
 
 const inside = (pack: MapPack, point: LatLng) => point.lng >= pack.bounds[0] && point.lng <= pack.bounds[2] && point.lat >= pack.bounds[1] && point.lat <= pack.bounds[3];
 
 // Canvas tiles and paths avoid WKWebView's WebGL surface/context lifecycle.
 // The archive still reads bounded byte ranges from the same native map files.
-export default function CanvasTrailMap({pack, overlay, currentPosition, points = [], course = [], follow = false}: TrailMapProps) {
+export default function CanvasTrailMap({pack, overlay, currentPosition, points = [], course = [], follow = false, heading = null}: TrailMapProps) {
     const container = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const layers = useRef<{imported: L.FeatureGroup; recorded: L.FeatureGroup; course: L.FeatureGroup; position: L.FeatureGroup} | null>(null);
@@ -81,8 +82,9 @@ export default function CanvasTrailMap({pack, overlay, currentPosition, points =
             }
             draw();
         };
-        line(points, groups.recorded, "#216d74"); line(course, groups.course, "#276e9a", "5 4");
-        if (currentPosition) L.circleMarker([currentPosition.lat, currentPosition.lng], {radius: 7, color: "white", weight: 3, fillColor: "#216d74", fillOpacity: 1}).addTo(groups.position);
+        line(points, groups.recorded, "#2f4766"); line(course, groups.course, "#276e9a", "5 4");
+        if (currentPosition && heading !== null) L.polygon(headingCone(currentPosition, heading).map(p => [p.lat, p.lng] as [number, number]), {stroke: false, fillColor: "#2f4766", fillOpacity: 0.35}).addTo(groups.position);
+        if (currentPosition) L.circleMarker([currentPosition.lat, currentPosition.lng], {radius: 7, color: "white", weight: 3, fillColor: "#2f4766", fillOpacity: 1}).addTo(groups.position);
         if (!follow && overlay && fittedOverlay.current !== overlay) {
             const bounds = groups.imported.getBounds();
             if (bounds.isValid()) map.fitBounds(bounds, {padding: [40, 40], maxZoom: 16, animate: false});
@@ -92,7 +94,7 @@ export default function CanvasTrailMap({pack, overlay, currentPosition, points =
             fittedCourse.current = course;
         }
         if (follow && currentPosition && (!pack || inside(pack, currentPosition))) map.panTo([currentPosition.lat, currentPosition.lng], {animate: false});
-    }, [loaded, points, course, overlay, currentPosition, follow, pack]);
+    }, [loaded, points, course, overlay, currentPosition, follow, pack, heading]);
 
     return <div className="relative w-full h-full" style={{isolation: "isolate"}} data-testid="offline-trail-map" data-map-engine="canvas" data-map-ready={loaded && !error ? "true" : "false"}>
         <div ref={container} style={{position: "absolute", inset: 0, background: "#edf1e9", zIndex: 0}} aria-label="저장한 등산 지도" />

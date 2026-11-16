@@ -11,6 +11,8 @@ export interface TrailMapProps {
     points?: LatLng[];
     course?: LatLng[];
     follow?: boolean;
+    /** Compass heading in degrees; draws a direction cone at the current position. */
+    heading?: number | null;
 }
 const loading = () => <p role="status">기기에서 지도를 읽는 중…</p>;
 const CanvasMap = dynamic(() => import("./CanvasTrailMap"), {ssr: false, loading});

@@ -4,8 +4,8 @@
   "description": "GPS 러닝 트래커",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f1f5f4",
-  "theme_color": "#123d46",
+  "background_color": "#eceef2",
+  "theme_color": "#1b2433",
   "orientation": "portrait",
   "icons": [
     {

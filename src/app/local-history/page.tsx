@@ -7,6 +7,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 import AppNavigation from "@/components/AppNavigation";
 import {RiverMark} from "@/components/Brand";
 import {activityLabel, canSyncActivity} from "@/lib/activities";
+import RouteThumbnail from "@/components/RouteThumbnail";
 
 export default function LocalHistoryPage() {
     const [entries, setEntries] = useState<LocalResultEntry[]>([]);
@@ -38,6 +39,7 @@ export default function LocalHistoryPage() {
             <div className="record-main"><h2>나의 {activityLabel(result.activity_type)}</h2>
             <div className="record-metrics"><span><strong className="num">{result.distance_km.toFixed(2)}</strong> km</span><span className="num">{formatDuration(result.duration_seconds)}</span></div>
             <p className="record-save-state">{uploaded ? "서버 저장됨" : result.ownerId && canSyncActivity(result.activity_type) ? "기기 저장됨, 연결 후 업로드" : "이 기기에 저장됨"}</p></div>
+            <RouteThumbnail points={result.pathPoints ?? []} />
             <span className="record-arrow" aria-hidden="true">›</span>
         </a>)}
         {entries.length > 0 && <p className="text-xs py-6" style={{color: "var(--c-text-2)"}}>경로는 이 기기에 보관돼요. 브라우저 데이터를 지우면 기기 기록도 사라질 수 있어요.</p>}

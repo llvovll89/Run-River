@@ -343,7 +343,7 @@ export default function SettingsPage() {
                         style={{
                             background:
                                 syncState === "saving"
-                                    ? "rgba(33,109,116,0.15)"
+                                    ? "rgba(47,71,102,0.15)"
                                     : syncState === "synced"
                                       ? "rgba(98,124,80,0.15)"
                                       : syncState === "error"
@@ -373,9 +373,9 @@ export default function SettingsPage() {
                             onClick={() => void retrySync()}
                             className="h-11 px-3 rounded-full text-xs font-semibold active:scale-95 transition-transform"
                             style={{
-                                background: "rgba(33,109,116,0.14)",
+                                background: "rgba(47,71,102,0.14)",
                                 color: "var(--c-accent-text)",
-                                border: "1px solid rgba(33,109,116,0.35)",
+                                border: "1px solid rgba(47,71,102,0.35)",
                             }}
                         >
                             지금 재시도
@@ -799,9 +799,9 @@ export default function SettingsPage() {
                             onClick={() => void handleRetryAllExhausted()}
                             className="ml-2 h-11 px-3 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
                             style={{
-                                background: "rgba(33,109,116,0.12)",
+                                background: "rgba(47,71,102,0.12)",
                                 color: "var(--c-accent-text)",
-                                border: "1px solid rgba(33,109,116,0.3)",
+                                border: "1px solid rgba(47,71,102,0.3)",
                             }}
                             disabled={syncing || !isOnline}
                         >
@@ -923,7 +923,7 @@ export default function SettingsPage() {
                     className="w-full py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
                     style={{
                         background: "var(--c-toss-blue)",
-                        boxShadow: "0 4px 20px rgba(33,109,116,0.35)",
+                        boxShadow: "0 4px 20px rgba(47,71,102,0.35)",
                         letterSpacing: "-0.01em",
                         marginTop: 8,
                     }}

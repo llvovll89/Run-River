@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect, useState, useRef, useCallback} from "react";
+import {useEffect, useState, useRef, useCallback, useMemo} from "react";
 import {useRouter} from "next/navigation";
 import dynamic from "next/dynamic";
 import {useGeolocation, calcDistance} from "@/hooks/useGeolocation";
@@ -32,6 +32,7 @@ import {SheetHandle, SheetActionGrid} from "@/components/RunSheetParts";
 import {readActiveRun, writeActiveRun, clearActiveRun, saveLocalResult, navigatePublic} from "@/lib/runStorage";
 import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 import {distanceToCourseMeters} from "@/lib/hiking";
+import {remainingAlongPath} from "@/lib/routeGeometry";
 
 const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
 const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
@@ -253,6 +254,11 @@ export default function RunningPage() {
     const lastOffRouteAlertAtRef = useRef(0);
 
     const effectiveDistance = totalDistance + adjustedDistanceKm;
+    // Distance left along the planned route/course (null when off route or no route).
+    const routeProgress = useMemo(
+        () => position && config?.routePath && config.routePath.length > 1 ? remainingAlongPath(position, config.routePath) : null,
+        [position, config?.routePath],
+    );
 
     const showToast = useCallback((msg: string, undoFn?: () => void) => {
         setToast({msg, undoFn});
@@ -1200,7 +1206,7 @@ export default function RunningPage() {
     }
 
     const isRun = config.activityType === "running";
-    const accent = isRun ? "#216d74" : "#627c50";
+    const accent = isRun ? "#2f4766" : "#627c50";
     const pace = calcPace(effectiveDistance, elapsed);
     const paceZone = getPaceZone(pace, config.activityType);
     const paceGuide = getPaceGuidance(pace, config.activityType);
@@ -1217,7 +1223,7 @@ export default function RunningPage() {
                 : "#64d2ff";
     const intervalBg =
         intervalPhase === "run"
-            ? "rgba(33,109,116,0.15)"
+            ? "rgba(47,71,102,0.15)"
             : intervalPhase === "rest"
               ? "rgba(98,124,80,0.15)"
               : intervalPhase === "warmup"
@@ -1225,7 +1231,7 @@ export default function RunningPage() {
                 : "rgba(100,210,255,0.16)";
     const intervalBorder =
         intervalPhase === "run"
-            ? "rgba(33,109,116,0.3)"
+            ? "rgba(47,71,102,0.3)"
             : intervalPhase === "rest"
               ? "rgba(98,124,80,0.3)"
               : intervalPhase === "warmup"
@@ -1246,7 +1252,7 @@ export default function RunningPage() {
             style={{background: "var(--c-bg)"}}
         >
             <h1 className="sr-only">운동 실시간 기록</h1>
-            {mapPack || config.courseOverlay ? <div className="absolute inset-0"><OfflineTrailMap pack={mapPack} overlay={config.courseOverlay} currentPosition={position} points={trackPoints} course={config.routePath} follow={followUser} /></div> : <KakaoMap
+            {mapPack || config.courseOverlay ? <div className="absolute inset-0"><OfflineTrailMap pack={mapPack} overlay={config.courseOverlay} currentPosition={position} points={trackPoints} course={config.routePath} follow={followUser} heading={isPaused ? null : heading} /></div> : <KakaoMap
                 offlineRouteTop={topPanelCollapsed ? "24%" : "54%"}
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??
@@ -1264,6 +1270,8 @@ export default function RunningPage() {
                 activityType={config.activityType}
                 followUser={followUser}
                 onUserDrag={() => setFollowUser(false)}
+                showControls={topPanelCollapsed}
+                controlsTop="26%"
                 className="absolute inset-0 h-full"
             />}
 
@@ -1718,6 +1726,19 @@ export default function RunningPage() {
                                     background: accent,
                                 }}
                             />
+                        </div>
+                    </div>
+                )}
+
+                {/* 경로 남은 거리 */}
+                {!topPanelCollapsed && routeProgress && (
+                    <div className="px-5 pt-3">
+                        <div className="route-progress">
+                            <span>경로 남은 거리</span>
+                            <span><strong className="num">{routeProgress.remainingKm.toFixed(2)} km</strong> / <span className="num">{routeProgress.totalKm.toFixed(2)} km</span></span>
+                        </div>
+                        <div className="rounded-full overflow-hidden" style={{height: 5, background: "var(--c-elevated)"}}>
+                            <div className="h-full rounded-full transition-all" style={{width: `${Math.min(100, Math.max(0, (1 - routeProgress.remainingKm / Math.max(routeProgress.totalKm, 0.001)) * 100))}%`, background: accent}} />
                         </div>
                     </div>
                 )}
