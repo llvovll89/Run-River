@@ -3,7 +3,8 @@
 import {useState, useEffect, useRef} from "react";
 import {useSearchParams} from "next/navigation";
 import dynamicImport from "next/dynamic";
-import type {KakaoMapHandle} from "@/components/KakaoMap";
+import type {MapHandle} from "@/components/MapView";
+import {loadKakaoServices} from "@/lib/kakaoServices";
 import {useTheme} from "@/hooks/useTheme";
 import {usePWAInstall} from "@/hooks/usePWAInstall";
 import {useUserProfile} from "@/hooks/useUserProfile";
@@ -29,7 +30,7 @@ import {useCompass} from "@/hooks/useCompass";
 import RouteElevation from "@/components/RouteElevation";
 import LoginRequiredSheet, {type LoginRequest} from "@/components/LoginRequiredSheet";
 
-const KakaoMap = dynamicImport(() => import("@/components/KakaoMap"), {
+const MapView = dynamicImport(() => import("@/components/MapView"), {
     ssr: false,
 });
 
@@ -140,7 +141,7 @@ export default function Home() {
     const endAddrOverride = useRef<string | null>(null);
     const dragY = useRef(0);
     const didDrag = useRef(false);
-    const mapRef = useRef<KakaoMapHandle>(null);
+    const mapRef = useRef<MapHandle>(null);
     // "follow": keep the map on me and show which way I face; any drag drops back to "free".
     const [locateMode, setLocateMode] = useState<"free" | "follow">("free");
     const compass = useCompass();
@@ -225,8 +226,8 @@ export default function Home() {
     }, [userLocation]);
 
     // 역지오코딩 헬퍼
-    function reverseGeocode(latlng: LatLng, setter: (s: string) => void) {
-        if (!window.kakao?.maps?.services) return;
+    async function reverseGeocode(latlng: LatLng, setter: (s: string) => void) {
+        if (!(await loadKakaoServices())) return;
         const geocoder = new kakao.maps.services.Geocoder();
         geocoder.coord2Address(latlng.lng, latlng.lat, (result, status) => {
             if (status === kakao.maps.services.Status.OK && result[0]) {
@@ -334,8 +335,12 @@ export default function Home() {
         setEndPoint(latlng);
     }
 
-    function handleSearch() {
+    async function handleSearch() {
         setSearch((prev) => ({...prev, loading: true}));
+        if (!(await loadKakaoServices())) {
+            setSearch((prev) => ({...prev, loading: false, results: []}));
+            return;
+        }
         const ps = new kakao.maps.services.Places();
         ps.keywordSearch(
             search.query,
@@ -667,8 +672,9 @@ export default function Home() {
 
     return (
         <main className="home-screen relative w-full h-dvh overflow-hidden">
-            <KakaoMap
+            <MapView
                 ref={mapRef}
+                offlineSketch
                 center={userLocation ?? {lat: 37.5665, lng: 126.978}}
                 onMapClick={pageMode === "map" ? handleMapClick : undefined}
                 onStartPointChange={
@@ -681,7 +687,7 @@ export default function Home() {
                 endPoint={pageMode === "map" ? endPoint : null}
                 currentPosition={userLocation}
                 heading={locateMode === "follow" ? compass.heading : null}
-                followUser={locateMode === "follow"}
+                follow={locateMode === "follow"}
                 onUserDrag={() => setLocateMode("free")}
                 showControls={!search.open}
                 routePath={pageMode === "map" ? (route.info?.path ?? []) : []}

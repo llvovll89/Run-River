@@ -1,6 +1,9 @@
 import XCTest
 
 final class HikingUITests: XCTestCase {
+    // First screen after (re)launch. CI simulators without a GPU have needed ~40s here
+    // (slow termination of the previous instance plus WebKit start-up), so allow 60s.
+    private let launchTimeout: TimeInterval = 60
     private func scrollPage(_ app: XCUIApplication) {
         // Drag the page margin; swiping through a MapLibre canvas pans the map
         // instead of scrolling to the control below it.
@@ -24,7 +27,7 @@ final class HikingUITests: XCTestCase {
     func testStartPauseFinishSaveAndExportHiking() {
         let app = XCUIApplication(); app.launch()
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
-        XCTAssertTrue(hiking.waitForExistence(timeout: 30)); hiking.tap()
+        XCTAssertTrue(hiking.waitForExistence(timeout: launchTimeout)); hiking.tap()
         let start = app.webViews.buttons["현재 위치에서 하이킹 시작"]
         tapVisible(start, in: app)
         let pause = app.webViews.buttons["일시정지"]
@@ -59,6 +62,7 @@ final class HikingUITests: XCTestCase {
     func testNativeDownloadAndRenderMap() {
         let app = XCUIApplication(); app.launch()
         let maps = app.webViews.links["오프라인 지도 준비"]
+        _ = maps.waitForExistence(timeout: launchTimeout)
         tapVisible(maps, in: app)
         XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
         tapVisible(app.webViews.buttons["북한산 지도 저장"], in: app)
@@ -69,7 +73,8 @@ final class HikingUITests: XCTestCase {
             scrollPage(app)
         }
         XCTAssertTrue(caption.exists)
-        XCTAssertTrue(app.webViews.buttons["Zoom in"].exists)
+        // MapView's own zoom control; it only renders once the map has opened.
+        XCTAssertTrue(app.webViews.buttons["지도 확대"].waitForExistence(timeout: 15))
         let loading = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "기기에서 지도를 읽는 중")).firstMatch
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: loading)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
@@ -79,7 +84,7 @@ final class HikingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
-        XCTAssertTrue(hiking.waitForExistence(timeout: 30))
+        XCTAssertTrue(hiking.waitForExistence(timeout: launchTimeout))
         hiking.tap()
         XCTAssertTrue(app.webViews.staticTexts["산길에서도 나의 페이스로"].waitForExistence(timeout: 30))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-hiking"; shot.lifetime = .keepAlways; add(shot)
@@ -88,7 +93,11 @@ final class HikingUITests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
         let picker = app.webViews.buttons["지도 파일 가져오기"]
         tapVisible(picker, in: app)
-        XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "Native Files picker must be presented")
+        // The system Files picker can take a while to appear on a fresh CI simulator, and a tap
+        // made while WebKit is busy may be dropped. Wait, then try the button once more.
+        let filesPicker = app.navigationBars.firstMatch
+        if !filesPicker.waitForExistence(timeout: 20), picker.exists, picker.isHittable { picker.tap() }
+        XCTAssertTrue(filesPicker.waitForExistence(timeout: 30), "Native Files picker must be presented")
         let files = XCTAttachment(screenshot: app.screenshot()); files.name = "iPhone-Files-picker"; files.lifetime = .keepAlways; add(files)
     }
 }

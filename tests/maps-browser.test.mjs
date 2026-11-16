@@ -69,6 +69,8 @@ test("downloaded trail map renders after network loss and survives reopening", {
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         assert.equal(mapRequests, 1, "Stored map must not be fetched again");
         assert.ok(await page.getByTestId("offline-trail-map").evaluate(element => element.clientHeight >= 300), "The rendered map must have a visible viewport");
+        // The iOS UI test relies on this control to confirm the map opened.
+        await page.getByRole("button", {name: "지도 확대", exact: true}).waitFor();
         await mkdir("output/playwright", {recursive: true});
         await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/offline-trail-map.png"});
         assert.deepEqual(await page.getByRole("alert").allTextContents(), [""]);

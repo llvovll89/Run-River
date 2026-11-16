@@ -73,11 +73,12 @@ getRunningHistory()              // SELECT * ORDER BY created_at DESC
 ---
 
 ## 컴포넌트
-**KakaoMap.tsx** — ref: `KakaoMapHandle { panTo(latlng) }`
-- window.kakao 동적 로딩, 타입: `src/types/kakao.d.ts`
-- 마커: 출발(초록), 도착(주황), 미리보기(회색)
-- 폴리라인: routePath(파랑 #007aff 6px), pathPoints(활동색 5px), previewLine(회색 점선)
-- 도착 반경 원: 5m, 주황 #ff9f0a
+**MapView.tsx** — 모든 화면의 공통 지도. ref: `MapHandle { panTo(latlng), fitPoints(points) }`
+- 배경: 저장한 PMTiles 팩 → 온라인이면 OpenFreeMap(OSM) → 오프라인이면 GPS 스케치(`offlineSketch`)
+- 엔진: MapLibre(`MapLibreTrailMap.tsx`), 아이폰(WKWebView WebGL 문제)은 Leaflet 캔버스(`CanvasTrailMap.tsx` + `lib/omtCanvasRules.ts`)
+- 마커: 출발(초록), 도착(주황), 미리보기 핀 / 선: routePath(예정 경로), points(기록, 활동색), course(따라갈 코스, 점선), previewLine
+- 도착 반경 원 5m, 지형 음영(MapLibre 온라인만, AWS terrarium), 확대·축소 `MapControls.tsx`
+- 설정·색상: `lib/mapBase.ts`. 카카오는 장소 검색·주소 변환에만 사용(`lib/kakaoServices.ts`)
 
 **기타:** WeeklyChart(recharts), DeleteRecordButton, EditableMemo, PWAUpdateBanner, PCLanding
 

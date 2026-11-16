@@ -81,7 +81,8 @@ jobs:
           xcrun simctl install "$DEVICE" ios/DerivedData/Build/Products/Debug-iphonesimulator/App.app
           xcrun simctl privacy "$DEVICE" grant location com.runriver.app
       - name: Test real WKWebView, Core Location, storage and UI
-        timeout-minutes: 15
+        # Has run up to ~14 minutes on hosted macOS simulators; keep headroom.
+        timeout-minutes: 20
         run: |
           # Move a few meters at walking speed: identical stationary fixes may
           # be coalesced across app relaunches by Simulator's location service.
