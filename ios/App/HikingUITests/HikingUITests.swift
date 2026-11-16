@@ -69,7 +69,8 @@ final class HikingUITests: XCTestCase {
             scrollPage(app)
         }
         XCTAssertTrue(caption.exists)
-        XCTAssertTrue(app.webViews.buttons["Zoom in"].exists)
+        // MapView's own zoom control; it only renders once the map has opened.
+        XCTAssertTrue(app.webViews.buttons["지도 확대"].waitForExistence(timeout: 15))
         let loading = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "기기에서 지도를 읽는 중")).firstMatch
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: loading)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
