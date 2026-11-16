@@ -1,5 +1,5 @@
 import {NextResponse, type NextRequest} from "next/server";
-import {updateSession} from "./lib/supabaseMiddleware";
+import {hasAuthCookie, updateSession} from "./lib/supabaseMiddleware";
 
 const AUTH_REQUIRED_ROUTES = ["/history", "/settings"];
 
@@ -26,7 +26,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    const {response, user} = await updateSession(request);
+    const {response, user, timedOut} = await updateSession(request);
+
+    // Auth server unreachable: with a session cookie, let the page load and report the
+    // problem itself rather than logging a signed-in user out. Without one, the user is a guest.
+    if (timedOut && hasAuthCookie(request)) return response;
 
     if (!user && isAuthRequiredRoute(pathname)) {
         const requestedPath = `${pathname}${request.nextUrl.search}`;
