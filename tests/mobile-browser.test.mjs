@@ -4,6 +4,8 @@ import {createServer} from "node:http";
 import {readFile, mkdir} from "node:fs/promises";
 import path from "node:path";
 import {chromium, webkit} from "playwright";
+import nextEnv from "@next/env";
+nextEnv.loadEnvConfig(process.cwd(), false);
 const browserType = process.env.TEST_BROWSER === "webkit" ? webkit : chromium;
 
 test("packaged app opens and navigates without external network or a service worker", async () => {
@@ -77,6 +79,32 @@ test("packaged app opens and navigates without external network or a service wor
         await mkdir("output/playwright", {recursive: true});
         await page.screenshot({path: "output/playwright/mobile-bundle.png"});
         assert.deepEqual(errors, []);
+        // A stalled auth service must not remove navigation or leave an endless
+        // loading screen. Only fabricated credentials enter this isolated context.
+        const slowContext = await browser.newContext({viewport: {width: 390, height: 844}});
+        await slowContext.route("**/*", route => {
+            if (route.request().url().startsWith(origin + "/")) return route.continue();
+            if (new URL(route.request().url()).pathname === "/auth/v1/user") return;
+            return route.abort();
+        });
+        const storageKey = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]}-auth-token`;
+        await slowContext.addInitScript(({storageKey}) => {
+            const user = {id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated", email: "slow@example.invalid", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z"};
+            const expires_at = Math.floor(Date.now() / 1000) + 3600;
+            const token = `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({sub: user.id, exp: expires_at}))}.test`;
+            localStorage.setItem(storageKey, JSON.stringify({access_token: token, refresh_token: "test", token_type: "bearer", expires_at, expires_in: 3600, user}));
+        }, {storageKey});
+        const slowPage = await slowContext.newPage();
+        const authStarted = slowPage.waitForRequest(request => new URL(request.url()).pathname === "/auth/v1/user");
+        await slowPage.goto(origin + "/history/");
+        await authStarted;
+        await slowPage.getByRole("status").filter({hasText: "기록을 불러오는 중"}).waitFor();
+        assert.ok(await slowPage.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "설정", exact: true}).isVisible());
+        await slowPage.getByText("연결이 지연되고 있어요. 인터넷 연결을 확인한 뒤 통계를 다시 열어주세요.", {exact: true}).waitFor({timeout: 15000});
+        await slowPage.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "운동", exact: true}).click();
+        await slowPage.waitForURL(origin + "/");
+        await slowPage.locator('[aria-controls="home-goal-options"]').click();
+        await slowContext.close();
         const nativeContext = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await nativeContext.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         await nativeContext.addInitScript((platform) => {
