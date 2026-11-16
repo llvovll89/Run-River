@@ -93,7 +93,11 @@ final class HikingUITests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
         let picker = app.webViews.buttons["지도 파일 가져오기"]
         tapVisible(picker, in: app)
-        XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 15), "Native Files picker must be presented")
+        // The system Files picker can take a while to appear on a fresh CI simulator, and a tap
+        // made while WebKit is busy may be dropped. Wait, then try the button once more.
+        let filesPicker = app.navigationBars.firstMatch
+        if !filesPicker.waitForExistence(timeout: 20), picker.exists, picker.isHittable { picker.tap() }
+        XCTAssertTrue(filesPicker.waitForExistence(timeout: 30), "Native Files picker must be presented")
         let files = XCTAttachment(screenshot: app.screenshot()); files.name = "iPhone-Files-picker"; files.lifetime = .keepAlways; add(files)
     }
 }
