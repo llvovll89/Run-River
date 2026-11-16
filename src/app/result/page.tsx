@@ -180,7 +180,7 @@ async function generateShareImage(
     const ctx = canvas.getContext("2d")!;
 
     const isRun = result.activity_type === "running";
-    const accent = isRun ? "#216d74" : "#627c50";
+    const accent = isRun ? "#2f4766" : "#627c50";
     const actLabel = activityLabel(result.activity_type);
 
     await document.fonts.ready;
@@ -958,7 +958,7 @@ export default function ResultPage() {
                             className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
                             style={{
                                 background: isAutoGapMode
-                                    ? "rgba(33,109,116,0.12)"
+                                    ? "rgba(47,71,102,0.12)"
                                     : "rgba(255,159,10,0.15)",
                                 color: isAutoGapMode
                                     ? "var(--c-toss-blue)"

@@ -4,9 +4,33 @@ declare namespace kakao {
       constructor(container: HTMLElement, options: MapOptions);
       setCenter(latlng: LatLng): void;
       getCenter(): LatLng;
-      setLevel(level: number): void;
+      setLevel(level: number, options?: {animate?: boolean | {duration: number}}): void;
       getLevel(): number;
       panTo(latlng: LatLng): void;
+      setMapTypeId(mapTypeId: MapTypeId): void;
+      addOverlayMapTypeId(mapTypeId: MapTypeId): void;
+      removeOverlayMapTypeId(mapTypeId: MapTypeId): void;
+      setBounds(bounds: LatLngBounds, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number): void;
+      relayout(): void;
+    }
+
+    enum MapTypeId {
+      ROADMAP = 1,
+      SKYVIEW = 2,
+      HYBRID = 3,
+      OVERLAY = 4,
+      ROADVIEW = 5,
+      TRAFFIC = 6,
+      TERRAIN = 7,
+      BICYCLE = 8,
+      BICYCLE_HYBRID = 9,
+      USE_DISTRICT = 10,
+    }
+
+    class LatLngBounds {
+      constructor(sw?: LatLng, ne?: LatLng);
+      extend(latlng: LatLng): void;
+      isEmpty(): boolean;
     }
 
     class LatLng {

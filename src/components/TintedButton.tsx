@@ -6,9 +6,9 @@ type Tone = "accent" | "danger" | "danger-solid" | "neutral";
 
 const TONE_STYLES: Record<Tone, { background: string; color: string; border: string }> = {
     accent: {
-        background: "rgba(33,109,116,0.12)",
+        background: "rgba(47,71,102,0.12)",
         color: "var(--c-accent-text)",
-        border: "1px solid rgba(33,109,116,0.3)",
+        border: "1px solid rgba(47,71,102,0.3)",
     },
     danger: {
         background: "rgba(255,69,58,0.12)",

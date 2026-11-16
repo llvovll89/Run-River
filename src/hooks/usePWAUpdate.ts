@@ -1,89 +1,96 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState } from "react";
+import { readActiveRun } from "@/lib/runStorage";
 
-function reloadWithBuster() {
-  const doReload = async () => {
-    try {
-      // The new worker has already prepared its offline assets. Keep them.
-    } catch {
-      // 캐시 삭제 실패 시에도 새 버전 로드는 진행한다.
-    }
+const UPDATED_FLAG = "rr_pwa_updated";
 
-    const url = new URL(window.location.href);
-    url.searchParams.set("sw", Date.now().toString());
-    window.location.replace(url.toString());
-  };
-
-  void doReload();
+/** Never swap versions under a live recording: the running screen or a recoverable run. */
+function isSafeToUpdate(): boolean {
+  if (/^\/running\/?$/.test(window.location.pathname)) return false;
+  try { return !readActiveRun(); } catch { return false; }
 }
 
+function reload() {
+  try { sessionStorage.setItem(UPDATED_FLAG, "1"); } catch { /* toast only */ }
+  window.location.reload();
+}
+
+/**
+ * Applies new app versions automatically instead of asking the user.
+ * - Found on launch: activate and reload right away (the screen has barely rendered).
+ * - Found while in use: activate silently and reload the next time the app is hidden,
+ *   so the user returns to the new version without a mid-task refresh.
+ * - During a run: wait; the check repeats whenever the app comes back to the foreground.
+ */
 export function usePWAUpdate() {
-  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
-  const [isApplying, setIsApplying] = useState(false);
-  const refreshingRef = useRef(false);
-  const applyingRef = useRef(false);
+  const [justUpdated, setJustUpdated] = useState(false);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_NATIVE_APP === "1") return;
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    navigator.serviceWorker.ready.then((registration) => {
-      if (registration.waiting && navigator.serviceWorker.controller) {
-        setWaitingWorker(registration.waiting);
+    try {
+      if (sessionStorage.getItem(UPDATED_FLAG)) {
+        sessionStorage.removeItem(UPDATED_FLAG);
+        setJustUpdated(true);
       }
+    } catch { /* ignore */ }
 
-      registration.addEventListener("updatefound", () => {
-        const newWorker = registration.installing;
-        if (!newWorker) return;
-        newWorker.addEventListener("statechange", () => {
-          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-            setWaitingWorker(newWorker);
-          }
+    let disposed = false;
+    let reloadWhenHidden = false;
+    let registration: ServiceWorkerRegistration | null = null;
+    const launchedAt = Date.now();
+
+    const activate = (worker: ServiceWorker | null) => {
+      // Without a controller this is the first install, not an update.
+      if (!worker || !navigator.serviceWorker.controller || disposed || !isSafeToUpdate()) return;
+      worker.postMessage({ type: "SKIP_WAITING" });
+    };
+
+    const onControllerChange = () => {
+      if (disposed) return;
+      // Right after launch nobody is mid-task yet; otherwise wait until the app is in the background.
+      if (Date.now() - launchedAt < 5000 && document.visibilityState === "visible") reload();
+      else reloadWhenHidden = true;
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (reloadWhenHidden && isSafeToUpdate()) reload();
+        return;
+      }
+      // PWAs stay open for days; look for a new version each time the app returns.
+      void registration?.update().catch(() => undefined);
+      activate(registration?.waiting ?? null);
+    };
+
+    navigator.serviceWorker.ready.then((ready) => {
+      if (disposed) return;
+      registration = ready;
+      activate(ready.waiting);
+      ready.addEventListener("updatefound", () => {
+        const worker = ready.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed") activate(worker);
         });
       });
     });
 
-    // skipWaiting 후 새 SW가 controllerchange 이벤트를 발생시키면 안전하게 한 번만 리로드
-    const onControllerChange = () => {
-      if (!applyingRef.current) return;
-      if (refreshingRef.current) return;
-      refreshingRef.current = true;
-      window.setTimeout(() => {
-        reloadWithBuster();
-      }, 150);
-    };
-
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      disposed = true;
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
-  const applyUpdate = useCallback(() => {
-    if (!waitingWorker) return;
-    applyingRef.current = true;
-    setIsApplying(true);
-    waitingWorker.postMessage({ type: "SKIP_WAITING" });
+  useEffect(() => {
+    if (!justUpdated) return;
+    const timer = window.setTimeout(() => setJustUpdated(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [justUpdated]);
 
-    // 일부 환경에서 controllerchange가 누락될 수 있어 폴백 리로드를 둔다.
-    window.setTimeout(() => {
-      if (!refreshingRef.current) {
-        refreshingRef.current = true;
-        reloadWithBuster();
-      }
-    }, 2200);
-  }, [waitingWorker]);
-
-  const dismissUpdate = useCallback(() => {
-    setWaitingWorker(null);
-  }, []);
-
-  return {
-    updateAvailable: !!waitingWorker,
-    isApplying,
-    applyUpdate,
-    dismissUpdate,
-  };
+  return { justUpdated };
 }

@@ -52,18 +52,30 @@ test("packaged app opens and navigates without external network or a service wor
                 assert.equal(await page.getByRole("button", {name: "3km", exact: true}).isVisible(), false);
                 assert.ok(await page.getByRole("button", {name: /3km.*시작/}).isVisible());
                 await page.screenshot({path: `output/playwright/home-compact-${width}-${colorScheme}.png`});
+                // Guests get an explanation before the login screen, from 더보기 and from the tab bar.
                 await page.getByRole("button", {name: "더보기", exact: true}).click();
                 await page.getByRole("button", {name: "기록", exact: true}).click();
-                await page.waitForURL("**/auth/?next=*");
+                const loginSheet = page.getByRole("dialog", {name: "기록 화면은 로그인이 필요해요"});
+                await loginSheet.waitFor();
+                await loginSheet.getByRole("link", {name: "로그인하기", exact: true}).click();
+                await page.waitForURL(/\/auth\/?\?next=%2Fhistory/);
+                await page.getByRole("note").filter({hasText: "통계와 계정 기록은 로그인 후"}).waitFor();
                 await page.getByRole("button", {name: "뒤로가기", exact: true}).click();
                 await page.waitForURL(origin + "/");
                 await page.getByRole("button", {name: "더보기", exact: true}).click();
                 await page.getByRole("button", {name: "설정", exact: true}).click();
-                await page.waitForURL(/\/settings\/?$/);
-                await page.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "운동", exact: true}).click();
-                await page.waitForURL(origin + "/");
+                const settingsSheet = page.getByRole("dialog", {name: "설정 화면은 로그인이 필요해요"});
+                await settingsSheet.getByRole("button", {name: "나중에", exact: true}).click();
+                assert.equal(await settingsSheet.count(), 0);
+                assert.equal(new URL(page.url()).pathname, "/");
                 await page.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "통계", exact: true}).click();
-                await page.waitForURL("**/auth/?next=*");
+                const statsSheet = page.getByRole("dialog", {name: "통계 화면은 로그인이 필요해요"});
+                await statsSheet.waitFor();
+                await page.keyboard.press("Escape");
+                assert.equal(await statsSheet.count(), 0);
+                await page.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "통계", exact: true}).click();
+                await statsSheet.getByRole("link", {name: "로그인하기", exact: true}).click();
+                await page.waitForURL(/\/auth\/?\?next=%2Fhistory/);
                 await page.getByRole("button", {name: "뒤로가기", exact: true}).click();
                 await page.waitForURL(origin + "/");
                 await page.getByRole("button", {name: "장소 검색", exact: true}).click();
@@ -109,6 +121,32 @@ test("packaged app opens and navigates without external network or a service wor
         await slowPage.waitForURL(origin + "/");
         await slowPage.locator('[aria-controls="home-goal-options"]').click();
         await slowContext.close();
+        // A slow page load must still acknowledge the tap. The document request is cancelled
+        // after React handles the click (window bubble phase), so the page stays put like a stalled load.
+        const stalledNavContext = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
+        await stalledNavContext.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
+        const stalledNavPage = await stalledNavContext.newPage();
+        await stalledNavPage.clock.install();
+        await stalledNavPage.goto(origin + "/local-history/", {waitUntil: "networkidle"});
+        await stalledNavPage.evaluate(() => {
+            window.__stallHome = true;
+            window.addEventListener("click", event => {
+                if (window.__stallHome && event.target instanceof Element && event.target.closest('nav a[href="/"]')) event.preventDefault();
+            });
+        });
+        const mainNav = stalledNavPage.getByRole("navigation", {name: "주요 메뉴"});
+        assert.equal(await mainNav.getByRole("link", {name: "기기 기록", exact: true}).getAttribute("aria-current"), "page");
+        await mainNav.getByRole("link", {name: "운동", exact: true}).click();
+        const busyTab = mainNav.locator('a[aria-busy="true"]');
+        await busyTab.filter({hasText: "여는 중"}).waitFor({timeout: 2000});
+        assert.equal(await busyTab.getAttribute("aria-label"), "운동");
+        assert.equal(await stalledNavPage.locator(".navigation-notice").count(), 0);
+        await stalledNavPage.clock.runFor(12500);
+        await stalledNavPage.getByRole("status").filter({hasText: "운동 화면 연결이 느려요"}).waitFor();
+        await stalledNavPage.evaluate(() => { window.__stallHome = false; });
+        await mainNav.getByRole("link", {name: "운동", exact: true}).click();
+        await stalledNavPage.waitForURL(origin + "/");
+        await stalledNavContext.close();
         const nativeContext = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce"});
         await nativeContext.route("**/*", route => route.request().url().startsWith(origin + "/") ? route.continue() : route.abort());
         await nativeContext.addInitScript((platform) => {

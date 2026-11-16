@@ -42,7 +42,7 @@ export default function SegmentedControl<T extends string>({
                         style={{
                             background: active ? "var(--c-surface)" : "transparent",
                             color: active ? "var(--c-text-1)" : "var(--c-text-2)",
-                            boxShadow: active ? "0 1px 4px rgba(18,61,70,.08)" : "none",
+                            boxShadow: active ? "0 1px 4px rgba(20,28,42,.08)" : "none",
                         }}
                     >
                         {opt.label}

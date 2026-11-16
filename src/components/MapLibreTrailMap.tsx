@@ -7,6 +7,7 @@ import {Protocol} from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {openOfflineMap, type MapPack} from "@/lib/offlineMaps";
 import type {LatLng, CourseOverlay} from "@/types";
+import {headingCone} from "@/lib/routeGeometry";
 
 let protocol: Protocol | null = null;
 function style(url: string, bounds: MapPack["bounds"], maxzoom: number): StyleSpecification {
@@ -29,7 +30,7 @@ function style(url: string, bounds: MapPack["bounds"], maxzoom: number): StyleSp
     };
 }
 
-export default function OfflineTrailMap({pack, overlay, currentPosition, points = [], course = [], follow = false}: {pack?: MapPack | null; overlay?: CourseOverlay; currentPosition?: LatLng | null; points?: LatLng[]; course?: LatLng[]; follow?: boolean}) {
+export default function OfflineTrailMap({pack, overlay, currentPosition, points = [], course = [], follow = false, heading = null}: {pack?: MapPack | null; overlay?: CourseOverlay; currentPosition?: LatLng | null; points?: LatLng[]; course?: LatLng[]; follow?: boolean; heading?: number | null}) {
     const container = useRef<HTMLDivElement>(null);
     const mapRef = useRef<MapInstance | null>(null);
     const [loaded, setLoaded] = useState(false);
@@ -73,11 +74,13 @@ export default function OfflineTrailMap({pack, overlay, currentPosition, points 
                         if (feature) new maplibregl.Popup().setLngLat(event.lngLat).setText(String(feature.properties.name || "가져온 표시")).addTo(map);
                     });
                     map.addSource("recorded", {type: "geojson", data: {type: "FeatureCollection", features: []}});
-                    map.addLayer({id: "recorded", type: "line", source: "recorded", paint: {"line-color": "#216d74", "line-width": 4}});
+                    map.addLayer({id: "recorded", type: "line", source: "recorded", paint: {"line-color": "#2f4766", "line-width": 4}});
                     map.addSource("course", {type: "geojson", data: {type: "FeatureCollection", features: []}});
                     map.addLayer({id: "course", type: "line", source: "course", paint: {"line-color": "#276e9a", "line-width": 4, "line-dasharray": [2, 1]}});
+                    map.addSource("heading", {type: "geojson", data: {type: "FeatureCollection", features: []}});
+                    map.addLayer({id: "heading", type: "fill", source: "heading", paint: {"fill-color": "#2f4766", "fill-opacity": 0.35}});
                     map.addSource("position", {type: "geojson", data: {type: "FeatureCollection", features: []}});
-                    map.addLayer({id: "position", type: "circle", source: "position", paint: {"circle-radius": 7, "circle-color": "#216d74", "circle-stroke-color": "white", "circle-stroke-width": 3}});
+                    map.addLayer({id: "position", type: "circle", source: "position", paint: {"circle-radius": 7, "circle-color": "#2f4766", "circle-stroke-color": "white", "circle-stroke-width": 3}});
                     if (!disposed) setLoaded(true);
                 });
             } catch (error) { if (!disposed) setError(error instanceof Error ? error.message : "지도를 열지 못했어요."); }
@@ -114,8 +117,9 @@ export default function OfflineTrailMap({pack, overlay, currentPosition, points 
             fittedCourse.current = course;
         }
         (map.getSource("position") as GeoJSONSource)?.setData({type: "FeatureCollection", features: currentPosition ? [{type: "Feature", properties: {}, geometry: {type: "Point", coordinates: [currentPosition.lng, currentPosition.lat]}}] : []});
+        (map.getSource("heading") as GeoJSONSource)?.setData({type: "FeatureCollection", features: currentPosition && heading !== null ? [{type: "Feature", properties: {}, geometry: {type: "Polygon", coordinates: [headingCone(currentPosition, heading).map(p => [p.lng, p.lat])]}}] : []});
         if (follow && currentPosition && (!pack || contains(pack, currentPosition))) map.easeTo({center: [currentPosition.lng, currentPosition.lat], duration: 500});
-    }, [loaded, points, course, overlay, currentPosition, follow, pack]);
+    }, [loaded, points, course, overlay, currentPosition, follow, pack, heading]);
 
     return <div className="relative w-full h-full" data-testid="offline-trail-map" data-map-ready={loaded && !error ? "true" : "false"}>
         <div ref={container} style={{position: "absolute", inset: 0}} aria-label="저장한 등산 지도" />

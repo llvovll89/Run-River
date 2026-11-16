@@ -60,6 +60,13 @@ function toKoreanAuthError(rawMessage: string, mode: AuthMode): string {
         : "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.";
 }
 
+/** Why the user was sent here, so the login form does not appear out of nowhere. */
+function loginPurpose(next: string): string | null {
+    if (next.startsWith("/history")) return "통계와 계정 기록은 로그인 후 볼 수 있어요. 로그인하면 바로 이어서 열어드릴게요.";
+    if (next.startsWith("/settings")) return "설정은 로그인 후 바꿀 수 있어요. 로그인하면 바로 이어서 열어드릴게요.";
+    return null;
+}
+
 export default function AuthPage() {
     const router = useRouter();
     const [next, setNext] = useState("/");
@@ -311,7 +318,7 @@ export default function AuthPage() {
             >
                 <h1
                     style={{
-                        fontSize: 30,
+                        fontSize: 24,
                         fontWeight: 800,
                         color: "var(--c-text-1)",
                         letterSpacing: "-0.02em",
@@ -329,6 +336,11 @@ export default function AuthPage() {
                     로그인 후 내 기록과 프로필을 계정으로 안전하게 관리할 수
                     있습니다.
                 </p>
+                {loginPurpose(next) && (
+                    <p className="auth-purpose" role="note">
+                        {loginPurpose(next)}
+                    </p>
+                )}
 
                 <div
                     className="mt-4 grid grid-cols-2 gap-2 rounded-2xl p-1"

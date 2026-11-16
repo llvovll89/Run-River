@@ -22,9 +22,9 @@ const END_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(_e
 
 function buildCurrentMarkerHTML(heading: number | null): string {
   const cone = heading !== null
-    ? `<svg style="position:absolute;top:0;left:0;width:44px;height:44px;transform:rotate(${heading}deg);transform-origin:50% 50%" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><path d="M22,22 L17,10 Q22,4 27,10 Z" fill="#216d74" opacity="0.82"/></svg>`
+    ? `<svg style="position:absolute;top:0;left:0;width:44px;height:44px;transform:rotate(${heading}deg);transform-origin:50% 50%" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><path d="M22,22 L17,10 Q22,4 27,10 Z" fill="#2f4766" opacity="0.82"/></svg>`
     : "";
-  return `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center">${cone}<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(33,109,116,0.15)"></div><div style="position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(33,109,116,0.22)"></div><div style="width:11px;height:11px;border-radius:50%;background:#216d74;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(33,109,116,0.7);position:relative;z-index:1"></div></div>`;
+  return `<div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center">${cone}<div style="position:absolute;width:24px;height:24px;border-radius:50%;background:rgba(47,71,102,0.15)"></div><div style="position:absolute;width:16px;height:16px;border-radius:50%;background:rgba(47,71,102,0.22)"></div><div style="width:11px;height:11px;border-radius:50%;background:#2f4766;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(47,71,102,0.7);position:relative;z-index:1"></div></div>`;
 }
 
 // 미리보기 핀 마커 — 슬레이트 그라디언트
@@ -33,6 +33,22 @@ const PREVIEW_MARKER_SRC = `data:image/svg+xml;charset=utf-8,${encodeURIComponen
 
 export interface KakaoMapHandle {
   panTo: (latlng: LatLng) => void;
+  /** Zoom and pan so every point is visible. */
+  fitPoints: (points: LatLng[]) => void;
+}
+
+type BaseMap = "road" | "sky" | "hybrid";
+const BASE_MAPS: {value: BaseMap; label: string}[] = [
+  {value: "road", label: "일반"},
+  {value: "sky", label: "위성"},
+  {value: "hybrid", label: "위성+길"},
+];
+const MAP_PREFS_KEY = "rr_map_prefs";
+function readMapPrefs(): {base: BaseMap; terrain: boolean} {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MAP_PREFS_KEY) ?? "{}");
+    return {base: BASE_MAPS.some(b => b.value === raw.base) ? raw.base : "road", terrain: raw.terrain === true};
+  } catch { return {base: "road", terrain: false}; }
 }
 
 interface KakaoMapProps {
@@ -54,6 +70,10 @@ interface KakaoMapProps {
   followUser?: boolean;
   onUserDrag?: () => void;
   className?: string;
+  /** Show map type (일반/위성), terrain and zoom controls. */
+  showControls?: boolean;
+  /** CSS `top` for the control stack, so it clears each screen's header. */
+  controlsTop?: string;
 }
 
 const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
@@ -75,6 +95,8 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   followUser = false,
   onUserDrag,
   className = "",
+  showControls = false,
+  controlsTop = "calc(var(--sat) + 76px)",
 }: KakaoMapProps, ref) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -93,7 +115,35 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
       if (!mapInstanceRef.current) return;
       mapInstanceRef.current.panTo(new kakao.maps.LatLng(latlng.lat, latlng.lng));
     },
+    fitPoints(points: LatLng[]) {
+      const map = mapInstanceRef.current;
+      if (!map || points.length === 0) return;
+      const bounds = new kakao.maps.LatLngBounds();
+      points.forEach(p => bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)));
+      map.setBounds(bounds, 90, 40, 220, 40);
+    },
   }));
+
+  const [mapPrefs, setMapPrefs] = useState<{base: BaseMap; terrain: boolean}>({base: "road", terrain: false});
+  useEffect(() => { setMapPrefs(readMapPrefs()); }, []);
+  const updateMapPrefs = (next: {base: BaseMap; terrain: boolean}) => {
+    setMapPrefs(next);
+    try { localStorage.setItem(MAP_PREFS_KEY, JSON.stringify(next)); } catch { /* preference only */ }
+  };
+  // Apply base map + terrain overlay whenever the map or the preference changes.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !mapReady) return;
+    const ids = kakao.maps.MapTypeId;
+    map.setMapTypeId(mapPrefs.base === "sky" ? ids.SKYVIEW : mapPrefs.base === "hybrid" ? ids.HYBRID : ids.ROADMAP);
+    if (mapPrefs.terrain) map.addOverlayMapTypeId(ids.TERRAIN);
+    else map.removeOverlayMapTypeId(ids.TERRAIN);
+  }, [mapPrefs, mapReady]);
+  const zoomBy = (delta: number) => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setLevel(Math.min(14, Math.max(1, map.getLevel() + delta)), {animate: true});
+  };
   const startMarkerRef   = useRef<kakao.maps.Marker | null>(null);
   const endMarkerRef     = useRef<kakao.maps.Marker | null>(null);
   const previewMarkerRef = useRef<kakao.maps.Marker | null>(null);
@@ -298,7 +348,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
     const routeLine = new kakao.maps.Polyline({
       path: routePath.map((p) => new kakao.maps.LatLng(p.lat, p.lng)),
       strokeWeight: 6,
-      strokeColor: "#216d74",
+      strokeColor: "#2f4766",
       strokeOpacity: 0.85,
       strokeStyle: "solid",
       map: mapInstanceRef.current,
@@ -330,7 +380,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   // activityType 변경 시 색상 업데이트 — 폴리라인 재생성
   useEffect(() => {
     if (!mapInstanceRef.current || !polylineRef.current) return;
-    const color = activityType === "walking" ? "#627c50" : "#216d74";
+    const color = activityType === "walking" ? "#627c50" : "#2f4766";
     const path = polylineRef.current.getPath() as kakao.maps.LatLng[];
     polylineRef.current.setMap(null);
     polylineRef.current = new kakao.maps.Polyline({
@@ -349,7 +399,7 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
   // pathPoints 변경 시 setPath로 점진적 업데이트 (전체 재생성 방지)
   useEffect(() => {
     if (!mapInstanceRef.current) return;
-    const color = activityType === "walking" ? "#627c50" : "#216d74";
+    const color = activityType === "walking" ? "#627c50" : "#2f4766";
     if (pathPoints.length < 2) {
       if (polylineRef.current) {
         polylineRef.current.setMap(null);
@@ -398,6 +448,16 @@ const KakaoMap = forwardRef<KakaoMapHandle, KakaoMapProps>(function KakaoMap({
 
   return <div className={`relative w-full ${className}`}>
     <div ref={mapRef} className="absolute inset-0" />
+    {showControls && online && mapReady && <div className="map-controls" style={{top: controlsTop}}>
+      <div className="map-control-group" role="group" aria-label="지도 종류">
+        {BASE_MAPS.map(b => <button type="button" key={b.value} aria-pressed={mapPrefs.base === b.value} onClick={() => updateMapPrefs({...mapPrefs, base: b.value})}>{b.label}</button>)}
+        <button type="button" aria-pressed={mapPrefs.terrain} onClick={() => updateMapPrefs({...mapPrefs, terrain: !mapPrefs.terrain})} title="산 지형 음영">지형</button>
+      </div>
+      <div className="map-control-group" role="group" aria-label="확대 축소">
+        <button type="button" aria-label="지도 확대" onClick={() => zoomBy(-1)}>+</button>
+        <button type="button" aria-label="지도 축소" onClick={() => zoomBy(1)}>−</button>
+      </div>
+    </div>}
     {(!online || !mapReady) && <OfflineRoute top={offlineRouteTop} points={pathPoints} currentPosition={currentPosition ?? pathPoints.at(-1) ?? startPoint} />}
   </div>;
 });

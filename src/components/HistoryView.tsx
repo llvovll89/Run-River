@@ -580,14 +580,14 @@ function RecordCard({record, rank}: {record: RunningRecord; rank: number}) {
                             className="text-xs font-bold px-2.5 py-1 rounded-full"
                             style={{
                                 background: isAutoGapMode
-                                    ? "rgba(33,109,116,0.12)"
+                                    ? "rgba(47,71,102,0.12)"
                                     : "rgba(255,159,10,0.15)",
                                 color: isAutoGapMode
                                     ? "var(--c-toss-blue)"
                                     : "#ff9f0a",
-                                border: `1px solid ${isAutoGapMode ? "rgba(33,109,116,0.28)" : "rgba(255,159,10,0.35)"}`,
+                                border: `1px solid ${isAutoGapMode ? "rgba(47,71,102,0.28)" : "rgba(255,159,10,0.35)"}`,
                                 boxShadow: isAutoGapMode
-                                    ? "0 0 0 1px rgba(33,109,116,0.08)"
+                                    ? "0 0 0 1px rgba(47,71,102,0.08)"
                                     : "0 0 0 1px rgba(255,159,10,0.12)",
                             }}
                             title={`공백 보정 거리 +${gapDistance.toFixed(2)}km`}
