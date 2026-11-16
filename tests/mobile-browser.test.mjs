@@ -100,7 +100,11 @@ test("packaged app opens and navigates without external network or a service wor
         await authStarted;
         await slowPage.getByRole("status").filter({hasText: "기록을 불러오는 중"}).waitFor();
         assert.ok(await slowPage.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "설정", exact: true}).isVisible());
-        await slowPage.getByText("연결이 지연되고 있어요. 인터넷 연결을 확인한 뒤 통계를 다시 열어주세요.", {exact: true}).waitFor({timeout: 15000});
+        try {
+            await slowPage.getByText("연결이 지연되고 있어요. 인터넷 연결을 확인한 뒤 통계를 다시 열어주세요.", {exact: true}).waitFor({timeout: 15000});
+        } catch (error) {
+            throw new Error(`Stalled auth did not reach its recovery state: ${await slowPage.locator("body").innerText()}`, {cause: error});
+        }
         await slowPage.getByRole("navigation", {name: "주요 메뉴"}).getByRole("link", {name: "운동", exact: true}).click();
         await slowPage.waitForURL(origin + "/");
         await slowPage.locator('[aria-controls="home-goal-options"]').click();
