@@ -84,7 +84,10 @@ export default function CanvasTrailMap(props: EngineProps) {
                     layer.addTo(map);
                 } else if (template) {
                     const rules = omtCanvasRules(dark);
-                    const layer = leafletLayer({url: template, paintRules: rules.paintRules, labelRules: rules.labelRules, backgroundColor: rules.backgroundColor, maxDataZoom: 14, keepBuffer: 1, updateWhenIdle: true, devicePixelRatio: dpr});
+                    // Online tiles are decoded and painted on the main thread: keep the work small so the
+                    // page stays responsive (1.5x canvas, no off-screen buffer, no redraw while zooming).
+                    const layer = leafletLayer({url: template, paintRules: rules.paintRules, labelRules: rules.labelRules, backgroundColor: rules.backgroundColor, maxDataZoom: 14,
+                        keepBuffer: 0, updateWhenIdle: true, updateWhenZooming: false, devicePixelRatio: Math.min(dpr, 1.5)});
                     layer.on("load", () => { if (!disposed) setLoaded(true); });
                     layer.addTo(map);
                     // Tiles render lazily; the map itself is usable right away.

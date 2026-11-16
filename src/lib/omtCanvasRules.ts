@@ -24,7 +24,7 @@ export function omtCanvasRules(dark: boolean): {paintRules: PaintRule[]; labelRu
         {dataLayer: "landuse", symbolizer: new PolygonSymbolizer({fill: c.urban}), filter: (_z, f) => ["residential", "commercial", "industrial", "retail", "school", "university"].includes(cls(f))},
         {dataLayer: "water", symbolizer: new PolygonSymbolizer({fill: c.water})},
         {dataLayer: "waterway", symbolizer: new LineSymbolizer({color: c.water, width: 1.4})},
-        {dataLayer: "building", minzoom: 14, symbolizer: new PolygonSymbolizer({fill: c.building, opacity: 0.85})},
+        {dataLayer: "building", minzoom: 15, symbolizer: new PolygonSymbolizer({fill: c.building, opacity: 0.85})},
         {dataLayer: "transportation", symbolizer: new LineSymbolizer({color: c.minor, width: roadWidth(1.6)}), filter: (_z, f) => ["minor", "service", "tertiary"].includes(cls(f))},
         {dataLayer: "transportation", symbolizer: new LineSymbolizer({color: c.road, width: roadWidth(3)}), filter: (_z, f) => ["primary", "secondary"].includes(cls(f))},
         {dataLayer: "transportation", symbolizer: new LineSymbolizer({color: c.major, width: roadWidth(3.6)}), filter: (_z, f) => ["motorway", "trunk"].includes(cls(f))},
@@ -35,7 +35,7 @@ export function omtCanvasRules(dark: boolean): {paintRules: PaintRule[]; labelRu
         {dataLayer: "place", symbolizer: new CenteredTextSymbolizer({labelProps: name, fill: c.text, stroke: c.halo, width: 2, fontFamily: "sans-serif", fontWeight: 600, fontSize: (z: number) => (z < 11 ? 13 : 12)}),
             filter: (z, f) => ["city", "town", "village", "suburb"].includes(cls(f)) || (z >= 15 && cls(f) === "neighbourhood")},
         // Landmarks useful outdoors (peaks, parks, stations); shops and offices only when zoomed right in.
-        {dataLayer: "poi", minzoom: 14, symbolizer: new CenteredTextSymbolizer({labelProps: name, fill: c.poi, stroke: c.halo, width: 2, fontFamily: "sans-serif", fontSize: 11}),
+        {dataLayer: "poi", minzoom: 15, symbolizer: new CenteredTextSymbolizer({labelProps: name, fill: c.poi, stroke: c.halo, width: 2, fontFamily: "sans-serif", fontSize: 11}),
             filter: (z, f) => z >= 17 || ["park", "railway", "bus", "attraction", "campsite", "drinking_water", "toilets", "place_of_worship", "museum", "school", "college"].includes(cls(f)) || Number(f.props.rank ?? 99) <= 3},
         {dataLayer: "mountain_peak", symbolizer: new CenteredTextSymbolizer({labelProps: name, fill: c.poi, stroke: c.halo, width: 2, fontFamily: "sans-serif", fontWeight: 600, fontSize: 12})},
     ];
