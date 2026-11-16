@@ -43,6 +43,8 @@
   --c-on-accent: #fff;
   --ease-standard: cubic-bezier(.2,0,0,1);
   --ease-emphatic: cubic-bezier(.2,0,0,1.2);
+  /* Map 0, goal sheet 10, toolbar 20, navigation 45, dialogs 50. */
+  --layer-goal-sheet: 10;
   color-scheme: light;
 }
 
@@ -110,9 +112,18 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .app-screen { padding-bottom: calc(var(--sab) + 92px); }
 .home-screen .home-brand { padding: 9px 12px; border-radius: 15px; }
 .home-screen .home-toolbar > button, .home-screen .home-toolbar > div > button { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; padding: 0; }
-.home-sheet-content { max-height: calc(100dvh - 320px - var(--sat) - var(--sab)); overflow-y: auto; padding: 0 20px 4px; scrollbar-width: none; }
+.home-sheet-content { max-height: min(42dvh, calc(100dvh - 350px - var(--sat) - var(--sab))); overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 4px; scrollbar-width: none; }
 .home-sheet-content::-webkit-scrollbar { display: none; }
 .home-screen .sheet { bottom: calc(65px + var(--sab)); }
+.home-goal-sheet { z-index: var(--layer-goal-sheet); padding-bottom: 12px; }
+.home-sheet-toggle { display: flex; flex-direction: column; align-items: center; width: 100%; min-height: 64px; padding: 10px 20px 12px; color: var(--c-text-1); touch-action: pan-x; }
+.home-sheet-grip { width: 32px; height: 4px; margin-bottom: 10px; border-radius: 4px; background: var(--c-text-3); opacity: .5; }
+.home-goal-summary { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; text-align: left; }
+.home-goal-summary strong { font-size: 16px; font-weight: 650; }
+.home-goal-summary > span { flex-shrink: 0; font-size: 12px; color: var(--c-accent-text); }
+.home-sheet-toggle:active { background: var(--c-elevated); border-radius: 28px 28px 0 0; }
+.home-goal-sheet:not([data-expanded="true"]) .home-offline-status p { display: none; }
+.home-goal-sheet:not([data-expanded="true"]) .home-offline-status { flex-wrap: nowrap; gap: 12px; }
 .home-sheet-footer { padding-top: 6px; }
 .home-sheet-footer > .flex { margin-top: 8px; }
 .goal-activity { display: flex; align-self: center; margin-left: auto; border: 1px solid var(--c-border); border-radius: 11px; overflow: hidden; }

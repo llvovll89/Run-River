@@ -1,4 +1,5 @@
 import type {User} from "@supabase/supabase-js";
+import {isAuthSessionMissingError} from "@supabase/supabase-js";
 import type {RunningRecord, ActivityType, LatLng, UserProfile, RunTuning} from "@/types";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 import {DEFAULT_RUN_TUNING, normalizeRunTuning} from "@/lib/runTuning";
@@ -71,6 +72,7 @@ export async function getCurrentUser(): Promise<User | null> {
     assertEnv();
     const supabase = getClient();
     const {data, error} = await supabase.auth.getUser();
+    if (isAuthSessionMissingError(error)) return null;
     if (error) throw error;
     return data.user ?? null;
 }

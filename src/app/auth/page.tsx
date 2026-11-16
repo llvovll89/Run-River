@@ -260,6 +260,10 @@ export default function AuthPage() {
             <div className="mb-8 flex items-center justify-between"><Brand />
                 <button
                     onClick={() => {
+                        if (process.env.NEXT_PUBLIC_NATIVE_APP === "1") {
+                            window.location.assign("/");
+                            return;
+                        }
                         if (window.history.length > 1) {
                             router.back();
                             return;
