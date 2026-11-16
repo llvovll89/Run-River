@@ -34,8 +34,7 @@ import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 import {distanceToCourseMeters} from "@/lib/hiking";
 import {remainingAlongPath} from "@/lib/routeGeometry";
 
-const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
-const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
+const MapView = dynamic(() => import("@/components/MapView"), {ssr: false});
 
 const PACE_COACHING_INTERVAL_MS = 1000 * 120;
 
@@ -1252,7 +1251,12 @@ export default function RunningPage() {
             style={{background: "var(--c-bg)"}}
         >
             <h1 className="sr-only">운동 실시간 기록</h1>
-            {mapPack || config.courseOverlay ? <div className="absolute inset-0"><OfflineTrailMap pack={mapPack} overlay={config.courseOverlay} currentPosition={position} points={trackPoints} course={config.routePath} follow={followUser} heading={isPaused ? null : heading} /></div> : <KakaoMap
+            <MapView
+                offlineSketch
+                pack={mapPack}
+                overlay={config.courseOverlay}
+                // Hiking courses are drawn dashed to follow; city routes are the planned walking path.
+                course={config.courseOverlay ? config.routePath : undefined}
                 offlineRouteTop={topPanelCollapsed ? "24%" : "54%"}
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??
@@ -1263,17 +1267,17 @@ export default function RunningPage() {
                 currentPosition={
                     isPaused ? frozenPositionRef.current : position
                 }
-                heading={isPaused ? undefined : heading}
-                pathPoints={pathPoints}
-                routePath={config.routePath}
+                heading={isPaused ? null : heading}
+                points={mapPack || config.courseOverlay ? trackPoints : pathPoints}
+                routePath={config.courseOverlay ? undefined : config.routePath}
                 showArrivalRadius
                 activityType={config.activityType}
-                followUser={followUser}
+                follow={followUser}
                 onUserDrag={() => setFollowUser(false)}
                 showControls={topPanelCollapsed}
                 controlsTop="26%"
                 className="absolute inset-0 h-full"
-            />}
+            />
 
             {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
             {!followUser && (

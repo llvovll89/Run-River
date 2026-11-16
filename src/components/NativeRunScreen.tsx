@@ -11,8 +11,7 @@ import TintedButton from "@/components/TintedButton";
 import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 import {distanceToCourseMeters} from "@/lib/hiking";
 
-const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
-const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
+const MapView = dynamic(() => import("@/components/MapView"), {ssr: false});
 
 export default function NativeRunScreen() {
     const mapPack = useOfflineMapPack();
@@ -116,7 +115,8 @@ export default function NativeRunScreen() {
                 {offCourse && <p role="alert" className="rounded-xl p-3 text-sm" style={{background: "var(--c-elevated)"}}>준비한 코스에서 벗어나 있어요. GPS 위치와 실제 길을 함께 확인해주세요.</p>}
                 <p className="text-sm" role="status">{run.status === "recording" ? stale ? "GPS 수신을 기다리고 있어요 · 하늘이 보이는 곳에서 잠시 기다려주세요" : `GPS 수신 중 · 정확도 약 ${Math.round(run.accuracy ?? 0)}m` : run.status === "paused" ? "기록 일시정지 · 재개를 누르면 이어서 기록해요" : "기기에 기록을 보관했어요 · 결과를 저장해주세요"}</p>
                 <div style={{position: "relative", height: "36vh", minHeight: 230, overflow: "hidden", borderRadius: 24}}>
-                    {mapPack || run.config.courseOverlay ? <OfflineTrailMap pack={mapPack} overlay={run.config.courseOverlay} currentPosition={run.position} points={points} course={run.config.routePath} follow /> : <KakaoMap className="h-full" center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={run.config.startPoint} pathPoints={points} routePath={run.config.routePath} activityType={run.config.activityType} followUser />}
+                    <MapView offlineSketch className="h-full" pack={mapPack} overlay={run.config.courseOverlay} center={run.position ?? run.config.startPoint} currentPosition={run.position} startPoint={mapPack || run.config.courseOverlay ? null : run.config.startPoint} points={points}
+                        course={run.config.courseOverlay ? run.config.routePath : undefined} routePath={run.config.courseOverlay ? undefined : run.config.routePath} activityType={run.config.activityType} follow />
                 </div>
                 <dl className="grid grid-cols-2 gap-5 py-3" aria-label="운동 측정값">
                     {[["이동 거리", `${run.distanceKm.toFixed(2)} km`], ["기록 시간", formatDuration(seconds)], ["현재 고도", run.currentAltitude == null ? "수신 대기" : `${Math.round(run.currentAltitude)} m`], ["누적 상승", `${Math.round(run.elevationGain)} m`], ["평균 페이스", formatPace(nativeRunResult(run).pace)], ["누적 하강", `${Math.round(run.elevationLoss)} m`]].map(([label, value]) => <div key={label}><dt className="text-xs mb-1" style={{color: "var(--c-text-2)"}}>{label}</dt><dd className="num text-2xl font-bold">{value}</dd></div>)}

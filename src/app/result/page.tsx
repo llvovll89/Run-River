@@ -51,8 +51,7 @@ import {activityLabel, canSyncActivity} from "@/lib/activities";
 import ExportGpxButton from "@/components/ExportGpxButton";
 import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 
-const KakaoMap = dynamic(() => import("@/components/KakaoMap"), {ssr: false});
-const OfflineTrailMap = dynamic(() => import("@/components/OfflineTrailMap"), {ssr: false});
+const MapView = dynamic(() => import("@/components/MapView"), {ssr: false});
 
 interface RunResult {
     id: string;
@@ -1093,13 +1092,17 @@ export default function ResultPage() {
                         className="card rounded-2xl overflow-hidden"
                         style={{height: 200}}
                     >
-                        {mapPack ? <OfflineTrailMap pack={mapPack} points={result.trackPoints?.length ? result.trackPoints : result.pathPoints} /> : <KakaoMap
+                        <MapView
+                            offlineSketch
+                            fitToPoints
+                            pack={mapPack}
                             center={result.startPoint}
-                            startPoint={result.startPoint}
-                            endPoint={result.endPoint}
-                            pathPoints={result.pathPoints}
+                            startPoint={mapPack ? null : result.startPoint}
+                            endPoint={mapPack ? null : result.endPoint}
+                            points={mapPack && result.trackPoints?.length ? result.trackPoints : result.pathPoints}
+                            activityType={result.activity_type}
                             className="w-full h-full"
-                        />}
+                        />
                     </div>
                 </div>
             )}
