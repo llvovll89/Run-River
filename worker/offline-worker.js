@@ -38,7 +38,9 @@ self.addEventListener("fetch", (event) => {
             const cached = await (await caches.open(CACHE)).match(url.pathname);
             return cached ?? fetch(request);
         })());
-    } else if (ASSETS.includes(url.pathname)) {
+    } else if (ASSETS.includes(url.pathname) || url.pathname.startsWith("/_next/static/")) {
+        // Build files are immutable. A page still running the previous version (updates apply
+        // silently) may need its own chunks, which live in the kept previous cache.
         event.respondWith((async () => {
             const response = await (await caches.open(CACHE)).match(url.pathname) ?? await caches.match(url.pathname);
             return response ?? fetch(request);

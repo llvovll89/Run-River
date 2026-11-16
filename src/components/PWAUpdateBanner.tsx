@@ -1,79 +1,14 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { usePWAUpdate } from "@/hooks/usePWAUpdate";
 
+/** Updates apply on their own (see usePWAUpdate); this only confirms it briefly afterwards. */
 export default function PWAUpdateBanner() {
-  const pathname = usePathname();
-  const { updateAvailable, isApplying, applyUpdate, dismissUpdate } = usePWAUpdate();
-
-  if (pathname === "/running") return null;
-  if (!updateAvailable) return null;
-
+  const { justUpdated } = usePWAUpdate();
+  if (!justUpdated) return null;
   return (
-    <div
-      className="fixed left-1/2 -translate-x-1/2 z-9999 flex items-center gap-3 px-4 py-3 rounded-2xl"
-      style={{
-        top: "calc(var(--sat, 0px) + 12px)",
-        maxWidth: "calc(430px - 32px)",
-        width: "calc(100vw - 32px)",
-        background: "var(--c-surface)",
-        border: "1px solid var(--c-border)",
-        boxShadow: "var(--c-card-shadow, 0 8px 24px rgba(0,0,0,0.18))",
-        backdropFilter: "blur(16px)",
-      }}
-    >
-      {/* 아이콘 */}
-      <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: "color-mix(in srgb, var(--c-toss-blue) 14%, transparent)" }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-toss-blue)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-      </div>
-
-      {/* 텍스트 */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold leading-tight" style={{ color: "var(--c-text-1, #fff)" }}>
-          {isApplying ? "업데이트 적용 중..." : "새 업데이트 available"}
-        </p>
-        <p className="text-xs mt-0.5" style={{ color: "var(--c-text-3, rgba(255,255,255,0.45))" }}>
-          {isApplying ? "잠시만 기다려주세요" : "지금 적용하거나 나중에 업데이트할 수 있어요"}
-        </p>
-      </div>
-
-      {/* 버튼 */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <button
-          onClick={dismissUpdate}
-          disabled={isApplying}
-          className="px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
-          style={{
-            background: "var(--c-elevated)",
-            border: "1px solid var(--c-border)",
-            color: isApplying ? "var(--c-text-3)" : "var(--c-text-2)",
-          }}
-        >
-          나중에
-        </button>
-        <button
-          onClick={applyUpdate}
-          disabled={isApplying}
-          className="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 transition-transform"
-          style={{
-            background: isApplying
-              ? "color-mix(in srgb, var(--c-toss-blue) 68%, var(--c-surface))"
-              : "var(--c-toss-blue)",
-            color: "#fff",
-            boxShadow: "0 2px 10px color-mix(in srgb, var(--c-toss-blue) 45%, transparent)",
-          }}
-        >
-          {isApplying ? "적용 중" : "업데이트"}
-        </button>
-      </div>
-    </div>
+    <p className="pwa-updated-toast" role="status">
+      새 버전으로 업데이트했어요
+    </p>
   );
 }
