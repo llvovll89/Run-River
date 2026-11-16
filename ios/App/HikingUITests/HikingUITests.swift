@@ -1,6 +1,9 @@
 import XCTest
 
 final class HikingUITests: XCTestCase {
+    // First screen after (re)launch. CI simulators without a GPU have needed ~40s here
+    // (slow termination of the previous instance plus WebKit start-up), so allow 60s.
+    private let launchTimeout: TimeInterval = 60
     private func scrollPage(_ app: XCUIApplication) {
         // Drag the page margin; swiping through a MapLibre canvas pans the map
         // instead of scrolling to the control below it.
@@ -24,7 +27,7 @@ final class HikingUITests: XCTestCase {
     func testStartPauseFinishSaveAndExportHiking() {
         let app = XCUIApplication(); app.launch()
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
-        XCTAssertTrue(hiking.waitForExistence(timeout: 30)); hiking.tap()
+        XCTAssertTrue(hiking.waitForExistence(timeout: launchTimeout)); hiking.tap()
         let start = app.webViews.buttons["현재 위치에서 하이킹 시작"]
         tapVisible(start, in: app)
         let pause = app.webViews.buttons["일시정지"]
@@ -59,6 +62,7 @@ final class HikingUITests: XCTestCase {
     func testNativeDownloadAndRenderMap() {
         let app = XCUIApplication(); app.launch()
         let maps = app.webViews.links["오프라인 지도 준비"]
+        _ = maps.waitForExistence(timeout: launchTimeout)
         tapVisible(maps, in: app)
         XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
         tapVisible(app.webViews.buttons["북한산 지도 저장"], in: app)
@@ -80,7 +84,7 @@ final class HikingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
-        XCTAssertTrue(hiking.waitForExistence(timeout: 30))
+        XCTAssertTrue(hiking.waitForExistence(timeout: launchTimeout))
         hiking.tap()
         XCTAssertTrue(app.webViews.staticTexts["산길에서도 나의 페이스로"].waitForExistence(timeout: 30))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-hiking"; shot.lifetime = .keepAlways; add(shot)
