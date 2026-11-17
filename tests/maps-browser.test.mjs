@@ -132,3 +132,59 @@ test("downloaded trail map renders after network loss and survives reopening", {
         await new Promise(resolve => server.close(resolve));
     }
 });
+
+test("an area picked on the map is saved from OpenFreeMap tiles and reopens offline", {timeout: 90000}, async () => {
+    const root = path.resolve("mobile-dist");
+    const server = createServer(async (req, res) => {
+        try {
+            let file = path.resolve(root, "." + decodeURIComponent(new URL(req.url, "http://localhost").pathname));
+            if (!file.startsWith(root)) throw new Error("outside bundle");
+            if (!path.extname(file)) file = path.join(file, "index.html");
+            const mime = {".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".ttf": "font/ttf"};
+            res.writeHead(200, {"Content-Type": mime[path.extname(file)] || "application/octet-stream"});
+            res.end(await readFile(file));
+        } catch { res.writeHead(404); res.end(); }
+    });
+    await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    let browser;
+    try {
+        browser = await browserType.launch({args: ["--enable-webgl", "--enable-unsafe-swiftshader"]});
+        const context = await browser.newContext({viewport: {width: 390, height: 844}, reducedMotion: "reduce", permissions: ["geolocation"], geolocation: {latitude: 37.66, longitude: 126.98},
+            ...(process.env.TEST_MAP_ENGINE === "canvas" ? {userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"} : {})});
+        // A minimal valid vector tile (one empty "water" layer) stands in for OpenFreeMap.
+        const tile = Buffer.from([0x1a, 0x09, 0x0a, 0x05, ...Buffer.from("water"), 0x78, 0x02]);
+        let tileRequests = 0, online = true;
+        await context.route("**/*", route => {
+            const url = route.request().url();
+            if (url.startsWith(origin + "/") || url.startsWith("blob:")) return route.continue();
+            if (!online) return route.abort();
+            if (url === "https://tiles.openfreemap.org/planet") return route.fulfill({json: {tiles: ["https://tiles.openfreemap.org/planet/test/{z}/{x}/{y}.pbf"]}});
+            if (url.startsWith("https://tiles.openfreemap.org/planet/test/")) { tileRequests++; return route.fulfill({body: tile, contentType: "application/vnd.mapbox-vector-tile"}); }
+            return route.abort();
+        });
+        const page = await context.newPage();
+        page.setDefaultTimeout(20000);
+        await page.goto(origin + "/maps/", {waitUntil: "networkidle"});
+        await page.getByRole("button", {name: "지도에서 지역 고르기", exact: true}).click();
+        await page.locator('[data-testid="area-picker-map"][data-map-ready="true"]').waitFor();
+        await page.getByText(/^이 범위 지도: 최대 약/).waitFor();
+        await page.getByText(/모바일 데이터를 최대 약/).waitFor();
+        await page.getByRole("button", {name: "이 지역 저장", exact: true}).click();
+        await page.getByText(/지도를 기기에 저장했어요\.$/).waitFor({timeout: 60000});
+        assert.ok(tileRequests > 7, "every zoom from 8 to 14 is fetched");
+        assert.equal(await page.getByTestId("area-picker-map").count(), 0, "the picker closes after saving");
+        assert.match(await page.locator("section[aria-label='저장한 지도']").innerText(), /운동할 때 사용할 지도/);
+        online = false;
+        await page.reload({waitUntil: "networkidle"});
+        await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
+        assert.equal(await page.getByTestId("offline-trail-map").getAttribute("data-map-base"), "pack");
+        await page.getByRole("button", {name: "삭제", exact: true}).first().click();
+        await page.getByRole("button", {name: "삭제 확인", exact: true}).click();
+        await page.getByText("아직 저장한 지도가 없어요.", {exact: true}).waitFor();
+        assert.equal(await page.evaluate(() => localStorage.getItem("rr_area_maps")), "[]");
+    } finally {
+        await browser?.close();
+        await new Promise(resolve => server.close(resolve));
+    }
+});

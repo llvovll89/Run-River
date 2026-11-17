@@ -13,6 +13,8 @@ export interface MapHandle {
     panTo: (latlng: LatLng) => void;
     /** Zoom and pan so every point is visible. */
     fitPoints: (points: LatLng[]) => void;
+    /** Visible area as [west, south, east, north], once the map exists. */
+    getBounds: () => [number, number, number, number] | null;
 }
 
 /** What every screen can ask of the map, whichever engine draws it. */
@@ -35,7 +37,13 @@ export interface MapViewProps {
     heading?: number | null;
     follow?: boolean;
     onUserDrag?: () => void;
+    /** Called after the map opens and whenever panning/zooming ends, with [west, south, east, north]. */
+    onViewChange?: (bounds: [number, number, number, number]) => void;
+    /** Test hook for the map element (defaults to "offline-trail-map"). */
+    testId?: string;
     center?: LatLng;
+    /** Opening zoom level (engines pick one by base map otherwise). */
+    initialZoom?: number;
     startPoint?: LatLng | null;
     endPoint?: LatLng | null;
     onStartPointChange?: (latlng: LatLng) => void;
