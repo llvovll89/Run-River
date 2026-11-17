@@ -38,6 +38,40 @@ function packStyle(url: string, bounds: MapPack["bounds"], maxzoom: number, dark
     };
 }
 
+/** Areas saved from the online map carry OpenMapTiles layers; same look as the iPhone canvas rules. */
+function omtPackStyle(url: string, bounds: MapPack["bounds"], maxzoom: number, dark: boolean): StyleSpecification {
+    const c = dark
+        ? {bg: "#151a22", green: "#1d2a24", wood: "#1b2a21", urban: "#1b2029", water: "#1d3447", major: "#4a5568", road: "#323a48", minor: "#2a313d", trail: "#c49461", building: "#222936", text: "#d6dbe4", halo: "#0e1117", poi: "#b9c0cc"}
+        : {bg: "#f2f0ea", green: "#dfe9d3", wood: "#cfe0c0", urban: "#ebe7df", water: "#aed3e3", major: "#f6d18b", road: "#ffffff", minor: "#ffffff", trail: "#a36b38", building: "#ddd7cd", text: "#2d3340", halo: "#ffffff", poi: "#5e4830"};
+    const cls = ["get", "class"] as const;
+    const name = ["coalesce", ["get", "name:ko"], ["get", "name"]];
+    const width = (base: number) => ["interpolate", ["exponential", 1.45], ["zoom"], 10, base * 0.25, 14, base, 18, base * 4.4];
+    return {
+        version: 8,
+        "font-faces": {[PACK_FONT]: "/fonts/NotoSans-Regular.ttf"},
+        sources: {openmaptiles: {type: "vector", url, bounds, maxzoom}},
+        layers: [
+            {id: "background", type: "background", paint: {"background-color": c.bg}},
+            {id: "landcover", type: "fill", source: "openmaptiles", "source-layer": "landcover", filter: ["in", cls, ["literal", ["grass", "meadow", "scrub", "farmland"]]], paint: {"fill-color": c.green}},
+            {id: "wood", type: "fill", source: "openmaptiles", "source-layer": "landcover", filter: ["in", cls, ["literal", ["wood", "forest"]]], paint: {"fill-color": c.wood}},
+            {id: "park", type: "fill", source: "openmaptiles", "source-layer": "park", paint: {"fill-color": c.green, "fill-opacity": 0.8}},
+            {id: "landuse", type: "fill", source: "openmaptiles", "source-layer": "landuse", filter: ["in", cls, ["literal", ["residential", "commercial", "industrial", "retail", "school", "university"]]], paint: {"fill-color": c.urban}},
+            {id: "water", type: "fill", source: "openmaptiles", "source-layer": "water", paint: {"fill-color": c.water}},
+            {id: "waterway", type: "line", source: "openmaptiles", "source-layer": "waterway", paint: {"line-color": c.water, "line-width": 1.4}},
+            {id: "building", type: "fill", source: "openmaptiles", "source-layer": "building", minzoom: 14, paint: {"fill-color": c.building, "fill-opacity": 0.85}},
+            {id: "road-minor", type: "line", source: "openmaptiles", "source-layer": "transportation", filter: ["in", cls, ["literal", ["minor", "service", "tertiary"]]], layout: {"line-cap": "round", "line-join": "round"}, paint: {"line-color": c.minor, "line-width": width(1.6)}},
+            {id: "road", type: "line", source: "openmaptiles", "source-layer": "transportation", filter: ["in", cls, ["literal", ["primary", "secondary"]]], layout: {"line-cap": "round", "line-join": "round"}, paint: {"line-color": c.road, "line-width": width(3)}},
+            {id: "road-major", type: "line", source: "openmaptiles", "source-layer": "transportation", filter: ["in", cls, ["literal", ["motorway", "trunk"]]], layout: {"line-cap": "round", "line-join": "round"}, paint: {"line-color": c.major, "line-width": width(3.6)}},
+            {id: "trails", type: "line", source: "openmaptiles", "source-layer": "transportation", minzoom: 12,
+                filter: ["any", ["==", cls, "track"], ["all", ["==", cls, "path"], ["in", ["coalesce", ["get", "subclass"], ""], ["literal", ["path", "steps", "bridleway", ""]]]]],
+                paint: {"line-color": c.trail, "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 16, 2.4], "line-dasharray": [2, 1.5]}},
+            {id: "places", type: "symbol", source: "openmaptiles", "source-layer": "place", filter: ["in", cls, ["literal", ["city", "town", "village", "suburb", "neighbourhood"]]], layout: {"text-field": name, "text-font": [PACK_FONT], "text-size": 12}, paint: {"text-color": c.text, "text-halo-color": c.halo, "text-halo-width": 1.5}},
+            {id: "peaks", type: "symbol", source: "openmaptiles", "source-layer": "mountain_peak", layout: {"text-field": name, "text-font": [PACK_FONT], "text-size": 12}, paint: {"text-color": c.poi, "text-halo-color": c.halo, "text-halo-width": 1.5}},
+            {id: "pois", type: "symbol", source: "openmaptiles", "source-layer": "poi", minzoom: 15, layout: {"text-field": name, "text-font": [PACK_FONT], "text-size": 11, "text-max-width": 6}, paint: {"text-color": c.poi, "text-halo-color": c.halo, "text-halo-width": 1.5}},
+        ],
+    } as StyleSpecification;
+}
+
 /** OpenFreeMap styles show Latin names first; show the Korean name when OSM has one. */
 function preferKoreanLabels(style: StyleSpecification): StyleSpecification {
     for (const layer of style.layers) {
@@ -87,7 +121,7 @@ function pinElement(kind: "start" | "end" | "preview"): HTMLElement {
 
 export default function MapLibreTrailMap(props: EngineProps) {
     const {ref, pack, overlay, currentPosition, points = [], course = [], routePath = [], follow = false, heading = null, base, dark,
-        startPoint, endPoint, previewPoint, previewLine = false, showArrivalRadius = false, activityType, showControls = false, controlsTop} = props;
+        startPoint, endPoint, previewPoint, previewLine = false, showArrivalRadius = false, activityType, showControls = false, controlsTop, testId = "offline-trail-map"} = props;
     const container = useRef<HTMLDivElement>(null);
     const mapRef = useRef<MapInstance | null>(null);
     const [loaded, setLoaded] = useState(false);
@@ -111,6 +145,7 @@ export default function MapLibreTrailMap(props: EngineProps) {
             list.forEach(p => bounds.extend([p.lng, p.lat]));
             map.fitBounds(bounds, {padding: {top: 90, right: 40, bottom: 220, left: 40}, maxZoom: 16, duration: 400});
         },
+        getBounds() { const b = mapRef.current?.getBounds(); return b ? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()] : null; },
     }));
 
     useEffect(() => { setTerrain(readMapPrefs().terrain); }, []);
@@ -133,14 +168,14 @@ export default function MapLibreTrailMap(props: EngineProps) {
                 if (archive) protocol.add(archive);
                 const start = initialCenter.current;
                 const inside = start && (!pack || contains(pack, start));
-                const style = archive && pack ? packStyle(`pmtiles://${archive.source.getKey()}`, pack.bounds, pack.maxZoom, dark)
+                const style = archive && pack ? (pack.schema === "openmaptiles" ? omtPackStyle : packStyle)(`pmtiles://${archive.source.getKey()}`, pack.bounds, pack.maxZoom, dark)
                     : onlineStyle ?? emptyStyle(dark);
                 const labelFont = base === "online" ? OPENFREEMAP_FONT : PACK_FONT;
                 const map = new maplibregl.Map({
                     container: container.current,
                     style,
                     center: inside ? [start!.lng, start!.lat] : pack ? [(pack.bounds[0] + pack.bounds[2]) / 2, (pack.bounds[1] + pack.bounds[3]) / 2] : [126.978, 37.5665],
-                    zoom: base === "online" ? 15 : 13, maxZoom: base === "pack" ? Math.min((pack?.maxZoom ?? 17) + 3, 20) : 19,
+                    zoom: props.initialZoom ?? (base === "online" ? 15 : 13), maxZoom: base === "pack" ? Math.min((pack?.maxZoom ?? 17) + 3, 20) : 19,
                     localIdeographFontFamily: "sans-serif", attributionControl: false,
                 });
                 mapRef.current = map;
@@ -152,6 +187,8 @@ export default function MapLibreTrailMap(props: EngineProps) {
                     if (base === "pack") setError(`지도를 읽지 못했어요. 파일을 다시 저장해주세요. ${event.error?.message ?? ""}`);
                 });
                 map.on("dragstart", () => callbacks.current.onUserDrag?.());
+                const reportView = () => { const b = map.getBounds(); callbacks.current.onViewChange?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]); };
+                map.on("moveend", reportView);
                 map.on("load", () => {
                     if (base === "online") {
                         map.addSource("terrain", {type: "raster-dem", tiles: [TERRAIN_TILES], encoding: "terrarium", tileSize: 256, maxzoom: 15});
@@ -189,7 +226,7 @@ export default function MapLibreTrailMap(props: EngineProps) {
                         if (feature) { new maplibregl.Popup().setLngLat(event.lngLat).setText(String(feature.properties.name || "가져온 표시")).addTo(map); return; }
                         callbacks.current.onMapClick?.({lat: event.lngLat.lat, lng: event.lngLat.lng});
                     });
-                    if (!disposed) setLoaded(true);
+                    if (!disposed) { setLoaded(true); reportView(); }
                 });
             } catch (failure) {
                 if (disposed) return;
@@ -271,10 +308,10 @@ export default function MapLibreTrailMap(props: EngineProps) {
     const zoomBy = (delta: number) => { const map = mapRef.current; if (map) map.easeTo({zoom: map.getZoom() + delta, duration: 250}); };
     const toggleTerrain = () => setTerrain(previous => { writeMapPrefs({terrain: !previous}); return !previous; });
 
-    return <div className="relative w-full h-full" data-testid="offline-trail-map" data-map-engine="webgl" data-map-base={base} data-map-ready={loaded && !error ? "true" : "false"}>
+    return <div className="relative w-full h-full" data-testid={testId} data-map-engine="webgl" data-map-base={base} data-map-ready={loaded && !error ? "true" : "false"}>
         <div ref={container} style={{position: "absolute", inset: 0}} aria-label={base === "pack" ? "저장한 등산 지도" : "지도"} />
         {showControls && loaded && <MapControls top={controlsTop} onZoom={zoomBy} terrain={base === "online" ? {on: terrain, toggle: toggleTerrain} : undefined} />}
-        <MapAttribution base={base} />
+        <MapAttribution base={base} pack={pack} />
         {base === "pack" && pack && currentPosition && !contains(pack, currentPosition) && <p role="status" className="map-notice">현재 위치가 저장한 지도 영역 밖이에요.</p>}
         {base === "none" && overlay && <p className="map-notice">배경 지도 없이 가져온 표시를 보여줘요 · 배경 지도는 별도로 저장해주세요</p>}
         {error && <p role="alert" className="map-notice">{error}</p>}
@@ -282,9 +319,9 @@ export default function MapLibreTrailMap(props: EngineProps) {
     </div>;
 }
 
-export function MapAttribution({base}: {base: EngineProps["base"]}) {
+export function MapAttribution({base, pack}: {base: EngineProps["base"]; pack?: MapPack | null}) {
     if (base === "none") return null;
-    return <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="map-attribution">{base === "pack" ? "© OpenStreetMap · Protomaps" : OSM_ATTRIBUTION}</a>;
+    return <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="map-attribution">{base === "pack" && pack?.schema !== "openmaptiles" ? "© OpenStreetMap · Protomaps" : OSM_ATTRIBUTION}</a>;
 }
 
 export function contains(pack: MapPack, point: LatLng) { return point.lng >= pack.bounds[0] && point.lng <= pack.bounds[2] && point.lat >= pack.bounds[1] && point.lat <= pack.bounds[3]; }
