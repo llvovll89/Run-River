@@ -30,8 +30,8 @@ export default function MapsPage() {
         const finish = (value: LatLng | null) => { if (!done) { done = true; setPosition(value); } };
         const timer = setTimeout(() => finish(null), 3000);
         const locate = () => navigator.geolocation?.getCurrentPosition(fix => finish({lat: fix.coords.latitude, lng: fix.coords.longitude}), () => finish(null), {timeout: 2500, maximumAge: 5 * 60_000});
-        if (Capacitor.isNativePlatform()) locate();
-        else if (navigator.permissions?.query) void navigator.permissions.query({name: "geolocation"}).then(state => state.state === "granted" ? locate() : finish(null), () => finish(null));
+        // Never prompt on page load (WKWebView asks again per session): only use an already-granted permission.
+        if (navigator.permissions?.query) void navigator.permissions.query({name: "geolocation"}).then(state => state.state === "granted" ? locate() : finish(null), () => finish(null));
         else finish(null);
         return () => clearTimeout(timer);
     }, []);
