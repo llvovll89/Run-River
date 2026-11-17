@@ -7,6 +7,8 @@ import {listOfflineMaps, selectedOfflineMap, selectOfflineMap, downloadSampleMap
 import ScreenHeader from "@/components/ScreenHeader";
 import AppNavigation from "@/components/AppNavigation";
 import TintedButton from "@/components/TintedButton";
+import AreaMapSaver from "@/components/AreaMapSaver";
+import type {LatLng} from "@/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {ssr: false});
 
@@ -18,9 +20,21 @@ export default function MapsPage() {
     const [error, setError] = useState("");
     const [status, setStatus] = useState("");
     const [removeId, setRemoveId] = useState<string | null>(null);
+    // Preview opens on the user's position when location access was already granted.
+    const [position, setPosition] = useState<LatLng | null | undefined>(undefined);
     const fileInput = useRef<HTMLInputElement>(null);
     async function refresh() { setPacks(await listOfflineMaps()); setSelected(selectedOfflineMap()); }
-    useEffect(() => { setReady(true); void refresh().catch(error => setError(error.message)); }, []);
+    useEffect(() => {
+        setReady(true); void refresh().catch(error => setError(error.message));
+        let done = false;
+        const finish = (value: LatLng | null) => { if (!done) { done = true; setPosition(value); } };
+        const timer = setTimeout(() => finish(null), 3000);
+        const locate = () => navigator.geolocation?.getCurrentPosition(fix => finish({lat: fix.coords.latitude, lng: fix.coords.longitude}), () => finish(null), {timeout: 2500, maximumAge: 5 * 60_000});
+        if (Capacitor.isNativePlatform()) locate();
+        else if (navigator.permissions?.query) void navigator.permissions.query({name: "geolocation"}).then(state => state.state === "granted" ? locate() : finish(null), () => finish(null));
+        else finish(null);
+        return () => clearTimeout(timer);
+    }, []);
     async function action(task: () => Promise<unknown>, message: string) {
         setBusy(true); setError(""); setStatus("");
         try { await task(); await refresh(); setStatus(message); }
@@ -33,8 +47,9 @@ export default function MapsPage() {
         <div className="p-5 space-y-6">
             {error && <p role="alert" className="text-sm" style={{color: "var(--c-danger)"}}>{error}</p>}
             <p role="status" className="text-sm">{busy ? "지도 파일을 준비하고 있어요. 잠시 기다려주세요…" : status}</p>
+            <AreaMapSaver disabled={!ready || busy} onSaved={saved => { void refresh(); setStatus(`${saved.name} 지도를 기기에 저장했어요.`); }} />
             <section className="card rounded-2xl p-5 space-y-3" aria-label="지도 저장">
-                <h2 className="text-lg font-bold">북한산 주변</h2>
+                <h2 className="text-lg font-bold">예시 지도 · 북한산 주변</h2>
                 <p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>등산로와 주변 도로를 담은 약 3.5MB 지도예요. 출발 전에 저장하고 데이터 연결을 끈 상태에서 확인해주세요.</p>
                 <TintedButton tone="accent" disabled={!ready || busy} onClick={() => void action(downloadSampleMap, "북한산 지도를 기기에 저장했어요.")}>북한산 지도 저장</TintedButton>
                 <p className="text-xs" style={{color: "var(--c-text-2)"}}>지도 데이터 기준 2026.11.13 · 등고선·오프라인 길찾기는 포함하지 않아요.</p>
@@ -48,8 +63,8 @@ export default function MapsPage() {
                     {removeId === map.id && <div role="group" aria-label="지도 삭제 확인" className="space-y-2"><p className="text-sm">삭제하면 이 지역은 다시 저장해야 볼 수 있어요.</p><div className="flex gap-3"><TintedButton tone="neutral" onClick={() => setRemoveId(null)}>취소</TintedButton><TintedButton tone="danger" disabled={!ready || busy} onClick={() => void action(async () => { await deleteOfflineMap(map.id); setRemoveId(null); }, "지도를 삭제했어요.")}>삭제 확인</TintedButton></div></div>}
                 </div>)}
             </section>
-            {pack && <section className="space-y-2" aria-label="오프라인 지도 미리보기"><h2 className="text-lg font-bold">{pack.name} 미리보기</h2><div style={{height: 400, borderRadius: 20, overflow: "hidden"}}><MapView key={pack.id} className="h-full" pack={pack} showControls controlsTop="12px" /></div><p className="text-xs" style={{color: "var(--c-text-2)"}}>갈색 점선은 산길·보행로예요. 지도 범위 밖은 추가로 저장해야 해요.</p></section>}
-            <section className="space-y-3"><h2 className="text-lg font-bold">다른 지역 지도 가져오기</h2><p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>Protomaps 형식의 PMTiles 파일을 가져올 수 있어요. 지도별 최대 200MB를 지원해요.</p><TintedButton tone="neutral" disabled={!ready || busy} onClick={() => { if (["android", "ios"].includes(Capacitor.getPlatform())) void action(() => importOfflineMap(), "지도를 가져왔어요."); else fileInput.current?.click(); }}>지도 파일 가져오기</TintedButton><input ref={fileInput} disabled={!ready || busy} type="file" accept=".pmtiles" className="sr-only" aria-label="PMTiles 지도 파일" onChange={event => { const file = event.target.files?.[0]; if (file) void action(() => importOfflineMap(file), "지도를 가져왔어요."); event.target.value = ""; }} /></section>
+            {pack && <section className="space-y-2" aria-label="오프라인 지도 미리보기"><h2 className="text-lg font-bold">{pack.name} 미리보기</h2><div style={{height: 400, borderRadius: 20, overflow: "hidden"}}>{position !== undefined && <MapView key={pack.id} className="h-full" pack={pack} center={position ?? undefined} currentPosition={position} showControls controlsTop="12px" />}</div><p className="text-xs" style={{color: "var(--c-text-2)"}}>갈색 점선은 산길·보행로예요. 지도 범위 밖은 추가로 저장해야 해요.</p></section>}
+            <section className="space-y-3"><h2 className="text-lg font-bold">다른 지역 지도 가져오기</h2><p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>PMTiles 벡터 지도 파일(Protomaps·OpenMapTiles 형식)을 가져올 수 있어요. 지도별 최대 200MB를 지원해요.</p><TintedButton tone="neutral" disabled={!ready || busy} onClick={() => { if (["android", "ios"].includes(Capacitor.getPlatform())) void action(() => importOfflineMap(), "지도를 가져왔어요."); else fileInput.current?.click(); }}>지도 파일 가져오기</TintedButton><input ref={fileInput} disabled={!ready || busy} type="file" accept=".pmtiles" className="sr-only" aria-label="PMTiles 지도 파일" onChange={event => { const file = event.target.files?.[0]; if (file) void action(() => importOfflineMap(file), "지도를 가져왔어요."); event.target.value = ""; }} /></section>
             <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>아이폰·Android 앱은 앱 전용 공간에 지도를 보관해요. 웹에서는 브라우저 데이터 정리로 지도가 지워질 수 있어요. 이동 기록은 지도 삭제와 별도로 보관돼요. 현장의 통제·표지판을 먼저 확인해주세요.</p>
             <a href="/hiking" className="block underline text-sm">GPX·KMZ 파일을 지도에 겹쳐보기</a>
             <a href="/" className="inline-block underline text-sm">운동 시작 화면으로</a>

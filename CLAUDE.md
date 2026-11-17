@@ -75,6 +75,7 @@ getRunningHistory()              // SELECT * ORDER BY created_at DESC
 ## 컴포넌트
 **MapView.tsx** — 모든 화면의 공통 지도. ref: `MapHandle { panTo(latlng), fitPoints(points) }`
 - 배경: 저장한 PMTiles 팩 → 온라인이면 OpenFreeMap(OSM) → 오프라인이면 GPS 스케치(`offlineSketch`)
+- 지역 저장(`/maps`, `AreaMapSaver.tsx`): 화면에 보이는 범위의 OpenFreeMap 타일(z8–14, 최대 1200개)을 받아 기기에서 PMTiles로 묶음(`lib/areaMaps.ts`). id `area-*`, 바이트는 IndexedDB `areas`, 목록은 localStorage `rr_area_maps`. 팩 `schema`가 `openmaptiles`면 OMT 스타일로 그림
 - 엔진: MapLibre(`MapLibreTrailMap.tsx`), 아이폰(WKWebView WebGL 문제)은 Leaflet 캔버스(`CanvasTrailMap.tsx` + `lib/omtCanvasRules.ts`)
 - 마커: 출발(초록), 도착(주황), 미리보기 핀 / 선: routePath(예정 경로), points(기록, 활동색), course(따라갈 코스, 점선), previewLine
 - 도착 반경 원 5m, 지형 음영(MapLibre 온라인만, AWS terrarium), 확대·축소 `MapControls.tsx`

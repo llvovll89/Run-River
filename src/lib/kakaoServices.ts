@@ -19,3 +19,17 @@ export function loadKakaoServices(): Promise<boolean> {
     });
     return loading;
 }
+
+/** Short Korean area name ("종로구 청운동") for a point, or null when Kakao is unavailable. */
+export async function areaName(lat: number, lng: number): Promise<string | null> {
+    const ready = await Promise.race([loadKakaoServices(), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 4000))]);
+    if (!ready) return null;
+    return new Promise(resolve => {
+        const timer = setTimeout(() => resolve(null), 4000);
+        new kakao.maps.services.Geocoder().coord2Address(lng, lat, (result, status) => {
+            clearTimeout(timer);
+            const address = status === kakao.maps.services.Status.OK ? result[0]?.address : undefined;
+            resolve(address ? [address.region_2depth_name, address.region_3depth_name].filter(Boolean).join(" ") || address.region_1depth_name || null : null);
+        });
+    });
+}

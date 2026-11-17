@@ -1,4 +1,5 @@
 import Capacitor
+import Network
 import UniformTypeIdentifiers
 import UIKit
 
@@ -6,7 +7,7 @@ import UIKit
 public final class NativeMapsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate, URLSessionDownloadDelegate {
     public let identifier = "NativeMapsPlugin"
     public let jsName = "NativeMaps"
-    public let pluginMethods: [CAPPluginMethod] = ["pick", "download", "list", "read", "delete"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
+    public let pluginMethods: [CAPPluginMethod] = ["pick", "download", "list", "read", "delete", "network"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
     private var files: MapFiles?
     private var failure: Error?
     private let queue = DispatchQueue(label: "com.runriver.maps")
@@ -37,6 +38,18 @@ public final class NativeMapsPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPick
         }
     }
     @objc public func delete(_ call: CAPPluginCall) { perform(call) { try $0.remove(call.getString("id") ?? ""); return [:] } }
+    /// Wi-Fi vs. metered connection, so the app can warn before a large map download.
+    @objc public func network(_ call: CAPPluginCall) {
+        let monitor = NWPathMonitor()
+        var answered = false
+        monitor.pathUpdateHandler = { path in
+            guard !answered else { return }
+            answered = true; monitor.cancel()
+            let type = path.status != .satisfied ? "none" : path.isExpensive || path.usesInterfaceType(.cellular) ? "cellular" : path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet) ? "wifi" : "unknown"
+            call.resolve(["type": type])
+        }
+        monitor.start(queue: queue)
+    }
     @objc public func pick(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             guard self.pickerCall == nil, let controller = self.bridge?.viewController else { call.reject("파일 선택 창이 열려 있어요."); return }
