@@ -1,4 +1,8 @@
 import type { Metadata, Viewport } from "next";
+// 지도 CSS는 첫 HTML에 함께 넣는다. 지도 청크와 함께 동적으로 붙이면 로딩이 끊길 때
+// React 내부 Promise가 처리되지 않은 채 reject되고, 오프라인에서는 스타일 없이 지도가 그려진다.
+import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import PWAUpdateBanner from "@/components/PWAUpdateBanner";

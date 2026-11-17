@@ -4,7 +4,6 @@ import {useEffect, useImperativeHandle, useRef, useState} from "react";
 import * as maplibregl from "maplibre-gl";
 import type {GeoJSONSource, Map as MapInstance, StyleSpecification} from "maplibre-gl";
 import {Protocol} from "pmtiles";
-import "maplibre-gl/dist/maplibre-gl.css";
 import {openOfflineMap, type MapPack} from "@/lib/offlineMaps";
 import type {LatLng, CourseOverlay} from "@/types";
 import {headingCone} from "@/lib/routeGeometry";
