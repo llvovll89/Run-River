@@ -3,7 +3,6 @@
 import {useEffect, useImperativeHandle, useRef, useState} from "react";
 import * as L from "leaflet";
 import {leafletLayer, LineSymbolizer, type LeafletLayerOptions} from "protomaps-leaflet";
-import "leaflet/dist/leaflet.css";
 import {openOfflineMap, type MapPack} from "@/lib/offlineMaps";
 import type {LatLng, CourseOverlay} from "@/types";
 import {headingCone} from "@/lib/routeGeometry";
