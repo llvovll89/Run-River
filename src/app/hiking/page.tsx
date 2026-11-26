@@ -18,6 +18,7 @@ const MapView = dynamic(() => import("@/components/MapView"), {ssr: false});
 export default function HikingPage() {
     const [course, setCourse] = useState<HikingCourse | null>(null);
     const [error, setError] = useState("");
+    const [startError, setStartError] = useState("");
     const [busy, setBusy] = useState(false);
     const [importing, setImporting] = useState(false);
     const [active, setActive] = useState(false);
@@ -49,7 +50,7 @@ export default function HikingPage() {
         try { saveHikingCourse(next); setCourse(next); } catch { setError("경로 선택을 저장하지 못했어요. 기기 공간을 확인해주세요."); }
     }
     async function start() {
-        setBusy(true); setError("");
+        setBusy(true); setError(""); setStartError("");
         try {
             if (!navigator.geolocation) throw new Error("이 기기는 GPS 기록을 지원하지 않아요.");
             const startPoint = await new Promise<LatLng>((resolve, reject) => navigator.geolocation.getCurrentPosition(fix => {
@@ -64,7 +65,7 @@ export default function HikingPage() {
             const config: RunConfig = {runId: crypto.randomUUID(), ownerId, startPoint, endPoint: null, activityType: "hiking", goalDistance: null, goalTime: null, routePath: course?.points, courseName: course?.name, courseOverlay: course?.overlay};
             sessionStorage.setItem("runConfig", JSON.stringify(config));
             navigatePublic("/running");
-        } catch (error) { setError(error instanceof Error ? error.message : "하이킹을 시작하지 못했어요."); setBusy(false); }
+        } catch (error) { setStartError(error instanceof Error ? error.message : "하이킹을 시작하지 못했어요."); setBusy(false); }
     }
     return <main className="app-screen min-h-dvh" style={{background: "var(--c-bg)"}}>
         <ScreenHeader title="하이킹" description="거리와 시간, 올라온 높이를 기록해요. 천천히 걸어도 자동으로 멈추지 않아요." />
@@ -95,6 +96,7 @@ export default function HikingPage() {
                 {(pack || course) && <div className="mt-4" style={{height: "min(330px, 44dvh)", overflow: "hidden", borderRadius: 18, border: "1px solid var(--c-border)"}}><MapView className="h-full" pack={pack} course={course?.points} overlay={course?.overlay} showControls controlsTop="12px" /></div>}
             </section>
             <section className="page-section">
+                {startError && <p role="alert" style={{marginTop: 0, marginBottom: 12, fontSize: 15, fontWeight: 650, color: "var(--c-danger-text)"}}>{startError}</p>}
                 <TintedButton tone="accent" wide disabled={!ready || busy || importing || active} onClick={() => void start()}>{busy ? "현재 위치 확인 중…" : "현재 위치에서 하이킹 시작"}</TintedButton>
                 <p>쉬어갈 때는 직접 일시정지를 눌러주세요. 기록은 먼저 이 기기에 저장돼요.</p>
                 <p className="section-fine">웹에서는 화면을 켜두어야 위치가 계속 기록돼요. 코스 안내가 길찾기를 대신하지는 않아요.</p>

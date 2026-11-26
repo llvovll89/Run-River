@@ -47,7 +47,7 @@ export default function LocalHistoryPage() {
         {entries.length > 0 && visible.length === 0 && <p className="py-10" style={{fontSize: 15, color: "var(--c-text-2)"}}>이 종류의 기록은 아직 없어요.</p>}
         {visible.map(({result, savedAt, uploaded}) => <a key={result.id} href={`/result?id=${result.id}`} className="record-row">
             <div className="record-date">{new Date(savedAt).getMonth() + 1}월<strong className="num">{new Date(savedAt).getDate()}</strong></div>
-            <div className="record-main"><h2>{partOfDay(savedAt)} {activityLabel(result.activity_type)}</h2>
+            <div className="record-main"><h2>{partOfDay(savedAt - result.duration_seconds * 1000)} {activityLabel(result.activity_type)}</h2>
             <div className="record-metrics"><span><strong className="num">{result.distance_km.toFixed(2)}</strong> km</span><span className="num">{formatDuration(result.duration_seconds)}</span></div>
             <p className="record-save-state">{uploaded ? "서버 저장됨" : result.ownerId && canSyncActivity(result.activity_type) ? "기기 저장됨, 연결 후 업로드" : "이 기기에 저장됨"}</p></div>
             <RouteThumbnail points={result.pathPoints ?? []} />

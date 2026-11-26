@@ -140,6 +140,22 @@ function calcMinDistanceToPathKm(
     return minDistance;
 }
 
+// 상단 패널·하단 버튼 높이를 재서 지도와 떠 있는 버튼을 실제로 보이는 영역에 맞춘다.
+function useMeasuredHeight<T extends HTMLElement>() {
+    const [height, setHeight] = useState(0);
+    const observer = useRef<ResizeObserver | null>(null);
+    const ref = useCallback((element: T | null) => {
+        observer.current?.disconnect();
+        observer.current = null;
+        if (!element) return;
+        setHeight(element.offsetHeight);
+        if (typeof ResizeObserver === "undefined") return;
+        observer.current = new ResizeObserver(() => setHeight(element.offsetHeight));
+        observer.current.observe(element);
+    }, []);
+    return [ref, height] as const;
+}
+
 export default function RunningPage() {
     const mapPack = useOfflineMapPack();
     const router = useRouter();
@@ -183,6 +199,10 @@ export default function RunningPage() {
     const [isPaused, setIsPaused] = useState(false);
     const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
     const [followUser, setFollowUser] = useState(true);
+    const [panelRef, panelHeight] = useMeasuredHeight<HTMLDivElement>();
+    const [actionsRef, actionsHeight] = useMeasuredHeight<HTMLDivElement>();
+    // 측정 전에는 기존 고정값(하단 바 약 100px)을 쓴다.
+    const floatingBottom = (extra: number) => actionsHeight ? `${actionsHeight + extra}px` : `calc(var(--sab) + ${100 + extra}px)`;
     const [toast, setToast] = useState<{
         msg: string;
         undoFn?: () => void;
@@ -1245,7 +1265,7 @@ export default function RunningPage() {
                 overlay={config.courseOverlay}
                 // Hiking courses are drawn dashed to follow; city routes are the planned walking path.
                 course={config.courseOverlay ? config.routePath : undefined}
-                offlineRouteTop={topPanelCollapsed ? "24%" : "54%"}
+                offlineRouteTop="16px"
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??
                     config.startPoint
@@ -1263,8 +1283,9 @@ export default function RunningPage() {
                 follow={followUser}
                 onUserDrag={() => setFollowUser(false)}
                 showControls={topPanelCollapsed}
-                controlsTop="26%"
-                className="absolute inset-0 h-full"
+                controlsTop="12px"
+                // MapView 기본 relative보다 우선하도록 위치는 인라인으로 준다.
+                style={{position: "absolute", left: 0, right: 0, top: panelHeight, bottom: actionsHeight}}
             />
 
             {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
@@ -1275,15 +1296,13 @@ export default function RunningPage() {
                     className="absolute z-10 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
                     style={{
                         right: 16,
-                        bottom: "calc(var(--sab) + 100px)",
-                        background: "rgba(20,22,26,0.9)",
-                        border: `1px solid ${accent}55`,
-                        backdropFilter: "blur(12px)",
-                        WebkitBackdropFilter: "blur(12px)",
-                        color: "var(--c-accent-text)",
-                        fontSize: 12,
+                        bottom: floatingBottom(12),
+                        background: "var(--c-surface)",
+                        border: "1px solid var(--c-border)",
+                        color: "var(--c-text-1)",
+                        fontSize: 14,
                         fontWeight: 700,
-                        boxShadow: `0 2px 12px ${accent}33`,
+                        boxShadow: "0 2px 12px rgba(12,18,30,0.16)",
                     }}
                 >
                     <svg
@@ -1345,7 +1364,7 @@ export default function RunningPage() {
                 <div
                     className="absolute z-30 left-1/2 -translate-x-1/2 rounded-2xl"
                     style={{
-                        bottom: "calc(var(--sab) + 104px)",
+                        bottom: floatingBottom(12),
                         width: "calc(100% - 32px)",
                         background: "var(--c-surface)",
                         border: "1px solid var(--c-border)",
@@ -1401,7 +1420,7 @@ export default function RunningPage() {
                     className="absolute z-20 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
                     style={{
                         right: 16,
-                        bottom: "calc(var(--sab) + 160px)",
+                        bottom: floatingBottom(68),
                         background: "var(--c-glass)",
                         border: "1px solid var(--c-border)",
                         backdropFilter: "blur(12px)",
@@ -1429,6 +1448,7 @@ export default function RunningPage() {
 
             {/* 상단 스탯 */}
             <div
+                ref={panelRef}
                 className="running-panel absolute top-0 left-0 right-0 z-10"
                 style={{
                     paddingTop: isOnline ? "calc(var(--sat) + 14px)" : "calc(var(--sat) + 44px)",
@@ -1448,7 +1468,7 @@ export default function RunningPage() {
                                     : (config.activityType === "hiking" ? "하이킹" : isRun ? "러닝" : "걷기") + " 중"}
                             </span>
                             {!isPaused && pace > 0 && (
-                                <span className="run-chip" style={{color: paceZone.color}}>
+                                <span className="run-chip" style={{color: `color-mix(in srgb, ${paceZone.color} 55%, var(--c-text-1))`}}>
                                     {paceZone.label}
                                 </span>
                             )}
@@ -1494,7 +1514,7 @@ export default function RunningPage() {
                     {!topPanelCollapsed && (
                         <>
                             {!isPaused && (
-                                <p className="run-note" style={{color: paceZone.color, fontWeight: 650}}>
+                                <p className="run-note" style={{color: `color-mix(in srgb, ${paceZone.color} 55%, var(--c-text-1))`, fontWeight: 650}}>
                                     {paceGuide}
                                 </p>
                             )}
@@ -1578,7 +1598,7 @@ export default function RunningPage() {
             </div>
             {arrived && (
                 <div
-                    className="absolute inset-0 z-20 flex items-end justify-center"
+                    className="absolute inset-0 z-40 flex items-end justify-center"
                     style={{
                         background: "var(--c-overlay)",
                         backdropFilter: "blur(8px)",
@@ -1642,7 +1662,7 @@ export default function RunningPage() {
 
             {gapSuggestion && (
                 <div
-                    className="absolute inset-0 z-30 flex items-end justify-center"
+                    className="absolute inset-0 z-40 flex items-end justify-center"
                     style={{
                         background: "var(--c-overlay)",
                         backdropFilter: "blur(6px)",
@@ -1751,6 +1771,7 @@ export default function RunningPage() {
 
             {/* 하단 버튼 */}
             <div
+                ref={actionsRef}
                 className="running-actions absolute bottom-0 left-0 right-0 z-30 px-5"
                 style={{
                     paddingBottom: "calc(var(--sab) + 20px)",

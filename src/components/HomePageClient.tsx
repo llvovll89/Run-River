@@ -24,7 +24,7 @@ import {INTERVAL_PRESETS} from "@/lib/intervalPresets";
 import type {IntervalPreset} from "@/lib/intervalPresets";
 import PCLanding from "@/components/PCLanding";
 import SegmentedControl from "@/components/SegmentedControl";
-import {OfflineStatus, OfflineStatusText} from "@/components/OfflineSetup";
+import {AppVersion, OfflineStatus, OfflineStatusText} from "@/components/OfflineSetup";
 import {useAuthSession} from "@/hooks/useAuthSession";
 import {useCompass} from "@/hooks/useCompass";
 import RouteElevation from "@/components/RouteElevation";
@@ -2393,9 +2393,10 @@ export default function Home() {
                         </div>
                     )}
 
-                    <OfflineStatusText />
+                    <AppVersion />
                 </div>
                 <div className="home-sheet-footer px-5">
+                    <OfflineStatusText />
                     {/* 액션 버튼 */}
                     <OfflineStatus />
                     <div className="flex gap-2">

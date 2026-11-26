@@ -948,7 +948,7 @@ export default function ResultPage() {
                         <div className="mt-2 flex items-center gap-3">
                             <button
                                 type="button"
-                                onClick={() => void syncNow(exhaustedCount > 0)}
+                                onClick={() => void syncNow(true)}
                                 className="btn"
                                 data-tone="neutral"
                                 disabled={syncing || !isOnline}

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import {useEffect, useState, type Ref} from "react";
+import {useEffect, useState, type CSSProperties, type Ref} from "react";
 import {Capacitor} from "@capacitor/core";
 import OfflineRoute from "@/components/OfflineRoute";
 import {useTheme} from "@/hooks/useTheme";
@@ -60,6 +60,8 @@ export interface MapViewProps {
     offlineSketch?: boolean;
     offlineRouteTop?: string;
     className?: string;
+    /** 바깥 상자 위치 지정(러닝 화면에서 패널 사이 영역에 맞출 때) */
+    style?: CSSProperties;
 }
 
 /** Props an engine receives: the base map has been decided for it. */
@@ -97,7 +99,7 @@ export default function MapView(props: MapViewProps) {
     const sketch = base === "none" && offlineSketch && !props.overlay;
     const Engine = canvas ? CanvasMap : GLMap;
 
-    return <div className={`relative w-full ${className}`}>
+    return <div className={`relative w-full ${className}`} style={props.style}>
         {canvas !== null && !sketch && <div className="absolute inset-0">
             <Engine key={`${base}-${theme}`} {...props} base={base} dark={theme === "dark"} onBaseError={() => setBaseFailed(true)} />
         </div>}

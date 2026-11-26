@@ -52,8 +52,6 @@ export default function OfflineSyncBanner() {
   const shouldShow = pendingCount > 0 || !!lastError;
 
   // 러닝 화면에서는 하단 컨트롤 터치 우선
-  if (pathname === "/running") return null;
-
   const statusText = useMemo(() => {
     if (syncing) return "기록을 올리는 중…";
     if (pendingCount === 0 && lastError) return "기록을 올리지 못했어요";
@@ -67,60 +65,41 @@ export default function OfflineSyncBanner() {
     return `올릴 기록 ${pendingCount}건`;
   }, [syncing, pendingCount, blockedCount, exhaustedCount, nextRetryAt, lastError]);
 
-  if (!shouldShow) return null;
+  // 모든 훅을 부른 뒤에 숨긴다(경로마다 훅 개수가 달라지면 레이아웃이 깨진다).
+  // 러닝 화면은 하단 조작을, 홈은 시작 버튼을 가리지 않도록 표시하지 않는다.
+  if (!shouldShow || pathname === "/running" || pathname === "/") return null;
 
   return (
     <div
-      className="absolute left-3 right-3 z-40 rounded-2xl px-3 py-2.5"
+      className="fixed z-40 rounded-2xl px-3 py-2.5"
       style={{
-        bottom: "calc(var(--sab) + 10px)",
+        // 하단 탐색(약 58px) 바로 위
+        bottom: "calc(var(--sab) + 66px)",
+        left: "max(12px, calc(50% - 203px))",
+        right: "max(12px, calc(50% - 203px))",
         background: "var(--c-surface)",
         border: "1px solid var(--c-border)",
         boxShadow: "0 8px 24px rgba(12,18,30,0.14)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        pointerEvents: "none",
       }}
     >
-      <div className="flex items-center justify-between gap-2" style={{ pointerEvents: "auto" }}>
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
           <p style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>{statusText}</p>
-          <p style={{ fontSize: 13, color: "var(--c-text-2)", marginTop: 1 }}>
-            마지막 업로드 {formatRelativeTime(lastSyncedAt)}
+          <p style={{ fontSize: 13, color: !isOnline || lastError ? "var(--c-warn)" : "var(--c-text-2)", marginTop: 1 }}>
+            {!isOnline ? "인터넷에 연결되면 올라가요" : lastError ? `최근 오류: ${lastError}` : `마지막 업로드 ${formatRelativeTime(lastSyncedAt)}`}
           </p>
-          {!isOnline && (
-            <p style={{ fontSize: 13, color: "var(--c-warn)", marginTop: 1 }}>
-              인터넷에 연결되면 올라가요.
-            </p>
-          )}
-          {lastError && (
-            <p style={{ fontSize: 13, color: "var(--c-warn)", marginTop: 1 }}>
-              최근 오류: {lastError}
-            </p>
-          )}
         </div>
-        <div className="flex items-center gap-1.5">
-          {exhaustedCount > 0 && (
-            <button
-              onClick={() => void syncNow(true)}
-              disabled={syncing || !isOnline}
-              className="btn"
-              data-tone="neutral"
-              style={{ minHeight: 44, fontSize: 14 }}
-            >
-              다시 시도
-            </button>
-          )}
-          <button
-            onClick={() => void syncNow()}
-            disabled={syncing || pendingCount === 0 || !isOnline}
-            className="btn"
-            data-tone="accent"
-            style={{ minHeight: 44, fontSize: 14 }}
-          >
-            {syncing ? "올리는 중" : "지금 올리기"}
-          </button>
-        </div>
+        <button
+          type="button"
+          // 사용자가 직접 누르면 재시도 대기 중인 기록도 바로 올린다.
+          onClick={() => void syncNow(true)}
+          disabled={syncing || pendingCount === 0 || !isOnline}
+          className="btn shrink-0"
+          data-tone="accent"
+          style={{ minHeight: 44, fontSize: 14, padding: "0 14px" }}
+        >
+          {syncing ? "올리는 중" : exhaustedCount > 0 ? "다시 시도" : "지금 올리기"}
+        </button>
       </div>
     </div>
   );

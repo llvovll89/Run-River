@@ -78,6 +78,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           className="relative w-full max-w-[430px] min-h-dvh overflow-x-hidden"
           style={{ background: "var(--c-bg)" }}
         >
+          {/* iOS 홈 화면 앱(black-translucent)은 상태바 글자가 항상 흰색이라 밝은 테마에서 띠를 깐다 */}
+          <div className="status-scrim" aria-hidden="true" />
           <ThemeProvider>
             <OfflineSetup>
             <AppRecovery />

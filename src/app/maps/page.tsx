@@ -42,11 +42,16 @@ export default function MapsPage() {
         finally { setBusy(false); }
     }
     const pack = packs.find(pack => pack.id === selected);
+    const statusRef = useRef<HTMLDivElement>(null);
+    // 아래쪽 버튼에서 시작한 작업이어도 진행·결과 문구가 화면에 들어오게 한다.
+    useEffect(() => { if (busy || status || error) statusRef.current?.scrollIntoView({block: "nearest", behavior: "smooth"}); }, [busy, status, error]);
     return <main className="app-screen min-h-dvh" style={{background: "var(--c-bg)"}}>
         <ScreenHeader title="오프라인 지도" description="데이터가 안 터지는 산에서도 볼 수 있게, 갈 곳의 지도를 미리 저장해두세요." />
         <div className="page-body">
-            {error && <p role="alert" className="page-status" style={{color: "var(--c-danger-text)"}}>{error}</p>}
-            <p role="status" className="page-status">{busy ? "지도 파일을 준비하고 있어요. 잠시 기다려주세요…" : status}</p>
+            <div ref={statusRef} style={{scrollMarginTop: "calc(var(--sat) + 12px)"}}>
+                {error && <p role="alert" className="page-status" style={{color: "var(--c-danger-text)"}}>{error}</p>}
+                <p role="status" className="page-status">{busy ? "지도 파일을 준비하고 있어요. 잠시 기다려주세요…" : status}</p>
+            </div>
             <AreaMapSaver disabled={!ready || busy} onSaved={saved => { void refresh(); setStatus(`${saved.name} 지도를 기기에 저장했어요.`); }} />
             <section aria-label="저장한 지도" className="page-section">
                 <h2>저장한 지도{packs.length > 0 && <span className="num" style={{color: "var(--c-text-2)", fontWeight: 560}}> {packs.length}</span>}</h2>
@@ -68,7 +73,7 @@ export default function MapsPage() {
             </section>
             {pack && <section className="page-section" aria-label="오프라인 지도 미리보기">
                 <h2>{pack.name} 미리보기</h2>
-                <div className="mt-3" style={{height: 400, borderRadius: 18, overflow: "hidden", border: "1px solid var(--c-border)"}}>{position !== undefined && <MapView key={pack.id} className="h-full" pack={pack} center={position ?? undefined} currentPosition={position} showControls controlsTop="12px" />}</div>
+                <div className="mt-3" style={{height: "min(400px, 50dvh)", borderRadius: 18, overflow: "hidden", border: "1px solid var(--c-border)"}}>{position !== undefined && <MapView key={pack.id} className="h-full" pack={pack} center={position ?? undefined} currentPosition={position} showControls controlsTop="12px" />}</div>
                 <p className="section-fine">갈색 점선은 산길과 보행로예요. 저장한 범위 밖은 비어 보여요.</p>
             </section>}
             <section className="page-section" aria-label="지도 저장">
