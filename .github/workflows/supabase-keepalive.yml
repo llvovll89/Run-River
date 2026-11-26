@@ -1,0 +1,34 @@
+# Supabase 무료 플랜은 일정 기간 요청이 없으면 프로젝트를 일시정지한다.
+# 3일마다 DB를 거치는 가벼운 읽기 요청을 보내 깨워 둔다.
+# 필요한 저장소 secrets: SUPABASE_URL, SUPABASE_ANON_KEY (앱의 NEXT_PUBLIC_ 값과 동일)
+name: supabase-keepalive
+
+on:
+  schedule:
+    - cron: "0 3 */3 * *" # 3일마다 03:00 UTC (12:00 KST)
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::SUPABASE_URL / SUPABASE_ANON_KEY secrets가 설정되지 않았습니다."
+            exit 1
+          fi
+          # RLS 때문에 빈 배열이 와도 DB 조회는 실행되어 활동으로 집계된다.
+          status=$(curl -sS -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 20 --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/running_records?select=id&limit=1")
+          echo "Supabase REST status: $status"
+          # 실패하면 워크플로가 실패해 GitHub 알림 메일로 일시정지를 알 수 있다.
+          [ "$status" -ge 200 ] && [ "$status" -lt 300 ]
