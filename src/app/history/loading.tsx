@@ -4,7 +4,7 @@ import ScreenHeader from "@/components/ScreenHeader";
 export default function HistoryLoading() {
   return (
     <main className="app-screen min-h-dvh" style={{ background: "var(--c-bg)" }}>
-      <ScreenHeader title="활동 기록" />
+      <ScreenHeader title="통계" />
       <p role="status" className="px-5 pt-4 text-sm" style={{color: "var(--c-text-2)"}}>기록을 불러오는 중…</p>
       <div className="px-4 pt-4">
         <div className="card rounded-2xl p-4">

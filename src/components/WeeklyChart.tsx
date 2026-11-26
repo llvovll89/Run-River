@@ -96,7 +96,7 @@ export default function WeeklyChart({ records }: Props) {
       {/* 주간 목표 카드 */}
       <div className="card rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--c-text-3)" }}>
+          <p style={{ fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em" }}>
             이번 주 목표
           </p>
           <button

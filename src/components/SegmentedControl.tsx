@@ -38,7 +38,7 @@ export default function SegmentedControl<T extends string>({
                         type="button"
                         aria-pressed={active}
                         onClick={() => onChange(opt.value)}
-                        className={`flex-1 flex items-center justify-center gap-2 ${itemPaddingClassName} rounded-xl text-sm font-semibold transition-all duration-200 active:scale-[0.97]`}
+                        className={`flex-1 flex items-center justify-center gap-2 ${itemPaddingClassName} min-h-11 rounded-xl text-[15px] font-semibold transition-colors duration-200`}
                         style={{
                             background: active ? "var(--c-surface)" : "transparent",
                             color: active ? "var(--c-text-1)" : "var(--c-text-2)",

@@ -55,16 +55,16 @@ export default function OfflineSyncBanner() {
   if (pathname === "/running") return null;
 
   const statusText = useMemo(() => {
-    if (syncing) return "동기화 중...";
-    if (pendingCount === 0 && lastError) return "동기화 오류";
-    if (pendingCount === 0) return "동기화 완료";
+    if (syncing) return "기록을 올리는 중…";
+    if (pendingCount === 0 && lastError) return "기록을 올리지 못했어요";
+    if (pendingCount === 0) return "모든 기록을 올렸어요";
     if (exhaustedCount > 0) {
-      return `대기 ${pendingCount}건 · 수동 확인 ${exhaustedCount}건`;
+      return `올릴 기록 ${pendingCount}건, 다시 시도가 필요한 기록 ${exhaustedCount}건`;
     }
     if (blockedCount > 0) {
-      return `대기 ${pendingCount}건 · 재시도 ${formatRetryTime(nextRetryAt)}`;
+      return `올릴 기록 ${pendingCount}건, ${formatRetryTime(nextRetryAt)} 다시 시도`;
     }
-    return `대기 ${pendingCount}건`;
+    return `올릴 기록 ${pendingCount}건`;
   }, [syncing, pendingCount, blockedCount, exhaustedCount, nextRetryAt, lastError]);
 
   if (!shouldShow) return null;
@@ -74,8 +74,9 @@ export default function OfflineSyncBanner() {
       className="absolute left-3 right-3 z-40 rounded-2xl px-3 py-2.5"
       style={{
         bottom: "calc(var(--sab) + 10px)",
-        background: "rgba(18,19,21,0.92)",
-        border: "1px solid rgba(255,255,255,0.12)",
+        background: "var(--c-surface)",
+        border: "1px solid var(--c-border)",
+        boxShadow: "0 8px 24px rgba(12,18,30,0.14)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         pointerEvents: "none",
@@ -83,17 +84,17 @@ export default function OfflineSyncBanner() {
     >
       <div className="flex items-center justify-between gap-2" style={{ pointerEvents: "auto" }}>
         <div>
-          <p style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>오프라인 동기화</p>
-          <p style={{ fontSize: 11, color: "#9da1a6", marginTop: 1 }}>
-            {statusText} · 마지막 성공 {formatRelativeTime(lastSyncedAt)}
+          <p style={{ fontSize: 15, fontWeight: 700, color: "var(--c-text-1)" }}>{statusText}</p>
+          <p style={{ fontSize: 13, color: "var(--c-text-2)", marginTop: 1 }}>
+            마지막 업로드 {formatRelativeTime(lastSyncedAt)}
           </p>
           {!isOnline && (
-            <p style={{ fontSize: 11, color: "#ff9f0a", marginTop: 1 }}>
-              오프라인 상태에서는 동기화가 대기됩니다.
+            <p style={{ fontSize: 13, color: "var(--c-warn)", marginTop: 1 }}>
+              인터넷에 연결되면 올라가요.
             </p>
           )}
           {lastError && (
-            <p style={{ fontSize: 11, color: "#ff9f0a", marginTop: 1 }}>
+            <p style={{ fontSize: 13, color: "var(--c-warn)", marginTop: 1 }}>
               최근 오류: {lastError}
             </p>
           )}
@@ -103,27 +104,21 @@ export default function OfflineSyncBanner() {
             <button
               onClick={() => void syncNow(true)}
               disabled={syncing || !isOnline}
-              className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
-              style={{
-                background: syncing ? "rgba(255,255,255,0.12)" : "rgba(255,159,10,0.22)",
-                color: syncing ? "#9da1a6" : "#ffd18f",
-                border: "1px solid rgba(255,159,10,0.35)",
-              }}
+              className="btn"
+              data-tone="neutral"
+              style={{ minHeight: 44, fontSize: 14 }}
             >
-              강제 재시도
+              다시 시도
             </button>
           )}
           <button
             onClick={() => void syncNow()}
             disabled={syncing || pendingCount === 0 || !isOnline}
-            className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
-            style={{
-              background: syncing || pendingCount === 0 ? "rgba(255,255,255,0.12)" : "var(--c-toss-blue)",
-              color: syncing || pendingCount === 0 ? "#9da1a6" : "#fff",
-              border: "1px solid rgba(255,255,255,0.15)",
-            }}
+            className="btn"
+            data-tone="accent"
+            style={{ minHeight: 44, fontSize: 14 }}
           >
-            {syncing ? "동기화 중" : "지금 동기화"}
+            {syncing ? "올리는 중" : "지금 올리기"}
           </button>
         </div>
       </div>

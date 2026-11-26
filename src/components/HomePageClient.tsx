@@ -24,7 +24,7 @@ import {INTERVAL_PRESETS} from "@/lib/intervalPresets";
 import type {IntervalPreset} from "@/lib/intervalPresets";
 import PCLanding from "@/components/PCLanding";
 import SegmentedControl from "@/components/SegmentedControl";
-import {OfflineStatus} from "@/components/OfflineSetup";
+import {OfflineStatus, OfflineStatusText} from "@/components/OfflineSetup";
 import {useAuthSession} from "@/hooks/useAuthSession";
 import {useCompass} from "@/hooks/useCompass";
 import RouteElevation from "@/components/RouteElevation";
@@ -554,14 +554,14 @@ export default function Home() {
     const guide =
         pageMode === "goal"
             ? {
-                  text: `목표: ${goal.distance} km · 위치 자동 설정`,
+                  text: "지금 있는 곳에서 출발해요",
                   color: accentVar,
               }
             : !startPoint
               ? {text: "출발 지점을 탭하세요", color: "var(--c-accent-text)"}
               : !endPoint
-                ? {text: "도착 지점을 탭하세요", color: "#f59e0b"}
-                : {text: "준비 완료 · 출발하세요", color: "var(--c-walk-text)"};
+                ? {text: "도착 지점을 탭하세요", color: "var(--c-warn)"}
+                : {text: "출발 준비가 됐어요", color: "var(--c-walk-text)"};
 
     useEffect(() => {
         if (!isShareReferral) {
@@ -953,7 +953,7 @@ export default function Home() {
                 style={{top: "calc(var(--sat) + 70px)"}}
             >
                 <span
-                    className="text-xs font-semibold px-4 py-1.5 rounded-full whitespace-nowrap"
+                    className="text-sm font-semibold px-4 py-2 rounded-full whitespace-nowrap"
                     style={{
                         background: "var(--c-glass)",
                         backdropFilter: "blur(12px)",
@@ -1533,7 +1533,7 @@ export default function Home() {
                 </button>
                 <div id="home-goal-options" hidden={!sheetOpen} className="home-sheet-content space-y-3">
                     <div className="home-intro">
-                        <div><h1>오늘의 운동</h1></div>
+                        <div><h1>목표 정하기</h1></div>
                         <button className="home-challenge" onClick={() => setWeeklyChallengeOpen(v => !v)} aria-label={weeklyChallengeOpen ? "이번 주 챌린지 접기" : "이번 주 챌린지 펼치기"} aria-expanded={weeklyChallengeOpen}>
                             이번 주 <span className="num">{weeklyDistanceKm.toFixed(1)} / {weeklyGoalKm} km</span>
                         </button>
@@ -1914,7 +1914,7 @@ export default function Home() {
                                                 }}
                                             >
                                                 {route.error
-                                                    ? "탐색 실패 · 직선"
+                                                    ? "경로를 못 찾아 직선으로 표시"
                                                     : "직선 거리"}
                                             </span>
                                             <span
@@ -2106,11 +2106,10 @@ export default function Home() {
                                 </button>
                             </div></details>
                             <p
-                                className="text-xs text-center"
-                                style={{color: "var(--c-text-3)"}}
+                                className="text-sm text-center"
+                                style={{color: "var(--c-text-2)"}}
                             >
-                                현재 위치에서 출발 · 설정한 시간 동안 자유롭게
-                                달립니다
+                                지금 위치에서 출발해 정한 시간만큼 달려요
                             </p>
                         </div>
                     )}
@@ -2386,15 +2385,15 @@ export default function Home() {
                             </div>
 
                             <p
-                                className="text-xs text-center"
-                                style={{color: "var(--c-text-3)"}}
+                                className="text-sm text-center"
+                                style={{color: "var(--c-text-2)"}}
                             >
-                                현재 위치에서 출발 · 인터벌 트레이닝을
-                                시작합니다
+                                지금 위치에서 출발해 인터벌 훈련을 해요
                             </p>
                         </div>
                     )}
 
+                    <OfflineStatusText />
                 </div>
                 <div className="home-sheet-footer px-5">
                     {/* 액션 버튼 */}

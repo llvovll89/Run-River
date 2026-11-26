@@ -1,7 +1,6 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import Brand from "@/components/Brand";
 import {useRouter} from "next/navigation";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 
@@ -264,7 +263,7 @@ export default function AuthPage() {
                 </div>
             )}
 
-            <div className="mb-8 flex items-center justify-between"><Brand />
+            <div className="mb-6 flex items-center">
                 <button
                     onClick={() => {
                         if (process.env.NEXT_PUBLIC_NATIVE_APP === "1") {
@@ -277,17 +276,15 @@ export default function AuthPage() {
                         }
                         router.push("/");
                     }}
-                    className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
-                    style={{
-                        background: "var(--c-surface)",
-                        border: "1px solid var(--c-border)",
-                        color: "var(--c-text-1)",
-                    }}
+                    className="btn"
+                    data-tone="neutral"
+                    style={{minHeight: 44, paddingLeft: 10}}
                     aria-label="뒤로가기"
                 >
                     <svg
-                        width="15"
-                        height="15"
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -297,29 +294,15 @@ export default function AuthPage() {
                     >
                         <path d="M15 18l-6-6 6-6" />
                     </svg>
+                    뒤로
                 </button>
-                <p
-                    style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: "var(--c-text-2)",
-                    }}
-                >
-                    홈으로 돌아가기
-                </p>
             </div>
 
-            <section
-                className="rounded-3xl p-5"
-                style={{
-                    background: "var(--c-surface)",
-                    border: "1px solid var(--c-border)",
-                }}
-            >
+            <section>
                 <h1
                     style={{
-                        fontSize: 24,
-                        fontWeight: 800,
+                        fontSize: 28,
+                        fontWeight: 780,
                         color: "var(--c-text-1)",
                         letterSpacing: "-0.02em",
                     }}
@@ -329,12 +312,12 @@ export default function AuthPage() {
                 <p
                     style={{
                         marginTop: 8,
-                        fontSize: 13,
-                        color: "var(--c-text-3)",
+                        fontSize: 15,
+                        lineHeight: 1.6,
+                        color: "var(--c-text-2)",
                     }}
                 >
-                    로그인 후 내 기록과 프로필을 계정으로 안전하게 관리할 수
-                    있습니다.
+                    기록을 계정에 올려두면 휴대폰을 바꿔도 이어서 볼 수 있어요.
                 </p>
                 {loginPurpose(next) && (
                     <p className="auth-purpose" role="note">
@@ -348,7 +331,7 @@ export default function AuthPage() {
                 >
                     <button
                         onClick={() => handleModeChange("login")}
-                        className="rounded-xl py-2 text-sm font-semibold"
+                        className="rounded-xl min-h-11 text-[15px] font-semibold"
                         style={{
                             background:
                                 mode === "login"
@@ -362,7 +345,7 @@ export default function AuthPage() {
                     </button>
                     <button
                         onClick={() => handleModeChange("signup")}
-                        className="rounded-xl py-2 text-sm font-semibold"
+                        className="rounded-xl min-h-11 text-[15px] font-semibold"
                         style={{
                             background:
                                 mode === "signup"
@@ -397,7 +380,7 @@ export default function AuthPage() {
                             }
                         }}
                         placeholder="이메일"
-                        className="w-full rounded-2xl px-4 py-3 text-sm outline-none"
+                        className="w-full rounded-2xl px-4 py-3 outline-none"
                         style={{
                             background: "var(--c-elevated)",
                             border: fieldError.email
@@ -410,7 +393,7 @@ export default function AuthPage() {
                         <p
                             style={{
                                 marginTop: 4,
-                                fontSize: 12,
+                                fontSize: 14,
                                 color: "var(--c-danger-text)",
                             }}
                         >
@@ -431,7 +414,7 @@ export default function AuthPage() {
                             }
                         }}
                         placeholder="비밀번호 (최소 6자)"
-                        className="w-full rounded-2xl px-4 py-3 text-sm outline-none"
+                        className="w-full rounded-2xl px-4 py-3 outline-none"
                         style={{
                             background: "var(--c-elevated)",
                             border: fieldError.password
@@ -444,7 +427,7 @@ export default function AuthPage() {
                         <p
                             style={{
                                 marginTop: 4,
-                                fontSize: 12,
+                                fontSize: 14,
                                 color: "var(--c-danger-text)",
                             }}
                         >
@@ -454,7 +437,7 @@ export default function AuthPage() {
                     <button
                         type="submit"
                         disabled={loading || !email || password.length < 6}
-                        className="mt-4 w-full rounded-2xl py-3 text-sm font-bold"
+                        className="mt-5 w-full rounded-2xl min-h-14 text-[17px] font-bold"
                         style={{
                             background: loading
                                 ? "var(--c-elevated)"
@@ -475,7 +458,7 @@ export default function AuthPage() {
                             type="button"
                             onClick={() => void handleResendVerification()}
                             disabled={resending || resendCooldown > 0}
-                            className="mt-2 w-full rounded-2xl py-3 text-sm font-semibold"
+                            className="mt-2 w-full rounded-2xl min-h-13 text-[16px] font-semibold"
                             style={{
                                 background: "var(--c-elevated)",
                                 border: "1px solid var(--c-border)",

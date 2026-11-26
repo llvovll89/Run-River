@@ -49,13 +49,7 @@ export default function PaceTrendChart({ records }: Props) {
       >
         <p
           className="mb-3"
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "var(--c-text-3)",
-          }}
+          style={{ fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em" }}
         >
           페이스 트렌드 (최근 {recent.length}회)
         </p>
