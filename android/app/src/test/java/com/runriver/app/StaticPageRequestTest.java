@@ -50,7 +50,7 @@ public class StaticPageRequestTest {
         try (ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup()) {
             MainActivity activity = controller.get();
             assertNotNull(activity.getBridge());
-            for (String[] page : new String[][]{{"/running", "운동 기록 준비 중"}, {"/maps/", "산에 가기 전, 지도 준비"}, {"/hiking", "산길에서도 나의 페이스로"}}) {
+            for (String[] page : new String[][]{{"/running", "운동 기록 준비 중"}, {"/maps/", "갈 곳의 지도를 미리 저장해두세요"}, {"/hiking", "천천히 걸어도 자동으로 멈추지 않아요"}}) {
                 WebResourceResponse response = activity.getBridge().getWebViewClient().shouldInterceptRequest(activity.getBridge().getWebView(), request("https://localhost" + page[0], true));
                 assertNotNull(response); assertEquals("text/html", response.getMimeType());
                 String html = new String(response.getData().readAllBytes(), StandardCharsets.UTF_8);
