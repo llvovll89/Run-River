@@ -46,9 +46,15 @@ function toKoreanAuthError(rawMessage: string, mode: AuthMode): string {
     }
     if (
         message.includes("network request failed") ||
-        message.includes("failed to fetch")
+        message.includes("failed to fetch") ||
+        // iPhone Safari·WKWebView의 연결 실패 메시지
+        message.includes("load failed") ||
+        message.includes("could not resolve") ||
+        message.includes("networkerror")
     ) {
-        return "네트워크 연결을 확인한 뒤 다시 시도해주세요.";
+        return typeof navigator !== "undefined" && !navigator.onLine
+            ? "인터넷에 연결된 뒤 다시 시도해주세요."
+            : "로그인 서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.";
     }
     if (message.includes("signup is disabled")) {
         return "현재 회원가입이 비활성화되어 있습니다. 관리자 설정을 확인해주세요.";
@@ -106,6 +112,8 @@ export default function AuthPage() {
         }
 
         setShowBanner(true);
+        // 오류는 사용자가 읽고 다시 시도할 때까지 남겨둔다.
+        if (notice.type === "error") return;
         const timer = window.setTimeout(() => {
             setShowBanner(false);
         }, 3500);
@@ -235,34 +243,6 @@ export default function AuthPage() {
             className="auth-screen min-h-dvh px-6 pb-8"
             style={{background: "var(--c-bg)"}}
         >
-            {showBanner && notice && (
-                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[min(92vw,420px)]">
-                    <div
-                        className="rounded-2xl px-4 py-3"
-                        style={{
-                            background:
-                                notice.type === "error"
-                                    ? "rgba(255,69,58,0.14)"
-                                    : "rgba(98,124,80,0.14)",
-                            border:
-                                notice.type === "error"
-                                    ? "1px solid rgba(255,69,58,0.45)"
-                                    : "1px solid rgba(98,124,80,0.45)",
-                            color:
-                                notice.type === "error"
-                                    ? "var(--c-danger)"
-                                    : "var(--c-walk)",
-                            boxShadow: "0 8px 28px rgba(0,0,0,0.2)",
-                            backdropFilter: "blur(8px)",
-                        }}
-                    >
-                        <p style={{fontSize: 13, fontWeight: 600}}>
-                            {notice.text}
-                        </p>
-                    </div>
-                </div>
-            )}
-
             <div className="mb-6 flex items-center">
                 <button
                     onClick={() => {
@@ -319,6 +299,22 @@ export default function AuthPage() {
                 >
                     기록을 계정에 올려두면 휴대폰을 바꿔도 이어서 볼 수 있어요.
                 </p>
+                {showBanner && notice && (
+                    <p
+                        role={notice.type === "error" ? "alert" : "status"}
+                        className="mt-4 rounded-2xl px-4 py-3"
+                        style={{
+                            fontSize: 15,
+                            fontWeight: 650,
+                            lineHeight: 1.5,
+                            background: "var(--c-surface)",
+                            border: "1px solid currentColor",
+                            color: notice.type === "error" ? "var(--c-danger-text)" : "var(--c-walk-text)",
+                        }}
+                    >
+                        {notice.text}
+                    </p>
+                )}
                 {loginPurpose(next) && (
                     <p className="auth-purpose" role="note">
                         {loginPurpose(next)}
