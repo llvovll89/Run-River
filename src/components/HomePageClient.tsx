@@ -551,12 +551,10 @@ export default function Home() {
             : `${Math.round(route.info.durationS / 60)}분`
         : null;
 
+    // 지도에서 경로를 고를 때만 다음 동작을 안내한다(목표 모드는 현재 위치에서 바로 출발).
     const guide =
-        pageMode === "goal"
-            ? {
-                  text: "지금 있는 곳에서 출발해요",
-                  color: accentVar,
-              }
+        pageMode !== "map"
+            ? null
             : !startPoint
               ? {text: "출발 지점을 탭하세요", color: "var(--c-accent-text)"}
               : !endPoint
@@ -711,7 +709,7 @@ export default function Home() {
                     paddingBottom: "12px",
                 }}
             >
-                <a href="/" aria-label="Run River 홈" className="home-brand glass"><Brand /></a>
+                <a href="/" aria-label="Run River 홈" className="home-brand glass"><Brand compact /></a>
                 <div className="home-toolbar flex items-center gap-2">
                     <button
                         onClick={() =>
@@ -948,7 +946,7 @@ export default function Home() {
             </div>
 
             {/* 안내 pill */}
-            <div
+            {guide && <div
                 className="absolute left-1/2 -translate-x-1/2 z-10 pointer-events-none"
                 style={{top: "calc(var(--sat) + 70px)"}}
             >
@@ -963,7 +961,7 @@ export default function Home() {
                 >
                     {guide.text}
                 </span>
-            </div>
+            </div>}
 
             {showReferralBanner && (
                 <div
