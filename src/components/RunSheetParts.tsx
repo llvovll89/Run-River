@@ -5,7 +5,7 @@ export function SheetHandle() {
         <div className="flex justify-center mb-5">
             <div
                 className="w-10 h-1 rounded-full"
-                style={{ background: "rgba(255,255,255,0.2)" }}
+                style={{ background: "var(--c-text-3)", opacity: 0.5 }}
             />
         </div>
     );
@@ -17,35 +17,37 @@ export function SheetActionGrid({
     primaryLabel,
     onPrimary,
     primaryColor,
-    primaryShadow,
 }: {
     secondaryLabel: string;
     onSecondary: () => void;
     primaryLabel: string;
     onPrimary: () => void;
     primaryColor: string;
-    primaryShadow: string;
+    /** 그림자 없이 면 색으로만 강조한다. 기존 호출 호환용 */
+    primaryShadow?: string;
 }) {
     return (
         <div className="grid grid-cols-2 gap-2">
             <button
+                type="button"
                 onClick={onSecondary}
-                className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
+                className="min-h-14 rounded-2xl font-bold text-[17px] active:scale-[0.98] transition-transform"
                 style={{
-                    background: "rgba(255,255,255,0.08)",
-                    color: "#d1d4d9",
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "var(--c-surface)",
+                    color: "var(--c-text-1)",
+                    border: "1px solid var(--c-border)",
                     letterSpacing: "-0.01em",
                 }}
             >
                 {secondaryLabel}
             </button>
             <button
+                type="button"
                 onClick={onPrimary}
-                className="py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-transform"
+                className="min-h-14 rounded-2xl font-bold text-[17px] active:scale-[0.98] transition-transform"
                 style={{
                     background: primaryColor,
-                    boxShadow: primaryShadow,
+                    color: "var(--c-on-accent)",
                     letterSpacing: "-0.01em",
                 }}
             >

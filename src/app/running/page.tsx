@@ -1,5 +1,6 @@
 "use client";
 
+import {RiverProgress} from "@/components/RiverProgress";
 import {useEffect, useState, useRef, useCallback, useMemo} from "react";
 import {useRouter} from "next/navigation";
 import dynamic from "next/dynamic";
@@ -139,6 +140,22 @@ function calcMinDistanceToPathKm(
     return minDistance;
 }
 
+// 상단 패널·하단 버튼 높이를 재서 지도와 떠 있는 버튼을 실제로 보이는 영역에 맞춘다.
+function useMeasuredHeight<T extends HTMLElement>() {
+    const [height, setHeight] = useState(0);
+    const observer = useRef<ResizeObserver | null>(null);
+    const ref = useCallback((element: T | null) => {
+        observer.current?.disconnect();
+        observer.current = null;
+        if (!element) return;
+        setHeight(element.offsetHeight);
+        if (typeof ResizeObserver === "undefined") return;
+        observer.current = new ResizeObserver(() => setHeight(element.offsetHeight));
+        observer.current.observe(element);
+    }, []);
+    return [ref, height] as const;
+}
+
 export default function RunningPage() {
     const mapPack = useOfflineMapPack();
     const router = useRouter();
@@ -182,6 +199,10 @@ export default function RunningPage() {
     const [isPaused, setIsPaused] = useState(false);
     const [topPanelCollapsed, setTopPanelCollapsed] = useState(false);
     const [followUser, setFollowUser] = useState(true);
+    const [panelRef, panelHeight] = useMeasuredHeight<HTMLDivElement>();
+    const [actionsRef, actionsHeight] = useMeasuredHeight<HTMLDivElement>();
+    // 측정 전에는 기존 고정값(하단 바 약 100px)을 쓴다.
+    const floatingBottom = (extra: number) => actionsHeight ? `${actionsHeight + extra}px` : `calc(var(--sab) + ${100 + extra}px)`;
     const [toast, setToast] = useState<{
         msg: string;
         undoFn?: () => void;
@@ -1218,24 +1239,11 @@ export default function RunningPage() {
             : intervalPhase === "rest"
               ? "var(--c-walk)"
               : intervalPhase === "warmup"
-                ? "#ffd60a"
-                : "#64d2ff";
-    const intervalBg =
-        intervalPhase === "run"
-            ? "rgba(47,71,102,0.15)"
-            : intervalPhase === "rest"
-              ? "rgba(98,124,80,0.15)"
-              : intervalPhase === "warmup"
-                ? "rgba(255,214,10,0.16)"
-                : "rgba(100,210,255,0.16)";
-    const intervalBorder =
-        intervalPhase === "run"
-            ? "rgba(47,71,102,0.3)"
-            : intervalPhase === "rest"
-              ? "rgba(98,124,80,0.3)"
-              : intervalPhase === "warmup"
-                ? "rgba(255,214,10,0.35)"
-                : "rgba(100,210,255,0.35)";
+                ? "var(--c-warn)"
+                : "var(--c-accent-text)";
+    // 구간 색은 글자(intervalTone)로만 구분하고 면은 테마 색을 쓴다.
+    const intervalBg = "var(--c-elevated)";
+    const intervalBorder = "var(--c-border)";
     const intervalLabel =
         intervalPhase === "run"
             ? "⚡ 달리기"
@@ -1257,7 +1265,7 @@ export default function RunningPage() {
                 overlay={config.courseOverlay}
                 // Hiking courses are drawn dashed to follow; city routes are the planned walking path.
                 course={config.courseOverlay ? config.routePath : undefined}
-                offlineRouteTop={topPanelCollapsed ? "24%" : "54%"}
+                offlineRouteTop="16px"
                 center={
                     (isPaused ? frozenPositionRef.current : position) ??
                     config.startPoint
@@ -1275,8 +1283,9 @@ export default function RunningPage() {
                 follow={followUser}
                 onUserDrag={() => setFollowUser(false)}
                 showControls={topPanelCollapsed}
-                controlsTop="26%"
-                className="absolute inset-0 h-full"
+                controlsTop="12px"
+                // MapView 기본 relative보다 우선하도록 위치는 인라인으로 준다.
+                style={{position: "absolute", left: 0, right: 0, top: panelHeight, bottom: actionsHeight}}
             />
 
             {/* 내 위치 재중심 버튼 (지도 수동 이동 후 표시) */}
@@ -1287,15 +1296,13 @@ export default function RunningPage() {
                     className="absolute z-10 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
                     style={{
                         right: 16,
-                        bottom: "calc(var(--sab) + 100px)",
-                        background: "rgba(20,22,26,0.9)",
-                        border: `1px solid ${accent}55`,
-                        backdropFilter: "blur(12px)",
-                        WebkitBackdropFilter: "blur(12px)",
-                        color: "var(--c-accent-text)",
-                        fontSize: 12,
+                        bottom: floatingBottom(12),
+                        background: "var(--c-surface)",
+                        border: "1px solid var(--c-border)",
+                        color: "var(--c-text-1)",
+                        fontSize: 14,
                         fontWeight: 700,
-                        boxShadow: `0 2px 12px ${accent}33`,
+                        boxShadow: "0 2px 12px rgba(12,18,30,0.16)",
                     }}
                 >
                     <svg
@@ -1357,14 +1364,14 @@ export default function RunningPage() {
                 <div
                     className="absolute z-30 left-1/2 -translate-x-1/2 rounded-2xl"
                     style={{
-                        bottom: "calc(var(--sab) + 104px)",
+                        bottom: floatingBottom(12),
                         width: "calc(100% - 32px)",
                         background: "var(--c-surface)",
                         border: "1px solid var(--c-border)",
                         backdropFilter: "blur(16px)",
                         WebkitBackdropFilter: "blur(16px)",
                         maxWidth: "calc(100vw - 32px)",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                        boxShadow: "0 6px 20px rgba(12,18,30,0.16)",
                     }}
                 >
                     <div
@@ -1389,9 +1396,9 @@ export default function RunningPage() {
                                 style={{
                                     fontSize: 12,
                                     fontWeight: 700,
-                                    color: "#fff",
-                                    background: "rgba(255,255,255,0.18)",
-                                    border: "1px solid rgba(255,255,255,0.28)",
+                                    color: "var(--c-accent-text)",
+                                    background: "var(--c-elevated)",
+                                    border: "1px solid var(--c-border)",
                                     borderRadius: 8,
                                     minHeight: 44,
                                     padding: "0 12px",
@@ -1413,12 +1420,12 @@ export default function RunningPage() {
                     className="absolute z-20 h-11 flex items-center gap-1.5 px-3 rounded-full active:scale-95 transition-transform"
                     style={{
                         right: 16,
-                        bottom: "calc(var(--sab) + 160px)",
-                        background: "rgba(20,22,26,0.9)",
-                        border: "1px solid rgba(255,255,255,0.18)",
+                        bottom: floatingBottom(68),
+                        background: "var(--c-glass)",
+                        border: "1px solid var(--c-border)",
                         backdropFilter: "blur(12px)",
                         WebkitBackdropFilter: "blur(12px)",
-                        color: "#fff",
+                        color: "var(--c-text-1)",
                         fontSize: 12,
                         fontWeight: 600,
                         boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
@@ -1441,152 +1448,64 @@ export default function RunningPage() {
 
             {/* 상단 스탯 */}
             <div
+                ref={panelRef}
                 className="running-panel absolute top-0 left-0 right-0 z-10"
                 style={{
                     paddingTop: isOnline ? "calc(var(--sat) + 14px)" : "calc(var(--sat) + 44px)",
                     paddingBottom: topPanelCollapsed ? "10px" : "16px",
-                    background: "var(--c-glass)",
-                    backdropFilter: "blur(20px)",
-                    WebkitBackdropFilter: "blur(20px)",
-                    borderBottom: `1px solid ${accent}33`,
+                    // 햇빛 아래 가독성을 위해 지도가 비치지 않는 불투명 면
+                    background: "var(--c-bg)",
+                    borderBottom: "1px solid var(--c-border)",
                     transition: "background 0.5s ease, border-color 0.5s ease",
                 }}
             >
                 <div className="px-5">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span
-                                className="text-xs font-bold px-2.5 py-1 rounded-full"
-                                style={{
-                                    background: `${accent}22`,
-                                    color: "var(--c-accent-text)",
-                                    letterSpacing: "-0.01em",
-                                }}
-                            >
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="run-chip">
                                 {isPaused
                                     ? "일시정지"
                                     : (config.activityType === "hiking" ? "하이킹" : isRun ? "러닝" : "걷기") + " 중"}
                             </span>
-                            {/* 페이스존 밽지 */}
                             {!isPaused && pace > 0 && (
-                                <span
-                                    className="text-xs font-bold px-2 py-1 rounded-full"
-                                    style={{
-                                        background: `${paceZone.color}22`,
-                                        color: paceZone.color,
-                                        letterSpacing: "-0.01em",
-                                    }}
-                                >
+                                <span className="run-chip" style={{color: `color-mix(in srgb, ${paceZone.color} 55%, var(--c-text-1))`}}>
                                     {paceZone.label}
                                 </span>
                             )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
                             {isPaused ? (
-                                <div
-                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                                    style={{
-                                        background: "rgba(255,159,10,0.15)",
-                                    }}
-                                >
-                                    <span
-                                        className="w-1.5 h-1.5 rounded-full"
-                                        style={{background: "#ff9f0a"}}
-                                    />
-                                    <span
-                                        className="text-xs font-semibold"
-                                        style={{color: "#ff9f0a"}}
-                                    >
-                                        일시정지
-                                    </span>
-                                </div>
+                                <span className="run-chip" data-tone="warn"><i aria-hidden="true" />기록 멈춤</span>
                             ) : isTracking ? (
-                                <div
-                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                                    style={{background: "rgba(98,124,80,0.15)"}}
-                                >
-                                    <span
-                                        className="w-1.5 h-1.5 rounded-full pulse-dot"
-                                        style={{background: "#627c50"}}
-                                    />
-                                    <span
-                                        className="text-xs font-semibold"
-                                        style={{color: "#627c50"}}
-                                    >
-                                        GPS
-                                    </span>
-                                </div>
+                                <span className="run-chip" data-tone="live"><i aria-hidden="true" className="pulse-dot" />GPS</span>
                             ) : null}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
                             <button
+                                type="button"
                                 onClick={() => setVoiceEnabled((prev) => !prev)}
-                                aria-label={
-                                    voiceEnabled
-                                        ? "음성 안내 끄기"
-                                        : "음성 안내 켜기"
-                                }
-                                className="w-11 h-11 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
-                                style={{
-                                    background: voiceEnabled
-                                        ? `${accent}22`
-                                        : "rgba(255,255,255,0.08)",
-                                    border: `1px solid ${voiceEnabled ? `${accent}44` : "rgba(255,255,255,0.18)"}`,
-                                    color: voiceEnabled ? accent : "#5e636a",
-                                }}
+                                aria-label={voiceEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
+                                aria-pressed={voiceEnabled}
+                                className="run-tool"
                             >
-                                <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                                     {voiceEnabled ? (
                                         <>
-                                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                                             <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                                             <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
                                         </>
                                     ) : (
                                         <>
-                                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                                            <line
-                                                x1="23"
-                                                y1="9"
-                                                x2="17"
-                                                y2="15"
-                                            />
-                                            <line
-                                                x1="17"
-                                                y1="9"
-                                                x2="23"
-                                                y2="15"
-                                            />
+                                            <line x1="23" y1="9" x2="17" y2="15" />
+                                            <line x1="17" y1="9" x2="23" y2="15" />
                                         </>
                                     )}
                                 </svg>
                             </button>
                             <button
-                                onClick={() =>
-                                    setTopPanelCollapsed((prev) => !prev)
-                                }
-                                aria-label={
-                                    topPanelCollapsed
-                                        ? "상단 패널 펼치기"
-                                        : "상단 패널 접기"
-                                }
-                                className="px-3 py-2 rounded-full active:scale-95 transition-transform"
-                                style={{
-                                    minHeight: 44,
-                                    background: "rgba(255,255,255,0.08)",
-                                    border: "1px solid rgba(255,255,255,0.18)",
-                                    color: "var(--c-text-1)",
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    letterSpacing: "-0.01em",
-                                }}
+                                type="button"
+                                onClick={() => setTopPanelCollapsed((prev) => !prev)}
+                                aria-label={topPanelCollapsed ? "상단 패널 펼치기" : "상단 패널 접기"}
+                                className="run-tool"
                             >
                                 {topPanelCollapsed ? "펼치기" : "접기"}
                             </button>
@@ -1595,47 +1514,23 @@ export default function RunningPage() {
                     {!topPanelCollapsed && (
                         <>
                             {!isPaused && (
-                                <p
-                                    className="mb-3"
-                                    style={{
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        color: paceZone.color,
-                                    }}
-                                >
+                                <p className="run-note" style={{color: `color-mix(in srgb, ${paceZone.color} 55%, var(--c-text-1))`, fontWeight: 650}}>
                                     {paceGuide}
                                 </p>
                             )}
                             {hasCompletionPriorityHint && (
-                                <p
-                                    className="mb-3"
-                                    style={{
-                                        fontSize: 11,
-                                        color: "var(--c-text-2)",
-                                        letterSpacing: "-0.01em",
-                                    }}
-                                >
-                                    완료 우선순위: 목적지 도착 → 거리 목표 →
-                                    시간 목표
+                                <p className="run-note">
+                                    먼저 닿는 조건에서 끝나요: 목적지 도착, 거리 목표, 시간 목표 순
                                 </p>
                             )}
                             {currentAltitude !== null && (
-                                <p
-                                    className="mb-3"
-                                    style={{fontSize: 12, color: "var(--c-text-2)"}}
-                                >
-                                    고도 {Math.round(currentAltitude)}m · 누적
-                                    상승 {Math.round(elevationGain)}m
+                                <p className="run-note">
+                                    고도 <strong className="num" style={{color: "var(--c-text-1)"}}>{Math.round(currentAltitude)}m</strong>, 누적 상승 <strong className="num" style={{color: "var(--c-text-1)"}}>{Math.round(elevationGain)}m</strong>
                                 </p>
                             )}
                             {adjustedDistanceKm > 0 && (
-                                <p
-                                    className="mb-3"
-                                    style={{fontSize: 12, color: "#ff9f0a"}}
-                                >
-                                    공백 보정 {adjustedDistanceKm.toFixed(2)}km
-                                    · 누락 시간{" "}
-                                    {formatDuration(untrackedSeconds)}
+                                <p className="run-note" data-tone="warn">
+                                    GPS가 끊긴 {formatDuration(untrackedSeconds)} 동안 {adjustedDistanceKm.toFixed(2)}km를 보정했어요
                                 </p>
                             )}
                             <div className="running-metrics">
@@ -1667,137 +1562,53 @@ export default function RunningPage() {
                         </>
                     )}
                     {topPanelCollapsed && (
-                        <div className="flex items-center justify-between py-1">
-                            <p
-                                className="num"
-                                style={{
-                                    fontSize: 16,
-                                    fontWeight: 800,
-                                    color: "var(--c-accent-text)",
-                                    letterSpacing: "-0.02em",
-                                }}
-                            >
-                                {effectiveDistance.toFixed(2)} km
+                        <div className="flex items-baseline justify-between py-1">
+                            <p className="num" style={{fontSize: 28, fontWeight: 800, color: "var(--c-text-1)"}}>
+                                {effectiveDistance.toFixed(2)}<span className="metric-unit">km</span>
                             </p>
-                            <p
-                                className="num"
-                                style={{
-                                    fontSize: 15,
-                                    fontWeight: 700,
-                                    color: "var(--c-text-1)",
-                                    letterSpacing: "-0.02em",
-                                }}
-                            >
+                            <p className="num" style={{fontSize: 22, fontWeight: 740, color: "var(--c-text-1)"}}>
                                 {formatDuration(elapsed)}
                             </p>
                         </div>
                     )}
                 </div>
 
-                {/* 목표 거리 진행 바 */}
+                {/* 목표 진행: 강줄기 선 */}
                 {!topPanelCollapsed && config.goalDistance && (
-                    <div className="px-5 pt-3">
-                        <div className="flex justify-between items-center mb-1.5">
-                            <span style={{fontSize: 11, color: "var(--c-text-2)"}}>
-                                목표까지
-                            </span>
-                            <span
-                                className="num"
-                                style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    color: "var(--c-accent-text)",
-                                }}
-                            >
-                                {Math.max(
-                                    0,
-                                    config.goalDistance - effectiveDistance,
-                                ).toFixed(2)}{" "}
-                                km 남음
-                            </span>
-                        </div>
-                        <div
-                            className="rounded-full overflow-hidden"
-                            style={{
-                                height: 5,
-                                background: "rgba(255,255,255,0.1)",
-                            }}
-                        >
-                            <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                    width: `${Math.min(100, (effectiveDistance / config.goalDistance) * 100)}%`,
-                                    background: accent,
-                                }}
-                            />
-                        </div>
-                    </div>
+                    <RiverProgress
+                        label="목표까지"
+                        value={`${Math.max(0, config.goalDistance - effectiveDistance).toFixed(2)} km 남음`}
+                        ratio={effectiveDistance / config.goalDistance}
+                    />
                 )}
-
-                {/* 경로 남은 거리 */}
                 {!topPanelCollapsed && routeProgress && (
-                    <div className="px-5 pt-3">
-                        <div className="route-progress">
-                            <span>경로 남은 거리</span>
-                            <span><strong className="num">{routeProgress.remainingKm.toFixed(2)} km</strong> / <span className="num">{routeProgress.totalKm.toFixed(2)} km</span></span>
-                        </div>
-                        <div className="rounded-full overflow-hidden" style={{height: 5, background: "var(--c-elevated)"}}>
-                            <div className="h-full rounded-full transition-all" style={{width: `${Math.min(100, Math.max(0, (1 - routeProgress.remainingKm / Math.max(routeProgress.totalKm, 0.001)) * 100))}%`, background: accent}} />
-                        </div>
-                    </div>
+                    <RiverProgress
+                        label="경로 남은 거리"
+                        value={`${routeProgress.remainingKm.toFixed(2)} / ${routeProgress.totalKm.toFixed(2)} km`}
+                        ratio={1 - routeProgress.remainingKm / Math.max(routeProgress.totalKm, 0.001)}
+                    />
                 )}
-
-                {/* 목표 시간 진행 바 */}
                 {!topPanelCollapsed && config.goalTime && (
-                    <div className="px-5 pt-3">
-                        <div className="flex justify-between items-center mb-1.5">
-                            <span style={{fontSize: 11, color: "var(--c-text-2)"}}>
-                                남은 시간
-                            </span>
-                            <span
-                                className="num"
-                                style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    color: "var(--c-accent-text)",
-                                }}
-                            >
-                                {formatDuration(
-                                    Math.max(0, config.goalTime * 60 - elapsed),
-                                )}
-                            </span>
-                        </div>
-                        <div
-                            className="rounded-full overflow-hidden"
-                            style={{
-                                height: 5,
-                                background: "rgba(255,255,255,0.1)",
-                            }}
-                        >
-                            <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                    width: `${Math.min(100, (elapsed / (config.goalTime * 60)) * 100)}%`,
-                                    background: accent,
-                                }}
-                            />
-                        </div>
-                    </div>
+                    <RiverProgress
+                        label="남은 시간"
+                        value={formatDuration(Math.max(0, config.goalTime * 60 - elapsed))}
+                        ratio={elapsed / (config.goalTime * 60)}
+                    />
                 )}
             </div>
             {arrived && (
                 <div
-                    className="absolute inset-0 z-20 flex items-end justify-center"
+                    className="absolute inset-0 z-40 flex items-end justify-center"
                     style={{
-                        background: "rgba(0,0,0,0.72)",
+                        background: "var(--c-overlay)",
                         backdropFilter: "blur(8px)",
                     }}
                 >
                     <div
                         className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
                         style={{
-                            background: "#121315",
-                            borderTop: "1px solid rgba(255,255,255,0.1)",
+                            background: "var(--c-sheet)",
+                            borderTop: "1px solid var(--c-border)",
                             borderRadius: "24px 24px 0 0",
                         }}
                     >
@@ -1807,7 +1618,7 @@ export default function RunningPage() {
                             style={{
                                 fontSize: 30,
                                 fontWeight: 800,
-                                color: "#fff",
+                                color: "var(--c-text-1)",
                                 letterSpacing: "-0.02em",
                             }}
                         >
@@ -1851,17 +1662,17 @@ export default function RunningPage() {
 
             {gapSuggestion && (
                 <div
-                    className="absolute inset-0 z-30 flex items-end justify-center"
+                    className="absolute inset-0 z-40 flex items-end justify-center"
                     style={{
-                        background: "rgba(0,0,0,0.62)",
+                        background: "var(--c-overlay)",
                         backdropFilter: "blur(6px)",
                     }}
                 >
                     <div
                         className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
                         style={{
-                            background: "#121315",
-                            borderTop: "1px solid rgba(255,255,255,0.1)",
+                            background: "var(--c-sheet)",
+                            borderTop: "1px solid var(--c-border)",
                             borderRadius: "24px 24px 0 0",
                         }}
                     >
@@ -1871,7 +1682,7 @@ export default function RunningPage() {
                             style={{
                                 fontSize: 24,
                                 fontWeight: 800,
-                                color: "#fff",
+                                color: "var(--c-text-1)",
                                 letterSpacing: "-0.02em",
                             }}
                         >
@@ -1887,8 +1698,8 @@ export default function RunningPage() {
                         <p
                             className="text-center mb-6"
                             style={{
-                                fontSize: 14,
-                                color: "#ff9f0a",
+                                fontSize: 15,
+                                color: "var(--c-warn)",
                                 fontWeight: 700,
                             }}
                         >
@@ -1900,8 +1711,8 @@ export default function RunningPage() {
                             onSecondary={handleSkipGapAdjustment}
                             primaryLabel="보정 적용"
                             onPrimary={handleApplyGapAdjustment}
-                            primaryColor="#ff9f0a"
-                            primaryShadow="0 4px 20px rgba(255,159,10,0.35)"
+                            primaryColor={accent}
+                            primaryShadow={`0 4px 20px ${accent}44`}
                         />
                     </div>
                 </div>
@@ -1911,15 +1722,15 @@ export default function RunningPage() {
                 <div
                     className="absolute inset-0 z-40 flex items-end justify-center"
                     style={{
-                        background: "rgba(0,0,0,0.72)",
+                        background: "var(--c-overlay)",
                         backdropFilter: "blur(8px)",
                     }}
                 >
                     <div
                         className="w-full mx-0 px-5 pt-7 pb-8 slide-up"
                         style={{
-                            background: "#121315",
-                            borderTop: "1px solid rgba(255,255,255,0.1)",
+                            background: "var(--c-sheet)",
+                            borderTop: "1px solid var(--c-border)",
                             borderRadius: "24px 24px 0 0",
                         }}
                     >
@@ -1929,7 +1740,7 @@ export default function RunningPage() {
                             style={{
                                 fontSize: 24,
                                 fontWeight: 800,
-                                color: "#fff",
+                                color: "var(--c-text-1)",
                                 letterSpacing: "-0.02em",
                             }}
                         >
@@ -1960,12 +1771,12 @@ export default function RunningPage() {
 
             {/* 하단 버튼 */}
             <div
+                ref={actionsRef}
                 className="running-actions absolute bottom-0 left-0 right-0 z-30 px-5"
                 style={{
                     paddingBottom: "calc(var(--sab) + 20px)",
                     paddingTop: "16px",
-                    background:
-                        "var(--c-glass)",
+                    background: "var(--c-bg)",
                 }}
             >
                 {/* 인터벌 HUD */}
@@ -1987,7 +1798,7 @@ export default function RunningPage() {
                             {config.intervalPreset.sets > 0 && (
                                 <span
                                     className="text-xs"
-                                    style={{color: "rgba(255,255,255,0.5)"}}
+                                    style={{color: "var(--c-text-2)"}}
                                 >
                                     {intervalSet}/{config.intervalPreset.sets}
                                     세트
@@ -2000,7 +1811,7 @@ export default function RunningPage() {
                                     className="font-bold num"
                                     style={{
                                         fontSize: 28,
-                                        color: "#fff",
+                                        color: "var(--c-text-1)",
                                         letterSpacing: "-0.03em",
                                     }}
                                 >
@@ -2025,9 +1836,9 @@ export default function RunningPage() {
                                     }}
                                     className="text-xs font-bold h-11 px-3 rounded-xl active:scale-95 transition-transform"
                                     style={{
-                                        background: "rgba(255,255,255,0.12)",
-                                        color: "#fff",
-                                        border: "1px solid rgba(255,255,255,0.2)",
+                                        background: "var(--c-surface)",
+                                        color: "var(--c-text-1)",
+                                        border: "1px solid var(--c-border)",
                                     }}
                                 >
                                     {intervalPhase === "run"
@@ -2041,7 +1852,7 @@ export default function RunningPage() {
                                     className="font-bold num"
                                     style={{
                                         fontSize: 28,
-                                        color: "#fff",
+                                        color: "var(--c-text-1)",
                                         letterSpacing: "-0.03em",
                                     }}
                                 >
@@ -2058,7 +1869,7 @@ export default function RunningPage() {
                                         className="mt-2 rounded-full overflow-hidden"
                                         style={{
                                             height: 4,
-                                            background: "rgba(255,255,255,0.1)",
+                                            background: "var(--c-river-track)",
                                         }}
                                     >
                                         <div
@@ -2079,9 +1890,8 @@ export default function RunningPage() {
                         onClick={isPaused ? handleResume : handlePause}
                         className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
                         style={{
-                            background: "var(--c-elevated)",
-                            color: "var(--c-text-1)",
-                            border: "1px solid var(--c-border)",
+                            background: "var(--c-toss-blue)",
+                            color: "var(--c-on-accent)",
                             letterSpacing: "-0.01em",
                         }}
                     >
@@ -2091,9 +1901,9 @@ export default function RunningPage() {
                         onClick={handleFinish}
                         className="py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
                         style={{
-                            background: "var(--c-danger)",
-                            color: "#fff",
-                            boxShadow: "0 4px 20px rgba(255,69,58,0.35)",
+                            background: "var(--c-surface)",
+                            color: "var(--c-danger-text)",
+                            border: "1.5px solid currentColor",
                             letterSpacing: "-0.01em",
                         }}
                     >
@@ -2132,8 +1942,7 @@ function MiniStat({
         <div
             className="rounded-2xl py-3 text-center"
             style={{
-                background: "rgba(26,28,31,0.9)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--c-elevated)",
             }}
         >
             <p style={{fontSize: 11, color: "var(--c-text-2)", marginBottom: 4}}>

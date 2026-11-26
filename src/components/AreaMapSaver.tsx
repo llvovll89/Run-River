@@ -65,39 +65,39 @@ export default function AreaMapSaver({disabled, onSaved}: {disabled: boolean; on
     const tooBig = tiles > AREA_MAX_TILES;
     const size = view ? mb(estimateAreaBytes(view)) : "";
 
-    if (!open) return <section className="card rounded-2xl p-5 space-y-3" aria-label="지역 지도 저장">
-        <h2 className="text-lg font-bold">원하는 지역 저장</h2>
-        <p className="text-sm leading-6" style={{color: "var(--c-text-2)"}}>지도를 움직여 화면에 담긴 지역을 기기에 저장해요. 등산로·도로·지명이 들어가요.</p>
-        {error && <p role="alert" className="text-sm" style={{color: "var(--c-danger)"}}>{error}</p>}
-        <TintedButton tone="accent" disabled={disabled} onClick={openPicker}>지도에서 지역 고르기</TintedButton>
+    if (!open) return <section className="page-section" aria-label="지역 지도 저장">
+        <h2>갈 곳의 지도 저장</h2>
+        <p>지도를 옮겨 화면에 담은 지역을 기기에 저장해요. 등산로, 도로, 지명이 함께 저장돼요.</p>
+        {error && <p role="alert" style={{color: "var(--c-danger-text)"}}>{error}</p>}
+        <div className="section-actions"><TintedButton tone="accent" wide disabled={disabled} onClick={openPicker}>지도에서 지역 고르기</TintedButton></div>
     </section>;
 
-    return <section className="card rounded-2xl p-4 space-y-3" aria-label="지역 지도 저장">
-        <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">저장할 지역 고르기</h2>
-            {!progress && <button type="button" className="text-sm underline" onClick={() => setOpen(false)}>닫기</button>}
+    return <section className="page-section" aria-label="지역 지도 저장">
+        <div className="flex items-center justify-between gap-3">
+            <h2>저장할 지역 고르기</h2>
+            {!progress && <button type="button" className="btn" data-tone="neutral" style={{minHeight: 44}} onClick={() => setOpen(false)}>닫기</button>}
         </div>
-        <p className="text-xs leading-5" style={{color: "var(--c-text-2)"}}>화면에 보이는 범위를 저장해요. 손가락으로 옮기고 확대·축소해 범위를 맞춰주세요.</p>
-        <div style={{height: 340, borderRadius: 16, overflow: "hidden", position: "relative"}}>
+        <p>화면에 보이는 범위를 저장해요. 두 손가락으로 확대·축소해 범위를 맞춰주세요.</p>
+        <div className="mt-3" style={{height: "min(340px, 46dvh)", borderRadius: 18, overflow: "hidden", position: "relative", border: "1px solid var(--c-border)"}}>
             {center === undefined
                 ? <p role="status" className="map-notice">내 위치를 찾는 중…</p>
                 : <MapView className="h-full" testId="area-picker-map" center={center ?? undefined} currentPosition={center} initialZoom={13} showControls controlsTop="12px" onViewChange={setView} />}
         </div>
-        {center === null && <p className="text-xs" style={{color: "var(--c-text-2)"}}>내 위치를 찾지 못해 서울을 보여줘요.</p>}
-        {!online && <p role="alert" className="text-sm" style={{color: "var(--c-danger)"}}>인터넷에 연결되어야 지역을 저장할 수 있어요.</p>}
-        {view && online && <div className="space-y-1">
-            <p className="text-sm font-semibold">{tooBig ? "범위가 너무 넓어요. 지도를 확대해 범위를 줄여주세요." : `이 범위 지도: 최대 약 ${size}`}</p>
-            {!tooBig && network === "wifi" && <p className="text-xs" style={{color: "var(--c-text-2)"}}>Wi‑Fi에 연결되어 있어요.</p>}
-            {!tooBig && network === "cellular" && <p role="alert" className="text-sm font-semibold" style={{color: "var(--c-danger)"}}>Wi‑Fi에 연결되어 있지 않아요. 모바일 데이터를 최대 약 {size} 사용해요.</p>}
-            {!tooBig && network === "unknown" && <p className="text-xs" style={{color: "var(--c-text-2)"}}>Wi‑Fi가 아니면 모바일 데이터를 최대 약 {size} 사용해요. 산지는 훨씬 적게 들어요.</p>}
+        {center === null && <p className="section-fine">내 위치를 찾지 못해 서울을 보여줘요.</p>}
+        {!online && <p role="alert" style={{color: "var(--c-danger-text)", fontWeight: 650}}>인터넷에 연결되어야 지역을 저장할 수 있어요.</p>}
+        {view && online && <div className="mt-3 space-y-1">
+            <p style={{fontSize: 16, fontWeight: 680}}>{tooBig ? "범위가 너무 넓어요. 지도를 확대해 범위를 줄여주세요." : <>이 범위를 저장하면 최대 <span className="num">{size}</span></>}</p>
+            {!tooBig && network === "wifi" && <p className="section-fine" style={{marginTop: 2}}>Wi‑Fi에 연결되어 있어요.</p>}
+            {!tooBig && network === "cellular" && <p role="alert" style={{fontSize: 15, fontWeight: 650, color: "var(--c-danger-text)"}}>Wi‑Fi가 아니에요. 모바일 데이터를 최대 {size} 써요.</p>}
+            {!tooBig && network === "unknown" && <p className="section-fine" style={{marginTop: 2}}>Wi‑Fi가 아니면 모바일 데이터를 최대 {size} 써요. 산은 보통 이보다 훨씬 적어요.</p>}
         </div>}
-        {error && <p role="alert" className="text-sm" style={{color: "var(--c-danger)"}}>{error}</p>}
+        {error && <p role="alert" style={{color: "var(--c-danger-text)"}}>{error}</p>}
         {progress
-            ? <div className="space-y-2" role="status" aria-label="지도 저장 진행">
-                <div style={{height: 6, borderRadius: 3, background: "var(--c-border)", overflow: "hidden"}}><div style={{width: `${progress.total ? progress.done / progress.total * 100 : 0}%`, height: "100%", background: "var(--c-accent-text)"}} /></div>
-                <p className="text-sm">지도를 받는 중… {progress.done}/{progress.total} · {(progress.bytes / 1024 / 1024).toFixed(1)}MB</p>
-                <TintedButton tone="neutral" onClick={() => abort.current?.abort()}>저장 취소</TintedButton>
+            ? <div className="mt-4 space-y-2" role="status" aria-label="지도 저장 진행">
+                <div style={{height: 6, borderRadius: 3, background: "var(--c-river-track)", overflow: "hidden"}}><div style={{width: `${progress.total ? progress.done / progress.total * 100 : 0}%`, height: "100%", background: "var(--c-river)"}} /></div>
+                <p style={{fontSize: 15}}>지도를 받는 중 <span className="num">{progress.done}/{progress.total}</span>, <span className="num">{(progress.bytes / 1024 / 1024).toFixed(1)}MB</span></p>
+                <TintedButton tone="neutral" wide onClick={() => abort.current?.abort()}>저장 취소</TintedButton>
             </div>
-            : <TintedButton tone="accent" disabled={disabled || !view || tooBig || !online} onClick={() => void save()}>{network === "cellular" ? "모바일 데이터로 이 지역 저장" : "이 지역 저장"}</TintedButton>}
+            : <div className="section-actions"><TintedButton tone="accent" wide disabled={disabled || !view || tooBig || !online} onClick={() => void save()}>{network === "cellular" ? "모바일 데이터로 이 지역 저장" : "이 지역 저장"}</TintedButton></div>}
     </section>;
 }

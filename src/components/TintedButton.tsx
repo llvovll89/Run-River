@@ -4,53 +4,29 @@ import type { ReactNode } from "react";
 
 type Tone = "accent" | "danger" | "danger-solid" | "neutral";
 
-const TONE_STYLES: Record<Tone, { background: string; color: string; border: string }> = {
-    accent: {
-        background: "rgba(47,71,102,0.12)",
-        color: "var(--c-accent-text)",
-        border: "1px solid rgba(47,71,102,0.3)",
-    },
-    danger: {
-        background: "rgba(255,69,58,0.12)",
-        color: "var(--c-danger-text)",
-        border: "1px solid rgba(255,69,58,0.3)",
-    },
-    "danger-solid": {
-        background: "var(--c-danger)",
-        color: "#fff",
-        border: "1px solid var(--c-danger)",
-    },
-    neutral: {
-        background: "var(--c-elevated)",
-        color: "var(--c-text-2)",
-        border: "1px solid var(--c-border)",
-    },
-};
-
+// 색과 크기는 globals.css의 .btn[data-tone]에서 정한다.
 export default function TintedButton({
     tone,
     onClick,
     disabled,
     rounded = "xl",
+    wide = false,
     children,
 }: {
     tone: Tone;
     onClick: () => void;
     disabled?: boolean;
     rounded?: "xl" | "full";
+    wide?: boolean;
     children: ReactNode;
 }) {
-    const style = disabled
-        ? { background: "var(--c-elevated)", color: "var(--c-text-3)", border: "1px solid var(--c-border)" }
-        : TONE_STYLES[tone];
-    const roundedClass = rounded === "full" ? "rounded-full" : "rounded-xl";
-
     return (
         <button
+            type="button"
             onClick={onClick}
             disabled={disabled}
-            className={`h-11 px-3 ${roundedClass} text-xs font-semibold active:scale-95 transition-transform`}
-            style={style}
+            data-tone={tone}
+            className={`btn${wide ? " btn-wide" : ""}${rounded === "full" ? " rounded-full" : ""}`}
         >
             {children}
         </button>

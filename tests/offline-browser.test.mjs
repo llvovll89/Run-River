@@ -39,7 +39,8 @@ before(async () => {
             return json(request.headers.accept?.includes("vnd.pgrst.object") ? [...api.rows.values()][0] : [...api.rows.values()]);
         }
         const upstream = http.request({hostname: "127.0.0.1", port: 3138, path: request.url, method: request.method, headers: request.headers}, (result) => {response.writeHead(result.statusCode, result.headers); result.pipe(response);});
-        upstream.on("error", () => {response.writeHead(502); response.end();});
+        // 서버 기동 중 연결이 끊기면 이미 보낸 헤더를 다시 쓰지 않는다(간헐 실패 원인).
+        upstream.on("error", () => {if (!response.headersSent) response.writeHead(502); response.end();});
         request.pipe(upstream);
     });
     await new Promise((resolve) => proxy.listen(3137, "127.0.0.1", resolve));
@@ -96,10 +97,10 @@ test("Chromium: saved map and bundled font render with the network completely of
         await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/pwa-map-offline.png"});
         await page.goto(`${origin}/hiking`);
         await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "offline.kmz", mimeType: "application/vnd.google-earth.kmz", buffer: Buffer.from(kmzFixture)});
-        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.getByText("경로 2개, 장소 1개, 구역 1개", {exact: true}).waitFor();
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         await page.reload();
-        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.getByText("경로 2개, 장소 1개, 구역 1개", {exact: true}).waitFor();
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         await page.getByTestId("offline-trail-map").screenshot({path: "output/playwright/kmz-offline-background.png"});
     } finally { await browser.close(); }
@@ -126,7 +127,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             await page.getByRole("button", {name: "러닝", exact: true}).click();
             assert.equal(new URL(page.url()).searchParams.has("sw"), false);
             await page.goto(`${origin}/local-history`);
-            await page.getByRole("heading", {name: "첫 번째 기록을 남겨볼까요?"}).waitFor();
+            await page.getByRole("heading", {name: "아직 기록이 없어요"}).waitFor();
             await page.screenshot({path: `output/playwright/empty-records-${name}.png`});
             await page.goto(origin);
             await context.setOffline(true);
@@ -175,7 +176,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             await recovered.evaluate(() => window.restoreTestStorage());
             await recovered.getByRole("button", {name: "종료", exact: true}).click();
             await recovered.waitForURL("**/result?id=*");
-            await recovered.getByText("기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요").waitFor();
+            await recovered.getByText("이 기기에 저장했어요. 로그인하지 않은 기록은 이 기기에만 남아요.").waitFor();
             const routePoints = (await recovered.getByTestId("offline-route").locator("polyline").getAttribute("points")).split(" ");
             assert.notEqual(routePoints[0], routePoints.at(-1));
             await recovered.screenshot({path: `output/playwright/result-${name}.png`});
@@ -184,9 +185,9 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             assert.ok(result.result.distance_km > 0);
             assert.equal(await recovered.evaluate(() => localStorage.getItem("rr_active_run")), null);
             await recovered.reload();
-            await recovered.getByText("기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요").waitFor();
+            await recovered.getByText("이 기기에 저장했어요. 로그인하지 않은 기록은 이 기기에만 남아요.").waitFor();
             await recovered.goto(`${origin}/local-history`);
-            await recovered.getByRole("heading", {name: "이 기기의 운동 기록"}).waitFor();
+            await recovered.getByRole("heading", {name: "기기 기록"}).waitFor();
             await recovered.locator('a[href^="/result?id="]').first().waitFor();
             await recovered.screenshot({path: `output/playwright/records-${name}.png`});
             await recovered.getByRole("link", {name: "통계", exact: true}).click({force: true});
@@ -236,7 +237,7 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
                 sessionStorage.setItem("runResult", JSON.stringify({id, ownerId: ownerA, startPoint: point, endPoint: point, distance_km: 0.1, duration_seconds: 60, pace: 600, activity_type: "running", pathPoints: [point]}));
             }, {id, ownerA});
             await page.goto(`${origin}/result`);
-            await page.getByText("기기에 저장됨 · 같은 계정 연결 시 자동 업로드").waitFor();
+            await page.getByText("이 기기에 저장했어요. 같은 계정으로 연결되면 자동으로 올라가요.").waitFor();
             await page.evaluate(() => window.dispatchEvent(new Event("online")));
             await new Promise((resolve) => setTimeout(resolve, 600));
             assert.equal(api.inserts, 0);
@@ -261,10 +262,10 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
             assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_local_results"))[0].uploaded), true);
             await page.getByText(/서버 저장됨/).waitFor();
             await page.goto(`${origin}/history`);
-            await page.getByRole("heading", {name: "활동 기록", exact: true}).waitFor();
+            await page.getByRole("heading", {name: "통계", exact: true}).waitFor();
             await page.screenshot({path: `output/playwright/history-${name}.png`});
             await page.goto(`${origin}/settings`);
-            await page.getByRole("heading", {name: "나에게 맞는 러닝", exact: true}).waitFor();
+            await page.getByRole("heading", {name: "설정", exact: true}).waitFor();
             await page.screenshot({path: `output/playwright/settings-${name}.png`});
             const desktop = await browser.newPage({viewport: {width: 1280, height: 900}, reducedMotion: "reduce"});
             await desktop.route("**/*", (route) => route.request().url().startsWith(origin) ? route.continue() : route.abort());

@@ -98,7 +98,7 @@ export default function HistoryView({records, fetchError, weightKg}: {records: R
 
     return (
         <main className="app-screen history-screen min-h-dvh" style={{background: "var(--c-bg)"}}>
-            <ScreenHeader title="활동 기록" description={`지금까지 ${records.length}번, 쌓여가는 나의 움직임.`} action={<ExportButton records={records} />} />
+            <ScreenHeader title="통계" description={`계정에 올린 운동 ${records.length}개`} action={<ExportButton records={records} />} />
             {/* 요약 카드 */}
             {records.length > 0 && (
                 <>
@@ -106,13 +106,7 @@ export default function HistoryView({records, fetchError, weightKg}: {records: R
                         <div className="card rounded-2xl p-4">
                             <p
                                 className="mb-3"
-                                style={{
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.08em",
-                                    color: "var(--c-text-3)",
-                                }}
+                                style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                             >
                                 전체 요약
                             </p>
@@ -219,13 +213,7 @@ export default function HistoryView({records, fetchError, weightKg}: {records: R
                             <div className="card rounded-2xl p-4">
                                 <p
                                     className="mb-3"
-                                    style={{
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        color: "var(--c-text-3)",
-                                    }}
+                                    style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                                 >
                                     유형별 분석
                                 </p>
@@ -256,13 +244,7 @@ export default function HistoryView({records, fetchError, weightKg}: {records: R
                             <div className="card rounded-2xl p-4">
                                 <p
                                     className="mb-3"
-                                    style={{
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        color: "var(--c-text-3)",
-                                    }}
+                                    style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                                 >
                                     획득한 배지
                                 </p>

@@ -64,7 +64,7 @@ final class HikingUITests: XCTestCase {
         let maps = app.webViews.links["오프라인 지도 준비"]
         _ = maps.waitForExistence(timeout: launchTimeout)
         tapVisible(maps, in: app)
-        XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.webViews.staticTexts["오프라인 지도"].waitForExistence(timeout: 30))
         tapVisible(app.webViews.buttons["북한산 지도 저장"], in: app)
         XCTAssertTrue(app.webViews.staticTexts["북한산 지도를 기기에 저장했어요."].waitForExistence(timeout: 60), "Download must pass the native checksum and metadata validation")
         let caption = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "갈색 점선은")).firstMatch
@@ -86,11 +86,11 @@ final class HikingUITests: XCTestCase {
         let hiking = app.webViews.links.matching(NSPredicate(format: "label CONTAINS %@", "하이킹")).firstMatch
         XCTAssertTrue(hiking.waitForExistence(timeout: launchTimeout))
         hiking.tap()
-        XCTAssertTrue(app.webViews.staticTexts["산길에서도 나의 페이스로"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "천천히 걸어도 자동으로 멈추지 않아요")).firstMatch.waitForExistence(timeout: 30))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "iPhone-hiking"; shot.lifetime = .keepAlways; add(shot)
-        let maps = app.webViews.links["오프라인 지도 저장·관리"]
+        let maps = app.webViews.links.matching(NSPredicate(format: "label IN %@", ["오프라인 지도 저장하기", "다른 지도 고르기"])).firstMatch
         tapVisible(maps, in: app)
-        XCTAssertTrue(app.webViews.staticTexts["산에 가기 전, 지도 준비"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.webViews.staticTexts["오프라인 지도"].waitForExistence(timeout: 30))
         let picker = app.webViews.buttons["지도 파일 가져오기"]
         tapVisible(picker, in: app)
         // The system Files picker can take a while to appear on a fresh CI simulator, and a tap

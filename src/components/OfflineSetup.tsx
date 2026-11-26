@@ -37,14 +37,26 @@ export default function OfflineSetup({children}: {children: React.ReactNode}) {
 }
 
 export function OfflineStatus() {
-    const status = useContext(OfflineStatusContext);
     const [active, setActive] = useState(false);
     useEffect(() => {try {setActive(Boolean(readActiveRun()));} catch {}}, []);
-    const ready = status.includes("준비 완료");
     return <div className="home-offline-status">
-        <p>{ready ? "오프라인 기록 준비 완료" : status || "화면을 켜두고 운동해주세요"}</p>
         {active && <a href="/running">진행 중인 운동 복구</a>}
         <a href="/maps">오프라인 지도 준비</a>
         <a href="/hiking">하이킹 시작</a>
     </div>;
+}
+
+/** 오프라인 준비 상태. 출발 전에 바로 확인할 수 있게 홈 시트 푸터에 한 줄로 둔다. */
+export function OfflineStatusText() {
+    const status = useContext(OfflineStatusContext);
+    const ready = status.includes("준비 완료");
+    return <p className="offline-status-text" data-ready={ready || undefined}>
+        {ready ? "오프라인 기록 준비 완료" : status || "화면을 켜두고 운동해주세요"}
+    </p>;
+}
+
+/** 빌드 버전. 업데이트 여부 확인용이라 홈 시트를 펼쳤을 때만 보인다. */
+export function AppVersion() {
+    if (!process.env.NEXT_PUBLIC_APP_VERSION) return null;
+    return <p className="app-version">버전 {process.env.NEXT_PUBLIC_APP_VERSION}</p>;
 }

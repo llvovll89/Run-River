@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 GPS 기반 러닝/걷기 트래커 PWA. Next.js 15 + React 19 + TypeScript + Supabase + Kakao Maps.
-모바일 전용 (max-width: 430px). 인증 없음 (RLS 전체 허용).
+모바일 전용 (max-width: 430px). Supabase 로그인 선택 — 게스트는 기기(localStorage)에만 기록, `/history`·`/settings`는 로그인 필요(`src/middleware.ts`).
 
 ## 커맨드
 ```
@@ -27,7 +27,12 @@ NEXT_PUBLIC_TMAP_KEY   # optional — T-Map 보행자 경로
 | `/` | `src/app/page.tsx` | 지도 설정, 목표 설정, 경로 탐색 |
 | `/running` | `src/app/running/page.tsx` | 실시간 GPS 트래킹 |
 | `/result` | `src/app/result/page.tsx` | 세션 결과 확인 |
-| `/history` | `src/app/history/page.tsx` | 기록 목록 + 통계 (서버 컴포넌트) |
+| `/history` | `src/app/history/page.tsx` | 계정 기록 목록 + 통계 (서버 컴포넌트, 로그인·온라인 필요) |
+| `/local-history` | `src/app/local-history/page.tsx` | 이 기기의 운동 기록 (오프라인 가능) |
+| `/maps` | `src/app/maps/page.tsx` | 오프라인 지도 지역 저장·관리 |
+| `/hiking` | `src/app/hiking/page.tsx` | 하이킹 기록, GPX·KMZ 코스 |
+| `/settings` | `src/app/settings/page.tsx` | 프로필·설정 (로그인·온라인 필요) |
+| `/auth` | `src/app/auth/page.tsx` | 로그인 |
 
 ---
 
@@ -68,7 +73,7 @@ getRunningHistory()              // SELECT * ORDER BY created_at DESC
 | `useNotification` | `{ permission, requestPermission }` | useNotification.ts |
 | `useTheme` | `{ theme: "light"\|"dark", toggle }` | useTheme.ts |
 | `usePWAInstall` | `{ mode, canInstall, promptInstall }` | usePWAInstall.ts |
-| `usePWAUpdate` | `{ updateAvailable, applyUpdate, dismissUpdate }` | usePWAUpdate.ts |
+| `usePWAUpdate` | `{ justUpdated }` — 새 버전 자동 적용, 적용 직후 3초 토스트용 | usePWAUpdate.ts |
 
 ---
 
@@ -136,11 +141,16 @@ getPaceZone(pace, activityType): { label, color }
 CSS 변수: `--c-bg`, `--c-surface`, `--c-elevated`, `--c-border`, `--c-text-1~3`
 `--c-toss-blue`(#007aff, 러닝), `--c-walk`(#34c759, 걷기), `--c-danger`(#ff453a)
 `--sat`(상단 safe area), `--sab`(하단 safe area)
-폰트: Pretendard (CDN)
+폰트: Pretendard Variable — `public/fonts/PretendardVariable.woff2`를 `globals.css`의 `@font-face`로 로드. **외부 CDN의 렌더링 차단 CSS 금지** (약한 신호에서 PWA 흰 화면 원인)
 
 ---
 
-## PWA (next.config.ts)
-- `skipWaiting: false` — 유저 승인 후 업데이트
-- dev 환경에서 SW 비활성화
-- `cacheOnFrontEndNav: true`, `aggressiveFrontEndNavCaching: true`
+## PWA · 오프라인
+- next-pwa 미사용. 서비스 워커 원본 `worker/offline-worker.js` → `npm run build` 후 `scripts/generate-service-worker.mjs`가 `VERSION`(BUILD_ID)·`ASSETS`를 주입해 `public/sw.js` 생성
+- 사전 저장: 화면 `/`, `/running`, `/result`, `/local-history`, `/maps`, `/hiking` + `_next/static` 자산 + 폰트·지도 런타임. 저장 안 한 화면은 오프라인 시 SW 안내 HTML(503)
+- 인증·서버 기록·API·RSC 응답은 캐시하지 않음
+- 등록: `OfflineSetup.tsx` (production만, 홈 하단에 준비 상태·빌드 버전 표시)
+- **업데이트는 자동** (`usePWAUpdate`): 업데이트 배너 없음. 실행 직후 5초 내 발견 시 즉시 새로고침 + "새 버전으로 업데이트했어요" 토스트, 사용 중 발견 시 앱을 백그라운드로 보낼 때 적용. `/running` 화면이거나 `rr_active_run`이 남아 있으면 적용 보류
+- 빌드 버전: `next.config.ts`가 `NEXT_PUBLIC_APP_VERSION`(KST 빌드 시각 · 커밋 7자리) 주입
+- 네이티브(Capacitor): `npm run build:mobile` → 정적 export `mobile-dist`, SW 미사용
+- 검증: `npm run test:unit`, `npm run test:offline` (Playwright Chromium·WebKit)

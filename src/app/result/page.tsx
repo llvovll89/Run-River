@@ -44,7 +44,6 @@ import type {
 import {useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
 import {trackGrowthEvent} from "@/lib/growthEvents";
-import Brand from "@/components/Brand";
 import AppNavigation from "@/components/AppNavigation";
 import TintedButton from "@/components/TintedButton";
 import {activityLabel, canSyncActivity} from "@/lib/activities";
@@ -862,63 +861,48 @@ export default function ResultPage() {
             <div
                 className="px-5"
                 style={{
-                    paddingTop: "calc(var(--sat) + 10px)",
-                    paddingBottom: "28px",
-                    background: "var(--c-surface)",
+                    paddingTop: "calc(var(--sat) + 14px)",
+                    paddingBottom: "24px",
+                    background: "var(--c-bg)",
                     borderBottom: "1px solid var(--c-border)",
                 }}
             >
-                <div className="result-topbar"><a href="/" aria-label="홈으로 가기"><Brand /></a><span className="result-complete">{label} 완료</span></div>
-                <h1 className="result-distance num"
-                    style={{
-                        color: "var(--c-text-1)",
-                    }}
-                >
+                <div className="result-topbar"><span className="result-complete">{label} 완료</span><span style={{fontSize: 14, color: "var(--c-text-2)"}}>{dateStr}</span></div>
+                <h1 className="result-distance num" style={{color: "var(--c-text-1)"}}>
                     {result.distance_km.toFixed(2)}
-                    <span
-                        style={{
-                            fontSize: 18,
-                            fontWeight: 600,
-                            color: "var(--c-text-2)",
-                            marginLeft: 6,
-                        }}
-                    >
-                        km
-                    </span>
+                    <span style={{fontSize: 22, fontWeight: 650, color: "var(--c-text-2)", marginLeft: 6, letterSpacing: 0}}>km</span>
                 </h1>
-                <p
-                    className="mt-1"
-                    style={{fontSize: 14, color: "var(--c-text-3)"}}
-                >
-                    {dateStr}
-                </p>
+                <dl className="result-stats">
+                    <div><dt>시간</dt><dd className="num">{formatDuration(result.duration_seconds)}</dd></div>
+                    <div><dt>평균 페이스</dt><dd className="num">{formatPace(result.pace)}<small>/km</small></dd></div>
+                </dl>
                 <div className="result-save-status">{saving ? (
                             <span
-                                className="text-xs"
+                                className="text-sm"
                                 style={{color: "var(--c-text-3)"}}
                             >
                                 저장 중…
                             </span>
                         ) : savedId ? (
                             <span
-                                className="text-xs font-semibold"
+                                className="text-sm font-semibold"
                                 style={{color: "var(--c-walk-text)"}}
                             >
-                                ✓ 자동 저장됨
+                                계정에 저장했어요
                             </span>
                         ) : offlineSaved ? (
                             <div className="flex items-center gap-2">
                                 <span
-                                    className="text-xs font-semibold"
+                                    className="text-sm font-semibold"
                                     style={{color: "var(--c-text-2)"}}
                                 >
-                                    {!canSyncActivity(result.activity_type) ? "하이킹 기록은 이 기기에 저장돼요 · 서버 동기화 준비 중" : result.ownerId ? "기기에 저장됨 · 같은 계정 연결 시 자동 업로드" : "기기에 저장됨 · 게스트 기록은 이 기기에 보관돼요"}
+                                    {!canSyncActivity(result.activity_type) ? "하이킹 기록은 이 기기에 저장했어요. 계정 업로드는 아직 지원하지 않아요." : result.ownerId ? "이 기기에 저장했어요. 같은 계정으로 연결되면 자동으로 올라가요." : "이 기기에 저장했어요. 로그인하지 않은 기록은 이 기기에만 남아요."}
                                 </span>
                             </div>
                         ) : saveError ? (
                             <div className="flex items-center gap-2">
                                 <span
-                                    className="text-xs font-semibold"
+                                    className="text-sm font-semibold"
                                     style={{color: "var(--c-danger-text)"}}
                                 >
                                     저장 실패
@@ -934,10 +918,10 @@ export default function ResultPage() {
                         ) : isAuthenticated === false ? (
                             <div className="flex items-center gap-2">
                                 <span
-                                    className="text-xs font-semibold"
+                                    className="text-sm font-semibold"
                                     style={{color: "var(--c-text-2)"}}
                                 >
-                                    게스트 모드 · 기록 미저장
+                                    로그인하지 않아 계정에는 저장되지 않았어요
                                 </span>
                                 <TintedButton
                                     tone="neutral"
@@ -952,137 +936,29 @@ export default function ResultPage() {
                         ) : null}</div>
                 <ExportGpxButton name={label} points={result.trackPoints?.length ? result.trackPoints : result.pathPoints ?? []} />
                 {adjustedDistanceKm > 0 && (
-                    <div className="mt-2">
-                        <span
-                            className="text-xs font-bold px-2.5 py-1 rounded-full inline-block"
-                            style={{
-                                background: isAutoGapMode
-                                    ? "rgba(47,71,102,0.12)"
-                                    : "rgba(255,159,10,0.15)",
-                                color: isAutoGapMode
-                                    ? "var(--c-toss-blue)"
-                                    : "#ff9f0a",
-                                letterSpacing: "-0.01em",
-                            }}
-                        >
-                            공백 보정{" "}
-                            {isAutoGapMode ? "자동 모드" : "수동 모드"}
-                        </span>
-                    </div>
+                    <p className="mt-2" style={{fontSize: 14, fontWeight: 650, color: isAutoGapMode ? "var(--c-accent-text)" : "var(--c-warn)"}}>
+                        GPS 공백 {adjustedDistanceKm.toFixed(2)}km를 {isAutoGapMode ? "자동으로" : "직접"} 보정했어요
+                    </p>
                 )}
                 {canSyncActivity(result.activity_type) && (pendingCount > 0 || (offlineSaved && Boolean(result.ownerId))) && (
                     <>
-                        <p
-                            className="mt-1"
-                            style={{fontSize: 12, color: "var(--c-text-3)"}}
-                        >
-                            동기화 대기 {pendingCount}건
-                            {blockedCount > 0 ? ` · 재시도 대기 ${blockedCount}건` : ""}
-                            {exhaustedCount > 0 ? ` · 수동 확인 ${exhaustedCount}건` : ""}
-                            {` · 마지막 성공 ${formatSyncAgo(lastSyncedAt)}`}
+                        <p className="mt-2" style={{fontSize: 14, color: "var(--c-text-2)"}}>
+                            올릴 기록 {pendingCount}건{exhaustedCount > 0 ? `, 다시 시도가 필요한 기록 ${exhaustedCount}건` : ""}. 마지막 업로드 {formatSyncAgo(lastSyncedAt)}
                         </p>
-                        <div className="mt-2 flex items-center gap-2">
+                        <div className="mt-2 flex items-center gap-3">
                             <button
-                                onClick={() =>
-                                    void syncNow(exhaustedCount > 0)
-                                }
-                                className="text-xs font-semibold h-11 px-3 rounded-full active:scale-95 transition-transform"
-                                style={{
-                                    background:
-                                        exhaustedCount > 0
-                                            ? "rgba(255,159,10,0.18)"
-                                            : "var(--c-elevated)",
-                                    color:
-                                        exhaustedCount > 0
-                                            ? "#ff9f0a"
-                                            : "var(--c-text-1)",
-                                    border:
-                                        exhaustedCount > 0
-                                            ? "1px solid rgba(255,159,10,0.35)"
-                                            : "1px solid var(--c-border)",
-                                }}
+                                type="button"
+                                onClick={() => void syncNow(true)}
+                                className="btn"
+                                data-tone="neutral"
                                 disabled={syncing || !isOnline}
                             >
-                                {syncing
-                                    ? "동기화 중"
-                                    : exhaustedCount > 0
-                                      ? "강제 동기화"
-                                      : "지금 동기화"}
+                                {syncing ? "올리는 중" : exhaustedCount > 0 ? "다시 시도" : "지금 올리기"}
                             </button>
-                            {!isOnline && (
-                                <span
-                                    style={{fontSize: 11, color: "#ff9f0a"}}
-                                >
-                                    오프라인
-                                </span>
-                            )}
+                            {!isOnline && <span style={{fontSize: 14, color: "var(--c-warn)"}}>인터넷에 연결되면 올릴 수 있어요</span>}
                         </div>
                     </>
                 )}
-            </div>
-
-            {/* 핵심 스탯 */}
-            <div className="px-4 pt-3 slide-up">
-                <div className="card rounded-2xl">
-                    <div className="grid grid-cols-2">
-                        {[
-                            {
-                                label: "소요 시간",
-                                value: formatDuration(result.duration_seconds),
-                                unit: "",
-                            },
-                            {
-                                label: "평균 페이스",
-                                value: formatPace(result.pace),
-                                unit: "/km",
-                            },
-                        ].map(({label: l, value, unit}, i) => (
-                            <div
-                                key={l}
-                                className="py-4 text-center"
-                                style={{
-                                    borderRight:
-                                        i === 0
-                                            ? "1px solid var(--c-border)"
-                                            : "none",
-                                }}
-                            >
-                                <p
-                                    style={{
-                                        fontSize: 11,
-                                        color: "var(--c-text-3)",
-                                        marginBottom: 4,
-                                    }}
-                                >
-                                    {l}
-                                </p>
-                                <div className="flex items-baseline justify-center gap-0.5">
-                                    <span
-                                        className="num"
-                                        style={{
-                                            fontSize: 18,
-                                            fontWeight: 800,
-                                            color: accent,
-                                            letterSpacing: "-0.03em",
-                                        }}
-                                    >
-                                        {value}
-                                    </span>
-                                    {unit && (
-                                        <span
-                                            style={{
-                                                fontSize: 11,
-                                                color: "var(--c-text-3)",
-                                            }}
-                                        >
-                                            {unit}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </div>
 
             {/* 경로 지도 */}
@@ -1115,13 +991,7 @@ export default function ResultPage() {
                         <div className="card rounded-2xl p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <p
-                                    style={{
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        color: "var(--c-text-3)",
-                                    }}
+                                    style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                                 >
                                     고도 프로필
                                 </p>
@@ -1247,13 +1117,7 @@ export default function ResultPage() {
                     <div className="card rounded-2xl p-4">
                         <p
                             className="mb-3"
-                            style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                color: "var(--c-text-3)",
-                            }}
+                            style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                         >
                             페이스 존 누적 시간
                         </p>
@@ -1313,13 +1177,7 @@ export default function ResultPage() {
                         <div className="card rounded-2xl p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <p
-                                    style={{
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        textTransform: "uppercase",
-                                        letterSpacing: "0.08em",
-                                        color: "var(--c-text-3)",
-                                    }}
+                                    style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                                 >
                                     스플릿 분석
                                 </p>
@@ -1526,13 +1384,7 @@ export default function ResultPage() {
                 <div className="card rounded-2xl">
                     <p
                         className="px-4 pt-4 pb-2"
-                        style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                            color: "var(--c-text-3)",
-                        }}
+                        style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                     >
                         활동 요약
                     </p>
@@ -1629,13 +1481,7 @@ export default function ResultPage() {
                     <div className="card rounded-2xl p-4">
                         <p
                             className="mb-3"
-                            style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                color: "var(--c-text-3)",
-                            }}
+                            style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                         >
                             인터벌 트레이닝
                         </p>
@@ -1721,13 +1567,7 @@ export default function ResultPage() {
                     <div className="card rounded-2xl p-4">
                         <p
                             className="mb-3"
-                            style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                color: "var(--c-text-3)",
-                            }}
+                            style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                         >
                             개인 최고 기록
                         </p>
@@ -1772,13 +1612,7 @@ export default function ResultPage() {
                     <div className="card rounded-2xl p-4">
                         <p
                             className="mb-3"
-                            style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                color: "var(--c-text-3)",
-                            }}
+                            style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                         >
                             이번에 획득한 배지
                         </p>
@@ -1826,13 +1660,7 @@ export default function ResultPage() {
                 <div className="card rounded-2xl p-4">
                     <div className="flex items-center justify-between mb-2">
                         <p
-                            style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.08em",
-                                color: "var(--c-text-3)",
-                            }}
+                            style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                         >
                             러닝 메모
                         </p>
@@ -1898,13 +1726,7 @@ export default function ResultPage() {
                 <div className="card rounded-2xl p-4">
                     <p
                         className="mb-2"
-                        style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.08em",
-                            color: "var(--c-text-3)",
-                        }}
+                        style={{fontSize: 17, fontWeight: 700, color: "var(--c-text-1)", letterSpacing: "-0.02em"}}
                     >
                         다음 목표
                     </p>

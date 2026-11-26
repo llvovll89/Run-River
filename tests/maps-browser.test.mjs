@@ -79,19 +79,19 @@ test("downloaded trail map renders after network loss and survives reopening", {
         assert.equal(await page.getByTestId("offline-trail-map").count(), 1, "Invalid import must preserve the selected map");
         await page.getByRole("button", {name: "삭제", exact: true}).click();
         await page.getByRole("button", {name: "삭제 확인", exact: true}).click();
-        await page.getByText("아직 저장한 지도가 없어요.", {exact: true}).waitFor();
+        await page.getByText("아직 저장한 지도가 없어요. 위에서 지역을 고르거나 북한산 지도로 먼저 확인해보세요.", {exact: true}).waitFor();
         assert.equal(await page.getByTestId("offline-trail-map").count(), 0);
         // Check the offline-map flow before opening the no-map hiking fallback.
         assert.equal(externalRequests.filter(url => !url.includes("cdn.jsdelivr.net")).length, 0);
         await page.goto(origin + "/hiking/", {waitUntil: "networkidle"});
         await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "map.kmz", mimeType: "application/vnd.google-earth.kmz", buffer: Buffer.from(kmzFixture)});
-        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.getByText("경로 2개, 장소 1개, 구역 1개", {exact: true}).waitFor();
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         assert.equal(await page.getByLabel("따라갈 경로").inputValue(), "");
         assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_hiking_course_v1")).points.length), 0);
         await page.getByLabel("따라갈 경로").selectOption("1");
         await page.reload({waitUntil: "networkidle"});
-        await page.getByText("경로 2개 · 장소 1개 · 구역 1개", {exact: true}).waitFor();
+        await page.getByText("경로 2개, 장소 1개, 구역 1개", {exact: true}).waitFor();
         assert.equal(await page.getByLabel("따라갈 경로").inputValue(), "1");
         assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rr_hiking_course_v1")).points[0].lat), 37.675);
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
@@ -104,7 +104,7 @@ test("downloaded trail map renders after network loss and survives reopening", {
         await page.getByText("KML 좌표 범위를 확인해주세요.", {exact: true}).waitFor();
         await page.getByText("북한산 KMZ 표시", {exact: true}).waitFor();
         await page.getByLabel("코스 파일", {exact: true}).setInputFiles({name: "multi.kml", mimeType: "application/vnd.google-earth.kml+xml", buffer: Buffer.from('<k:kml xmlns:k="http://www.opengis.net/kml/2.2"><k:Folder><k:Placemark><k:name>멀티 표시</k:name><k:MultiGeometry><k:Point><k:coordinates>126.98,37.66</k:coordinates></k:Point><k:LineString><k:coordinates>126.98,37.66 126.99,37.67</k:coordinates></k:LineString></k:MultiGeometry></k:Placemark></k:Folder></k:kml>')});
-        await page.getByText("경로 1개 · 장소 1개 · 구역 0개", {exact: true}).waitFor();
+        await page.getByText("경로 1개, 장소 1개, 구역 0개", {exact: true}).waitFor();
         assert.equal(await page.getByLabel("따라갈 경로").inputValue(), "0");
         await page.getByLabel("코스 파일").setInputFiles({name: "course.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from('<gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><name>북한산 테스트 코스</name><trkseg><trkpt lat="37.66" lon="126.98"/><trkpt lat="37.661" lon="126.98"/></trkseg></trk></gpx>')});
         await page.getByText("북한산 테스트 코스", {exact: true}).waitFor();
@@ -118,7 +118,7 @@ test("downloaded trail map renders after network loss and survives reopening", {
         await page.waitForFunction(() => JSON.parse(localStorage.getItem("rr_active_run") || "null")?.trackPoints?.length > 0);
         await page.getByRole("button", {name: "종료", exact: true}).click();
         await page.waitForURL("**/result?id=*");
-        await page.getByText("하이킹 기록은 이 기기에 저장돼요 · 서버 동기화 준비 중", {exact: true}).waitFor();
+        await page.getByText("하이킹 기록은 이 기기에 저장했어요. 계정 업로드는 아직 지원하지 않아요.", {exact: true}).waitFor();
         const downloadReady = page.waitForEvent("download");
         await page.getByRole("button", {name: "이동 경로 GPX 내보내기", exact: true}).click();
         const download = await downloadReady;
@@ -168,20 +168,20 @@ test("an area picked on the map is saved from OpenFreeMap tiles and reopens offl
         await page.goto(origin + "/maps/", {waitUntil: "networkidle"});
         await page.getByRole("button", {name: "지도에서 지역 고르기", exact: true}).click();
         await page.locator('[data-testid="area-picker-map"][data-map-ready="true"]').waitFor();
-        await page.getByText(/^이 범위 지도: 최대 약/).waitFor();
-        await page.getByText(/모바일 데이터를 최대 약/).waitFor();
+        await page.getByText(/^이 범위를 저장하면 최대/).waitFor();
+        await page.getByText(/모바일 데이터를 최대/).waitFor();
         await page.getByRole("button", {name: "이 지역 저장", exact: true}).click();
         await page.getByText(/지도를 기기에 저장했어요\.$/).waitFor({timeout: 60000});
         assert.ok(tileRequests > 7, "every zoom from 8 to 14 is fetched");
         assert.equal(await page.getByTestId("area-picker-map").count(), 0, "the picker closes after saving");
-        assert.match(await page.locator("section[aria-label='저장한 지도']").innerText(), /운동할 때 사용할 지도/);
+        assert.match(await page.locator("section[aria-label='저장한 지도']").innerText(), /운동할 때 이 지도를 써요/);
         online = false;
         await page.reload({waitUntil: "networkidle"});
         await page.locator('[data-testid="offline-trail-map"][data-map-ready="true"]').waitFor();
         assert.equal(await page.getByTestId("offline-trail-map").getAttribute("data-map-base"), "pack");
         await page.getByRole("button", {name: "삭제", exact: true}).first().click();
         await page.getByRole("button", {name: "삭제 확인", exact: true}).click();
-        await page.getByText("아직 저장한 지도가 없어요.", {exact: true}).waitFor();
+        await page.getByText("아직 저장한 지도가 없어요. 위에서 지역을 고르거나 북한산 지도로 먼저 확인해보세요.", {exact: true}).waitFor();
         assert.equal(await page.evaluate(() => localStorage.getItem("rr_area_maps")), "[]");
     } finally {
         await browser?.close();
