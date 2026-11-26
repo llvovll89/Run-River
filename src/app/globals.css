@@ -1,6 +1,22 @@
 @import "tailwindcss";
 @variant dark (prefers-color-scheme: dark);
 
+/* 외부 CDN 폰트 CSS는 렌더링을 막아 약한 신호에서 흰 화면이 됐다. 앱에 포함해 서비스 워커로 저장한다. */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+
 @theme {
   --color-toss-blue: #2f4766;
   --color-run: #2f4766;
