@@ -86,6 +86,8 @@ getRunningHistory()              // SELECT * ORDER BY created_at DESC
 - 도착 반경 원 5m, 지형 음영(MapLibre 온라인만, AWS terrarium), 확대·축소 `MapControls.tsx`
 - 설정·색상: `lib/mapBase.ts`. 카카오는 장소 검색·주소 변환에만 사용(`lib/kakaoServices.ts`)
 
+**Brand.tsx** — 로고: 출발점(주황 점)에서 시작한 GPS 경로 한 줄이 8° 기울어진 R을 그림. 볼이 기둥에 닿지 않는 '열린 틈'이 기억점. `BrandIcon`(남색 #16294A 타일, 앱 아이콘과 동일), `RiverMark`(바탕 없음, 선은 `currentColor`, 점은 `--c-brand-accent` #F25C1F), 워드마크는 `public/brand/wordmark.svg`를 CSS mask로 그림. 앱 아이콘은 `npm run icons`(`scripts/brand-icon.mjs` 원본 — 웹·마스커블·iOS·Android 전부), 심볼·워드마크 SVG는 `docs/brand/`(규칙·색은 `docs/brand/README.md`). 심볼을 바꾸면 세 파일(Brand.tsx·brand-icon.mjs·generate_brand.py)을 함께 수정
+
 **기타:** WeeklyChart(recharts), DeleteRecordButton, EditableMemo, PWAUpdateBanner, PCLanding
 
 ---
