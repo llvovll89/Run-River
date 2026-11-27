@@ -96,7 +96,11 @@ export function OfflineSyncProvider({children}: {children: React.ReactNode}) {
                 }
 
                 try {
-                    await saveRunningRecord(item.record);
+                    // created_at 없이 큐에 들어간 이전 항목은 큐 저장 시각(운동 종료 직후)으로 보정
+                    await saveRunningRecord({
+                        ...item.record,
+                        created_at: item.record.created_at ?? new Date(item.savedAt).toISOString(),
+                    });
                     if (item.record.id) markLocalResultUploaded(item.record.id);
                     dequeue(item.queueId);
                     succeeded = true;

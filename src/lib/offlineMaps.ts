@@ -187,34 +187,45 @@ export async function downloadAreaMap(bounds: Bounds, name: string, onProgress: 
     const compress = typeof CompressionStream !== "undefined";
     const saved: AreaTile[] = [];
     let next = 0, done = 0, bytes = 0;
+    // 한 worker가 실패하면 Promise.all은 바로 끝나지만 나머지 worker는 계속 돈다 → 내부 신호로 전부 멈추고 진행률 콜백도 막는다
+    const stop = new AbortController();
+    const abortFromCaller = () => stop.abort();
+    if (signal?.aborted) stop.abort(); else signal?.addEventListener("abort", abortFromCaller, {once: true});
     const fetchTile = async (z: number, x: number, y: number) => {
         const url = template.replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
         for (let attempt = 0; ; attempt++) {
             try {
-                const response = await fetch(url, {credentials: "omit", signal});
+                const response = await fetch(url, {credentials: "omit", signal: stop.signal});
                 if (response.status === 204 || response.status === 404) return null;
                 if (!response.ok) throw new Error(`tile ${response.status}`);
                 return new Uint8Array(await response.arrayBuffer());
             } catch (error) {
-                if (signal?.aborted) throw new DOMException("지도 저장을 취소했어요.", "AbortError");
+                if (stop.signal.aborted) throw new DOMException("지도 저장을 취소했어요.", "AbortError");
                 if (attempt >= 2) throw new Error("지도를 다운로드하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.", {cause: error});
                 await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
             }
         }
     };
     const worker = async () => {
-        while (next < tiles.length) {
+        while (next < tiles.length && !stop.signal.aborted) {
             const {z, x, y} = tiles[next++];
             const data = await fetchTile(z, x, y);
             if (data?.byteLength) {
                 const stored = compress ? await gzip(data) : data;
+                if (stop.signal.aborted) return;
                 saved.push({z, x, y, data: stored}); bytes += stored.byteLength;
             }
+            if (stop.signal.aborted) return;
             done++; onProgress({done, total: tiles.length, bytes});
         }
     };
     onProgress({done: 0, total: tiles.length, bytes: 0});
-    await Promise.all(Array.from({length: 6}, worker));
+    try {
+        await Promise.all(Array.from({length: 6}, () => worker().catch(error => { stop.abort(); throw error; })));
+    } finally {
+        signal?.removeEventListener("abort", abortFromCaller);
+    }
+    if (signal?.aborted) throw new DOMException("지도 저장을 취소했어요.", "AbortError");
     const archive = buildPmtiles(saved, {
         bounds: coveredBounds(bounds), minZoom: AREA_MIN_ZOOM, maxZoom: AREA_MAX_ZOOM, tileCompression: compress ? "gzip" : "none",
         metadata: {name, attribution: "© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap", vector_layers: OPENMAPTILES_LAYERS.map(id => ({id}))},

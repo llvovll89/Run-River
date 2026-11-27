@@ -1,16 +1,10 @@
 import {NextResponse} from "next/server";
 import {createServerClient} from "@supabase/ssr";
 import {cookies} from "next/headers";
+import {sanitizeNextPath} from "@/lib/safeRedirect";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-
-function sanitizeNextPath(raw: string | null): string {
-    if (!raw) return "/";
-    const value = raw.trim();
-    if (!value.startsWith("/") || value.startsWith("//")) return "/";
-    return value;
-}
 
 function assertEnv() {
     if (!supabaseUrl || !supabaseAnonKey) {

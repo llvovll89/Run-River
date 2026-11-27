@@ -1,5 +1,5 @@
 import type {RunningRecord} from "@/types";
-import {formatPace, formatDuration} from "@/lib/utils";
+import {formatPace, formatDuration, dayKey} from "@/lib/utils";
 
 export interface BadgeItem {
     key: string;
@@ -121,7 +121,7 @@ export const STREAK_BADGE_RULES: MilestoneBadgeRule[] = [
 function calcMaxStreak(records: RunningRecord[]): number {
     if (records.length === 0) return 0;
     const days = Array.from(
-        new Set(records.map((r) => r.created_at.slice(0, 10))),
+        new Set(records.map((r) => dayKey(r.created_at))),
     ).sort((a, b) => a.localeCompare(b));
     let maxStreak = 1;
     let cur = 1;

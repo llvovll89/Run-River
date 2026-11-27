@@ -64,6 +64,7 @@ interface RunResult {
     gap_adjustment_count?: number;
     gap_adjustment_auto_enabled?: boolean;
     duration_seconds: number;
+    finishedAt?: number;
     pace: number;
     activity_type: ActivityType;
     pathPoints?: LatLng[];
@@ -76,6 +77,11 @@ interface RunResult {
     intervalCompletedSets?: number;
     intervalTotalRunSeconds?: number;
     intervalTotalRestSeconds?: number;
+}
+
+function runFinishedAtIso(result: RunResult): string | undefined {
+    const finishedAt = result.finishedAt ?? result.trackPoints?.at(-1)?.timestamp;
+    return typeof finishedAt === "number" && Number.isFinite(finishedAt) ? new Date(finishedAt).toISOString() : undefined;
 }
 
 function isValidRunResult(value: unknown): value is RunResult {
@@ -578,6 +584,8 @@ export default function ResultPage() {
             altitude_end_m: parsed.altitude_end_m ?? null,
             elevation_gain_m: parsed.elevation_gain_m ?? null,
             elevation_loss_m: parsed.elevation_loss_m ?? null,
+            // 오프라인 저장 후 나중에 올라가도 운동한 시각으로 기록 (없으면 DB 기본값 now())
+            created_at: runFinishedAtIso(parsed),
         };
         try {
             saveLocalResult(parsed);
