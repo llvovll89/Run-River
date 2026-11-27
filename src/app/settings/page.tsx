@@ -5,7 +5,7 @@ import AppNavigation from "@/components/AppNavigation";
 
 import {useEffect, useState} from "react";
 import {useRouter} from "next/navigation";
-import {useUserProfile} from "@/hooks/useUserProfile";
+import {clearLocalProfile, useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
 import {
     dequeue,
@@ -14,11 +14,7 @@ import {
     resetRetry,
     type PendingRecord,
 } from "@/lib/offlineQueue";
-import {
-    claimLegacyRecords,
-    getUnclaimedLegacyCount,
-    signOut,
-} from "@/lib/supabase";
+import {signOut} from "@/lib/supabase";
 import {DEFAULT_RUN_TUNING, normalizeRunTuning} from "@/lib/runTuning";
 import type {UserProfile} from "@/types";
 import TintedButton from "@/components/TintedButton";
@@ -61,9 +57,6 @@ export default function SettingsPage() {
         message: string;
     }>({running: false, total: 0, prepared: 0, message: ""});
     const [isOnline, setIsOnline] = useState(true);
-    const [unclaimedCount, setUnclaimedCount] = useState(0);
-    const [claiming, setClaiming] = useState(false);
-    const [claimMessage, setClaimMessage] = useState("");
     const [error, setError] = useState("");
     const [autoPauseStopSpeed, setAutoPauseStopSpeed] = useState("0.45");
     const [autoPauseResumeSpeed, setAutoPauseResumeSpeed] = useState("0.90");
@@ -108,24 +101,6 @@ export default function SettingsPage() {
             normalizeRunTuning(profile.runTuning ?? DEFAULT_RUN_TUNING),
         );
     }, [profile]);
-
-    useEffect(() => {
-        let mounted = true;
-
-        async function loadUnclaimedCount() {
-            try {
-                const count = await getUnclaimedLegacyCount();
-                if (mounted) setUnclaimedCount(count);
-            } catch {
-                if (mounted) setUnclaimedCount(0);
-            }
-        }
-
-        void loadUnclaimedCount();
-        return () => {
-            mounted = false;
-        };
-    }, []);
 
     useEffect(() => {
         setIsOnline(navigator.onLine);
@@ -205,35 +180,10 @@ export default function SettingsPage() {
         setExhaustedItems(getExhaustedQueue());
     }
 
-    async function handleClaimLegacyRecords() {
-        if (claiming) return;
-        setClaiming(true);
-        setClaimMessage("");
-
-        try {
-            const claimed = await claimLegacyRecords(500);
-            const count = await getUnclaimedLegacyCount();
-            setUnclaimedCount(count);
-            setClaimMessage(
-                claimed > 0
-                    ? `${claimed}건의 기존 기록을 내 계정으로 가져왔습니다.`
-                    : "가져올 기존 기록이 없습니다.",
-            );
-            if (claimed > 0) {
-                await syncNow(true);
-            }
-        } catch {
-            setClaimMessage(
-                "기존 기록 가져오기에 실패했습니다. 잠시 후 다시 시도해주세요.",
-            );
-        } finally {
-            setClaiming(false);
-        }
-    }
-
     async function handleSignOut() {
         try {
             await signOut();
+            try { clearLocalProfile(); } catch { /* 저장소 접근 실패는 로그아웃을 막지 않는다 */ }
             window.location.href = "/auth";
         } catch {
             setError("로그아웃에 실패했습니다.");
@@ -406,69 +356,6 @@ export default function SettingsPage() {
 
             {/* 폼 */}
             <div className="px-5 py-6 flex flex-col gap-4">
-                {unclaimedCount > 0 && (
-                <div
-                    className="rounded-2xl p-4"
-                    style={{
-                        background: "var(--c-surface)",
-                        border: "1px solid var(--c-border)",
-                    }}
-                >
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <p
-                                style={{
-                                    fontSize: 14,
-                                    fontWeight: 700,
-                                    color: "var(--c-text-1)",
-                                }}
-                            >
-                                이전 기록 연결
-                            </p>
-                            <p
-                                style={{
-                                    fontSize: 12,
-                                    color: "var(--c-text-3)",
-                                    marginTop: 4,
-                                }}
-                            >
-                                계정에 연결되지 않은 운동 {unclaimedCount}건
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => void handleClaimLegacyRecords()}
-                            disabled={claiming || unclaimedCount <= 0}
-                            className="h-11 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-transform"
-                            style={{
-                                background:
-                                    claiming || unclaimedCount <= 0
-                                        ? "var(--c-elevated)"
-                                        : "var(--c-toss-blue)",
-                                color:
-                                    claiming || unclaimedCount <= 0
-                                        ? "var(--c-text-3)"
-                                        : "#fff",
-                                border: "1px solid var(--c-border)",
-                            }}
-                        >
-                            {claiming ? "처리 중..." : "내 기록으로 가져오기"}
-                        </button>
-                    </div>
-                    {claimMessage && (
-                        <p
-                            style={{
-                                fontSize: 12,
-                                color: "var(--c-text-2)",
-                                marginTop: 8,
-                            }}
-                        >
-                            {claimMessage}
-                        </p>
-                    )}
-                </div>
-
-                )}
-
                 <ProfileField
                     label="체중"
                     unit="kg"

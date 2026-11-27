@@ -49,6 +49,10 @@ export function loadRunTuning(): RunTuning {
   }
 }
 
+export function clearRunTuning(): void {
+  if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+}
+
 export function saveRunTuning(tuning: RunTuning): RunTuning {
   const normalized = normalizeRunTuning(tuning);
   if (typeof window !== "undefined") {

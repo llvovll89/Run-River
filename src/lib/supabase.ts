@@ -214,20 +214,3 @@ export async function upsertUserProfile(
     return mapProfileRow(data as ProfileRow);
 }
 
-export async function getUnclaimedLegacyCount(): Promise<number> {
-    assertEnv();
-    const supabase = getClient();
-    const {data, error} = await supabase.rpc("count_unclaimed_legacy_records");
-    if (error) throw error;
-    return typeof data === "number" ? data : 0;
-}
-
-export async function claimLegacyRecords(limitCount = 200): Promise<number> {
-    assertEnv();
-    const supabase = getClient();
-    const {data, error} = await supabase.rpc("claim_legacy_records", {
-        limit_count: limitCount,
-    });
-    if (error) throw error;
-    return typeof data === "number" ? data : 0;
-}

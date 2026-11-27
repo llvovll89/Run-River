@@ -57,6 +57,7 @@ const REFERRAL_BANNER_SEEN_KEY = "rr_referral_banner_seen_at";
 const REFERRAL_BANNER_COOLDOWN_MS = 1000 * 60 * 60 * 24 * 7;
 const REFERRAL_VISIT_SESSION_KEY = "rr_referral_visit_logged";
 const CUSTOM_INTERVAL_KEY = "rr_custom_interval";
+const ROUTE_FETCH_TIMEOUT_MS = 10_000;
 
 function buildCustomPreset(inputs: {
     warmupMin: string;
@@ -245,9 +246,14 @@ export default function Home() {
             startAddrOverride.current = null;
             return;
         }
-        reverseGeocode(startPoint, (v) =>
-            setAddresses((prev) => ({...prev, start: v})),
-        );
+        // 지점이 바뀌거나 지워진 뒤 늦게 온 주소가 최신 값을 덮어쓰지 않게 한다
+        let cancelled = false;
+        reverseGeocode(startPoint, (v) => {
+            if (!cancelled) setAddresses((prev) => ({...prev, start: v}));
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [startPoint]);
 
     useEffect(() => {
@@ -259,22 +265,32 @@ export default function Home() {
             endAddrOverride.current = null;
             return;
         }
-        reverseGeocode(endPoint, (v) =>
-            setAddresses((prev) => ({...prev, end: v})),
-        );
+        let cancelled = false;
+        reverseGeocode(endPoint, (v) => {
+            if (!cancelled) setAddresses((prev) => ({...prev, end: v}));
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [endPoint]);
 
-    // 도보 경로 페치 (OSRM)
+    // 도보 경로 페치 (OSRM — FOSSGIS routed-foot)
     useEffect(() => {
         if (!startPoint || !endPoint || pageMode !== "map") {
-            setRoute((prev) => ({...prev, info: null, error: false}));
+            setRoute((prev) => ({...prev, info: null, error: false, loading: false}));
             return;
         }
         let cancelled = false;
-        setRoute((prev) => ({...prev, loading: true, error: false}));
+        // 이전 경로를 비워야 응답 전에 시작해도 바뀌기 전 경로가 저장되지 않는다
+        setRoute((prev) => ({...prev, info: null, loading: true, error: false}));
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ROUTE_FETCH_TIMEOUT_MS);
 
         fetch(
-            `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`,
+            // OSRM 데모 서버는 car 프로필만 운영해 foot을 요청해도 자동차 경로·시간이 나온다 → FOSSGIS 도보 전용 인스턴스 사용
+            // (이 인스턴스는 URL의 프로필 자리를 무시하고 도보로만 계산한다)
+            `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`,
+            {signal: controller.signal},
         )
             .then((r) => r.json())
             .then((data) => {
@@ -298,11 +314,14 @@ export default function Home() {
                     setRoute((prev) => ({...prev, info: null, error: true}));
             })
             .finally(() => {
+                clearTimeout(timeout);
                 if (!cancelled) setRoute((prev) => ({...prev, loading: false}));
             });
 
         return () => {
             cancelled = true;
+            clearTimeout(timeout);
+            controller.abort();
         };
     }, [startPoint, endPoint, pageMode]);
 

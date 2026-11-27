@@ -102,45 +102,6 @@ function estimateGapDistanceKm(
     return Math.max(0, Math.min(maxDistanceKm, estimated));
 }
 
-function calcMinDistanceToPathKm(
-    point: LatLng,
-    routePath: LatLng[],
-    hintRef?: {current: number},
-): number {
-    const len = routePath.length;
-    if (hintRef && len > 0) {
-        const start = Math.max(0, hintRef.current - 3);
-        const end = Math.min(len - 1, hintRef.current + 20);
-        let minDist = Number.POSITIVE_INFINITY;
-        let minIdx = hintRef.current;
-        for (let i = start; i <= end; i += 1) {
-            const d = calcDistance(point, routePath[i]);
-            if (d < minDist) {
-                minDist = d;
-                minIdx = i;
-            }
-        }
-        // 윈도우가 경로를 놓쳤을 때 전체 재탐색
-        if (minDist > 0.1) {
-            for (let i = 0; i < len; i += 1) {
-                const d = calcDistance(point, routePath[i]);
-                if (d < minDist) {
-                    minDist = d;
-                    minIdx = i;
-                }
-            }
-        }
-        hintRef.current = minIdx;
-        return minDist;
-    }
-    let minDistance = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < len; i += 1) {
-        const d = calcDistance(point, routePath[i]);
-        if (d < minDistance) minDistance = d;
-    }
-    return minDistance;
-}
-
 // 상단 패널·하단 버튼 높이를 재서 지도와 떠 있는 버튼을 실제로 보이는 영역에 맞춘다.
 function useMeasuredHeight<T extends HTMLElement>() {
     const [height, setHeight] = useState(0);
@@ -270,12 +231,6 @@ export default function RunningPage() {
     const autoPausedRef = useRef(false);
 
     const offRouteSinceRef = useRef<number | null>(null);
-    const nearestRouteIdxRef = useRef(0);
-
-    // config(경로) 교체 시 힌트 인덱스 리셋
-    useEffect(() => {
-        nearestRouteIdxRef.current = 0;
-    }, [config]);
     const lastOffRouteAlertAtRef = useRef(0);
 
     const effectiveDistance = totalDistance + adjustedDistanceKm;
@@ -770,11 +725,8 @@ export default function RunningPage() {
         const ALERT_COOLDOWN_MS = runTuning.offRouteAlertCooldownMs;
         const now = Date.now();
 
-        const minDistanceToRoute = config.activityType === "hiking" ? distanceToCourseMeters(position, config.routePath) / 1000 : calcMinDistanceToPathKm(
-            position,
-            config.routePath,
-            nearestRouteIdxRef,
-        );
+        // 꼭짓점이 아니라 선분까지의 거리: 직선 구간 한가운데서 거짓 이탈 경고가 나지 않게 한다
+        const minDistanceToRoute = distanceToCourseMeters(position, config.routePath) / 1000;
         const isOffRoute = minDistanceToRoute >= OFF_ROUTE_THRESHOLD_KM;
 
         if (!isOffRoute) {
@@ -900,6 +852,8 @@ export default function RunningPage() {
         // 정지 직전의 낮은 속도 샘플이 남아 있으면 재개 직후 다시 자동 정지된다
         speedSamplesRef.current = [];
         resumeTracking();
+        // 일시정지 중 화면이 숨겨지면 시스템이 Wake Lock을 해제하므로 재개할 때 다시 잡는다
+        void acquireWakeLock();
         startTimeRef.current = Date.now();
         isPausedRef.current = false;
         timerRef.current = setInterval(() => {
@@ -911,7 +865,7 @@ export default function RunningPage() {
             );
         }, 1000);
         setIsPaused(false);
-    }, [resumeTracking]);
+    }, [resumeTracking, acquireWakeLock]);
 
     const handleApplyGapAdjustment = useCallback(() => {
         if (!gapSuggestion) return;
