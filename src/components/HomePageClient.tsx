@@ -1950,6 +1950,20 @@ export default function Home() {
                             {route.info && !route.loading && route.info.path.length > 1 && (
                                 <RouteElevation path={route.info.path} />
                             )}
+                            {route.info && !route.loading && (
+                                // FOSSGIS 라우팅 이용 조건: 출처 표기 + "fix the map" 링크
+                                <p
+                                    className="text-center"
+                                    style={{fontSize: 10, color: "var(--c-text-3)"}}
+                                >
+                                    경로 ©{" "}
+                                    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap</a>
+                                    {" "}기여자 ·{" "}
+                                    <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener noreferrer" className="underline">FOSSGIS</a>
+                                    {" "}·{" "}
+                                    <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer" className="underline">지도 수정</a>
+                                </p>
+                            )}
                         </div>
                     )}
 
