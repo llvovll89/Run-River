@@ -220,6 +220,12 @@ jobs:
         run: npx playwright install-deps chromium
       - run: node --test tests/mobile-browser.test.mjs
       - run: node --test tests/maps-browser.test.mjs
+      # Robolectric은 android-all jar를 Maven Central에서 받아 ~/.m2에 둔다. 캐시가 없으면 매번 받다가 429로 실패한다
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('android/app/build.gradle') }}
+          restore-keys: robolectric-${{ runner.os }}-
       - run: bash ./gradlew testDebugUnitTest assembleDebug --no-daemon
         working-directory: android
       - uses: actions/upload-artifact@v4
