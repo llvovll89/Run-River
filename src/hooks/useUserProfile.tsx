@@ -11,6 +11,7 @@ import {
 import type {UserProfile} from "@/types";
 import {
     DEFAULT_RUN_TUNING,
+    clearRunTuning,
     loadRunTuning,
     normalizeRunTuning,
     saveRunTuning,
@@ -280,6 +281,12 @@ export function UserProfileProvider({children}: {children: React.ReactNode}) {
             {children}
         </UserProfileContext.Provider>
     );
+}
+
+// 로그아웃 시 호출: 다음에 로그인한 계정에 이전 사용자의 체중·튜닝값이 올라가지 않게 한다
+export function clearLocalProfile(): void {
+    localStorage.removeItem(STORAGE_KEY);
+    clearRunTuning();
 }
 
 export function useUserProfile() {

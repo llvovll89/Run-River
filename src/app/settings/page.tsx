@@ -5,7 +5,7 @@ import AppNavigation from "@/components/AppNavigation";
 
 import {useEffect, useState} from "react";
 import {useRouter} from "next/navigation";
-import {useUserProfile} from "@/hooks/useUserProfile";
+import {clearLocalProfile, useUserProfile} from "@/hooks/useUserProfile";
 import {useOfflineSync} from "@/hooks/useOfflineSync";
 import {
     dequeue,
@@ -234,6 +234,7 @@ export default function SettingsPage() {
     async function handleSignOut() {
         try {
             await signOut();
+            try { clearLocalProfile(); } catch { /* 저장소 접근 실패는 로그아웃을 막지 않는다 */ }
             window.location.href = "/auth";
         } catch {
             setError("로그아웃에 실패했습니다.");

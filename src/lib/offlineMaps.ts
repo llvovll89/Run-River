@@ -92,8 +92,33 @@ const writeAreaIndex = (list: MapPack[]) => localStorage.setItem(AREA_INDEX_KEY,
 export async function listOfflineMaps(): Promise<MapPack[]> {
     return [...areaIndex(), ...await listFileMaps()];
 }
+const readMapMeta = (id: string): MapPack | null => {
+    try { const stored = localStorage.getItem(`rr_map_meta_${id}`); return stored ? JSON.parse(stored) : null; }
+    catch { return null; }
+};
+
+async function listWebFileMaps(): Promise<MapPack[]> {
+    // getAll()은 지도 바이트(최대 200MB)까지 전부 읽으므로 key만 읽고 표시 정보는 localStorage 메타에서 가져온다
+    const ids = await transaction<IDBValidKey[]>("readonly", store => store.getAllKeys());
+    const result: MapPack[] = [];
+    for (const key of ids) {
+        const id = String(key);
+        let pack = readMapMeta(id);
+        if (!pack) {
+            // 메타가 없는 이전 항목: 한 번만 읽어서 메타를 만들어 둔다
+            const stored = await transaction<StoredMap | undefined>("readonly", store => store.get(key));
+            if (!stored) continue;
+            const {blob: _, ...meta} = stored;
+            pack = meta;
+            try { localStorage.setItem(`rr_map_meta_${id}`, JSON.stringify(pack)); } catch { /* 다음 목록 조회 때 다시 시도 */ }
+        }
+        result.push(pack);
+    }
+    return result;
+}
+
 async function listFileMaps(): Promise<MapPack[]> {
-    if (!native()) return (await transaction<StoredMap[]>("readonly", store => store.getAll())).map(({blob: _, ...pack}) => pack);
+    if (!native()) return listWebFileMaps();
     const {maps} = await NativeMaps.list();
     const result: MapPack[] = [];
     for (const map of maps) {
@@ -124,6 +149,7 @@ export async function importOfflineMap(file?: File, name?: string): Promise<MapP
         const pack = await describe(new PMTiles(new FileSource(file)), id, name ?? file.name, file.size);
         const bytes = await file.arrayBuffer();
         await transaction("readwrite", store => store.put({...pack, blob: bytes}));
+        try { localStorage.setItem(`rr_map_meta_${id}`, JSON.stringify(pack)); } catch { /* 목록 조회 때 IDB에서 다시 만든다 */ }
         selectOfflineMap(id);
         // Best effort: browsers can still remove site data; native files are app-private.
         await navigator.storage?.persist?.().catch(() => false);
@@ -164,7 +190,7 @@ export async function deleteOfflineMap(id: string) {
         await transaction("readwrite", store => store.delete(id), "areas");
         writeAreaIndex(areaIndex().filter(pack => pack.id !== id));
     } else if (native()) { await NativeMaps.delete({id}); localStorage.removeItem(`rr_map_meta_${id}`); }
-    else await transaction("readwrite", store => store.delete(id));
+    else { await transaction("readwrite", store => store.delete(id)); localStorage.removeItem(`rr_map_meta_${id}`); }
     if (selectedOfflineMap() === id) localStorage.removeItem(ACTIVE_KEY);
     window.dispatchEvent(new Event("offline-map-changed"));
 }
