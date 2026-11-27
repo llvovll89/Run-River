@@ -21,6 +21,7 @@ import type {
     TrackPoint,
     RunConfig,
     RunRecoverySnapshot,
+    IntervalProgress,
 } from "@/types";
 import {useVoiceGuide} from "@/hooks/useVoiceGuide";
 import {
@@ -47,7 +48,7 @@ interface GapSuggestion {
 
 type CompletionReason = "destination" | "distance" | "time" | "interval";
 
-type IntervalPhase = "warmup" | "run" | "rest" | "cooldown";
+type IntervalPhase = IntervalProgress["phase"];
 
 function estimateGapDistanceKm(
     trackPoints: TrackPoint[],
@@ -214,6 +215,8 @@ export default function RunningPage() {
     const intervalCountdownRef = useRef(0);
     const intervalRunSecondsRef = useRef(0);
     const intervalRestSecondsRef = useRef(0);
+    // 복구한 인터벌 상태: config 초기화 effect가 처음 상태로 덮어쓰지 않게 한 번만 적용
+    const restoredIntervalRef = useRef<IntervalProgress | null>(null);
     const intervalTimerRef = useRef<ReturnType<typeof setInterval> | null>(
         null,
     );
@@ -318,9 +321,11 @@ export default function RunningPage() {
                 | "adjustedDistanceKm"
                 | "untrackedSeconds"
                 | "adjustedGapCount"
+                | "interval"
             >,
         ) => {
             nextConfig = {...nextConfig, runId: nextConfig.runId ?? crypto.randomUUID()};
+            restoredIntervalRef.current = recovery?.interval ?? null;
             setConfig(nextConfig);
             requestPermission();
             startTracking({
@@ -483,7 +488,11 @@ export default function RunningPage() {
                 1500,
             );
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [beginSession, clearRecoverySnapshot, router, showToast, stopTracking]);
 
+    // 화면을 벗어날 때 정리: 복구 경로처럼 위 effect가 일찍 return해도 항상 실행되도록 분리
+    useEffect(() => {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
             if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -494,8 +503,7 @@ export default function RunningPage() {
             stopTracking();
             wakeLockRef.current?.release();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [beginSession, clearRecoverySnapshot, router, showToast, stopTracking]);
+    }, [stopTracking]);
 
     const handleResumeRecoveredSession = useCallback(() => {
         if (!pendingRecovery) return;
@@ -514,6 +522,7 @@ export default function RunningPage() {
             adjustedDistanceKm: pendingRecovery.adjustedDistanceKm ?? 0,
             untrackedSeconds: pendingRecovery.untrackedSeconds ?? 0,
             adjustedGapCount: pendingRecovery.adjustedGapCount ?? 0,
+            interval: pendingRecovery.interval,
         });
         showToast("이전 러닝 세션을 복구했어요.");
     }, [pendingRecovery, beginSession, showToast]);
@@ -551,6 +560,15 @@ export default function RunningPage() {
                 adjustedDistanceKm,
                 untrackedSeconds,
                 adjustedGapCount,
+                ...(config.intervalPreset && {
+                    interval: {
+                        phase: intervalPhaseRef.current,
+                        set: intervalSetRef.current,
+                        countdown: intervalCountdownRef.current,
+                        runSeconds: intervalRunSecondsRef.current,
+                        restSeconds: intervalRestSecondsRef.current,
+                    },
+                }),
             });
         };
 
@@ -880,6 +898,26 @@ export default function RunningPage() {
     // 인터벌 preset 설정 시 초기화
     useEffect(() => {
         if (!config?.intervalPreset) return;
+
+        const restored = restoredIntervalRef.current;
+        restoredIntervalRef.current = null;
+        const validRestored =
+            restored &&
+            ["warmup", "run", "rest", "cooldown"].includes(restored.phase) &&
+            [restored.set, restored.countdown, restored.runSeconds, restored.restSeconds].every(
+                (value) => Number.isFinite(value) && value >= 0,
+            );
+        if (restored && validRestored) {
+            intervalCountdownRef.current = restored.countdown;
+            intervalPhaseRef.current = restored.phase;
+            intervalSetRef.current = restored.set;
+            intervalRunSecondsRef.current = restored.runSeconds;
+            intervalRestSecondsRef.current = restored.restSeconds;
+            setIntervalCountdown(restored.countdown);
+            setIntervalPhase(restored.phase);
+            setIntervalSet(restored.set);
+            return;
+        }
 
         const preset = config.intervalPreset;
         const hasWarmup = preset.sets > 0 && (preset.warmupSeconds ?? 0) > 0;

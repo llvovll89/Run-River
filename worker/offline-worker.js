@@ -14,14 +14,20 @@ main{padding:24px}a{display:inline-block;margin-top:20px;padding:14px 22px;borde
 
 self.addEventListener("install", (event) => {
     event.waitUntil((async () => {
-        const cache = await caches.open(CACHE);
-        await cache.addAll(ASSETS);
-        for (const url of PAGES) {
-            const response = await fetch(new Request(url, {credentials: "omit", cache: "reload"}));
-            if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) {
-                throw new Error("Offline app shell could not be prepared");
+        try {
+            const cache = await caches.open(CACHE);
+            await cache.addAll(ASSETS);
+            for (const url of PAGES) {
+                const response = await fetch(new Request(url, {credentials: "omit", cache: "reload"}));
+                if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) {
+                    throw new Error("Offline app shell could not be prepared");
+                }
+                await cache.put(url, response);
             }
-            await cache.put(url, response);
+        } catch (error) {
+            // 설치에 실패한 부분 캐시가 남으면 activate가 이것을 "직전 버전"으로 착각해 실행 중인 버전의 캐시를 지운다
+            await caches.delete(CACHE);
+            throw error;
         }
     })());
 });

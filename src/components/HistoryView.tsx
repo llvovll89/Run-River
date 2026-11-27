@@ -6,6 +6,7 @@ import {
     formatDateShort,
     formatTime,
     calcCaloriesByPace,
+    calcPace,
     dayKey,
 } from "@/lib/utils";
 import Link from "next/link";
@@ -22,6 +23,13 @@ import {activityLabel} from "@/lib/activities";
 function parseDayLocal(day: string): Date {
     const [year, month, date] = day.split("-").map(Number);
     return new Date(year, (month ?? 1) - 1, date ?? 1);
+}
+
+function weightedPace(records: RunningRecord[]): number {
+    return calcPace(
+        records.reduce((s, r) => s + r.distance_km, 0),
+        records.reduce((s, r) => s + r.duration_seconds, 0),
+    );
 }
 
 function calcCurrentStreak(records: RunningRecord[]): number {
@@ -61,10 +69,8 @@ export default function HistoryView({records, fetchError, weightKg}: {records: R
     const totalDist = records.reduce((s, r) => s + r.distance_km, 0);
     const totalDays = new Set(records.map((r) => dayKey(r.created_at)))
         .size;
-    const avgPace =
-        records.length > 0
-            ? records.reduce((s, r) => s + r.pace, 0) / records.length
-            : 0;
+    // 기록별 페이스 단순 평균은 짧은 기록에 치우치므로 총 시간 / 총 거리로 계산한다
+    const avgPace = weightedPace(records);
     const currentStreak = calcCurrentStreak(records);
 
     const totalCalories = records.reduce(
@@ -83,14 +89,8 @@ export default function HistoryView({records, fetchError, weightKg}: {records: R
     const walkRecords = records.filter((r) => r.activity_type === "walking");
     const runDist = runRecords.reduce((s, r) => s + r.distance_km, 0);
     const walkDist = walkRecords.reduce((s, r) => s + r.distance_km, 0);
-    const runAvgPace =
-        runRecords.length > 0
-            ? runRecords.reduce((s, r) => s + r.pace, 0) / runRecords.length
-            : 0;
-    const walkAvgPace =
-        walkRecords.length > 0
-            ? walkRecords.reduce((s, r) => s + r.pace, 0) / walkRecords.length
-            : 0;
+    const runAvgPace = weightedPace(runRecords);
+    const walkAvgPace = weightedPace(walkRecords);
     const allBadges = deriveAllBadges(records);
 
     return (

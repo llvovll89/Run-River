@@ -77,6 +77,16 @@ export interface RunRecoverySnapshot {
     adjustedDistanceKm?: number;
     untrackedSeconds?: number;
     adjustedGapCount?: number;
+    // 인터벌 진행 상태 — 복구 시 1세트부터 다시 시작하지 않도록 저장
+    interval?: IntervalProgress;
+}
+
+export interface IntervalProgress {
+    phase: "warmup" | "run" | "rest" | "cooldown";
+    set: number;
+    countdown: number;
+    runSeconds: number;
+    restSeconds: number;
 }
 
 export interface UserProfile {
