@@ -129,7 +129,11 @@ getPaceZone(pace, activityType): { label, color }
 2. OSRM `/foot` 엔드포인트 (fallback)
 - T-Map 좌표 순서: `startX/startY = lng/lat` (주의)
 
-**GPS 노이즈 필터:** 0.001km 이하 이동 무시, 0.05km 이상 점프 무시
+**GPS 노이즈 필터 (`lib/gpsFilter.ts`):** 정확도 40m 초과·0.001km 이하 이동 무시, 기준점 대비 속도 상한(러닝 25km/h, 그 외 9km/h) 초과 무시. 기준점이 30초 넘게 오래됐는데 거부되면 거리 없이 기준점만 옮김(신호 끊김 후 누적 멈춤 방지)
+
+**자동 일시정지/재개:** 자동 정지 시 트래킹 watch를 끄고, 별도 watch로 움직임(속도 2회 연속 `autoPauseResumeSpeedMs` 이상 또는 정확도 반경·20m 이상 이동)을 감지하면 자동 재개. 수동 일시정지는 자동 재개 안 함
+
+**완료 시트 "계속 달리기":** 넘긴 완료 사유(`dismissedCompletionsRef`)는 같은 세션에서 다시 띄우지 않음
 
 **Wake Lock:** iOS는 Screen Wake Lock API 미지원 → toast 경고만 표시
 
