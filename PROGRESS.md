@@ -12,6 +12,7 @@
   - 홈 브랜드 버튼은 유리 테두리 없이 아이콘 타일 44px, 다크 지도에서는 얇은 테두리
   - 심볼·워드마크 SVG, 생성 스크립트(`generate_brand.py`, fonttools 필요), 사용 규칙: `docs/brand/`
 - 심볼을 바꾸면 `Brand.tsx`·`scripts/brand-icon.mjs`·`docs/brand/generate_brand.py` 세 곳을 함께 고친다.
+- [PR #24](https://github.com/llvovll89/Run-River/pull/24): 첫 방문 때 서비스 워커의 `clients.claim()`이 `controllerchange`를 일으켜 `usePWAUpdate`가 5초 안에 페이지를 새로고침하고 "새 버전으로 업데이트했어요" 토스트를 잘못 띄우던 문제 수정. 시작 시 컨트롤러가 없었으면 첫 변경은 무시한다. WebKit `test:offline`이 이 새로고침과 경합해 간헐 실패하고, `prepare()` 실패 시 브라우저가 닫히지 않아 CI가 15분 멈추던 것도 함께 고침.
 - 검증: 로컬 `tsc`·`test:unit` 20·`next build`, iPhone 13 라이트·다크·PC 스크린샷. CI web(`test:offline` 포함)·android·ios 통과. 작업 환경에서는 Playwright 브라우저 버전 불일치로 `test:offline`을 직접 돌리지 못함.
 
 ### 다음 작업 후보

@@ -41,6 +41,9 @@ export function usePWAUpdate() {
     let reloadWhenHidden = false;
     let registration: ServiceWorkerRegistration | null = null;
     const launchedAt = Date.now();
+    // The first install's clients.claim() also fires controllerchange (none → worker).
+    // That is not a new version, so it must not reload the page or show the update toast.
+    let controlled = Boolean(navigator.serviceWorker.controller);
 
     const activate = (worker: ServiceWorker | null) => {
       // Without a controller this is the first install, not an update.
@@ -50,6 +53,10 @@ export function usePWAUpdate() {
 
     const onControllerChange = () => {
       if (disposed) return;
+      if (!controlled) {
+        controlled = true;
+        return;
+      }
       // Right after launch nobody is mid-task yet; otherwise wait until the app is in the background.
       if (Date.now() - launchedAt < 5000 && document.visibilityState === "visible") reload();
       else reloadWhenHidden = true;
