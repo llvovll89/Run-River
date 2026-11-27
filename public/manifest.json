@@ -1,7 +1,7 @@
 {
   "name": "Run River",
   "short_name": "RunRiver",
-  "description": "GPS 러닝 트래커",
+  "description": "러닝·걷기·하이킹 GPS 기록",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#eceef2",
@@ -15,19 +15,19 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

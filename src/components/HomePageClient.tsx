@@ -709,7 +709,7 @@ export default function Home() {
                     paddingBottom: "12px",
                 }}
             >
-                <a href="/" aria-label="Run River 홈" className="home-brand glass"><Brand compact /></a>
+                <a href="/" aria-label="Run River 홈" className="home-brand"><Brand compact /></a>
                 <div className="home-toolbar flex items-center gap-2">
                     <button
                         onClick={() =>

@@ -54,6 +54,8 @@
   --c-warn: #9a5b00;
   --c-river-track: #c9d3df;
   --c-river: #22395e;
+  --c-brand-accent: #f25c1f;
+  --c-brand-ring: 0 0 0 0 transparent;
   --c-overlay: rgba(12,16,26,.4);
   --c-sheet: #fbfbfc;
   --c-control-bg: #e6e9ee;
@@ -90,6 +92,7 @@
   --c-control-bg: #1d2738;
   --c-control-border: #2a3549;
   --c-glass: rgba(19,27,41,.96);
+  --c-brand-ring: 0 0 0 1px rgba(233,237,244,.16);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -101,7 +104,7 @@
     --c-danger-text: #f1a39b; --c-walk-text: #bcd5a6; --c-warn: #f0b860; --c-river-track: #2a3549; --c-river: #8fb0e6;
     --c-overlay: rgba(3,6,12,.72); --c-sheet: #131b29;
     --c-control-bg: #1d2738; --c-control-border: #2a3549; --c-glass: rgba(19,27,41,.96);
-    color-scheme: dark;
+      color-scheme: dark;
   }
 }
 
@@ -121,6 +124,8 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 /* iOS가 입력 포커스 때 확대하지 않도록 16px 이상 */
 input:is([type="email"],[type="password"],[type="text"],[type="search"],:not([type])), textarea, select { font-size: max(16px, 1em); }
 .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--c-text-1); font-size: 17px; font-weight: 750; letter-spacing: -.055em; white-space: nowrap; }
+/* Outlined wordmark (public/brand/wordmark.svg) painted in the current text color. */
+.brand-wordmark { display: inline-block; height: 15px; aspect-ratio: 8901 / 1550; background: currentColor; -webkit-mask: url(/brand/wordmark.svg) center / contain no-repeat; mask: url(/brand/wordmark.svg) center / contain no-repeat; }
 .sheet { background: var(--c-sheet); border-radius: 28px 28px 0 0; border: 1px solid var(--c-border); border-bottom: 0; box-shadow: 0 -12px 40px rgba(20,28,42,.07); }
 .card { background: var(--c-surface); border: 1px solid var(--c-border); box-shadow: var(--c-card-shadow); }
 .glass { background: var(--c-glass); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--c-border); box-shadow: 0 2px 8px rgba(20,28,42,.035); color: var(--c-text-1); }
@@ -146,8 +151,9 @@ input:is([type="email"],[type="password"],[type="text"],[type="search"],:not([ty
 input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { appearance: none; -webkit-appearance: none; margin: 0; }
 .app-screen { padding-bottom: calc(var(--sab) + 96px); }
 /* 로고 단독 버튼: 옆 도구 버튼(44px)과 같은 크기·모양 */
-.home-screen .home-brand { width: 44px; height: 44px; padding: 0; border-radius: 13px; display: grid; place-items: center; }
-.home-screen .home-brand svg { width: 26px; height: 26px; }
+.home-screen .home-brand { width: 44px; height: 44px; padding: 0; border-radius: 10px; display: grid; place-items: center; }
+/* The app icon tile is the button: no glass frame, a soft lift over the map, a hairline ring on dark maps. */
+.home-screen .home-brand svg { width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 2px 10px rgba(12,20,36,.22), var(--c-brand-ring); }
 .home-screen .home-toolbar > button, .home-screen .home-toolbar > div > button { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; padding: 0; }
 .home-sheet-content { max-height: min(42dvh, calc(100dvh - 390px - var(--sat) - var(--sab))); overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 4px; scrollbar-width: none; }
 .home-sheet-content::-webkit-scrollbar { display: none; }
