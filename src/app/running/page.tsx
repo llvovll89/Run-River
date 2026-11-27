@@ -34,6 +34,7 @@ import {readActiveRun, writeActiveRun, clearActiveRun, saveLocalResult, navigate
 import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
 import {distanceToCourseMeters} from "@/lib/hiking";
 import {remainingAlongPath} from "@/lib/routeGeometry";
+import {AUTO_RESUME_SPEED_SAMPLES, shouldAutoResume} from "@/lib/gpsFilter";
 
 const MapView = dynamic(() => import("@/components/MapView"), {ssr: false});
 
@@ -167,6 +168,8 @@ export default function RunningPage() {
         useState<CompletionReason | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const arrivedRef = useRef(false);
+    // "계속 달리기"로 넘긴 완료 사유 — 조건이 계속 참이어도 다시 띄우지 않는다
+    const dismissedCompletionsRef = useRef<Set<CompletionReason>>(new Set());
     const finishedRef = useRef(false);
     const wakeLockRef = useRef<WakeLockSentinel | null>(null);
     const startTimeRef = useRef<number>(0);
@@ -263,6 +266,8 @@ export default function RunningPage() {
     );
     const speedSamplesRef = useRef<number[]>([]);
     const lastAutoPauseDistanceRef = useRef(0);
+    // 자동 일시정지 상태일 때만 움직임을 감지해 자동 재개한다 (수동 일시정지는 제외)
+    const autoPausedRef = useRef(false);
 
     const offRouteSinceRef = useRef<number | null>(null);
     const nearestRouteIdxRef = useRef(0);
@@ -389,6 +394,7 @@ export default function RunningPage() {
             setGapSuggestion(null);
             setArrived(false);
             setCompletionReason(null);
+            dismissedCompletionsRef.current = new Set();
             lastSplitDistanceRef.current = Math.floor(
                 recovery?.totalDistance ?? 0,
             );
@@ -682,8 +688,10 @@ export default function RunningPage() {
         let reason: CompletionReason | null = null;
         let title = "";
         let body = "";
+        const dismissed = dismissedCompletionsRef.current;
 
         if (
+            !dismissed.has("destination") &&
             position &&
             config.endPoint &&
             calcDistance(position, config.endPoint) <= 0.005
@@ -692,13 +700,18 @@ export default function RunningPage() {
             title = "목적지 도착!";
             body = "5m 이내 진입";
         } else if (
+            !dismissed.has("distance") &&
             config.goalDistance &&
             effectiveDistance >= config.goalDistance
         ) {
             reason = "distance";
             title = "목표 달성!";
             body = `${config.goalDistance}km 완주`;
-        } else if (config.goalTime && elapsed >= config.goalTime * 60) {
+        } else if (
+            !dismissed.has("time") &&
+            config.goalTime &&
+            elapsed >= config.goalTime * 60
+        ) {
             reason = "time";
             title = "시간 목표 달성!";
             body = `${config.goalTime}분 완료 · ${effectiveDistance.toFixed(2)}km 달림`;
@@ -867,6 +880,7 @@ export default function RunningPage() {
     ]);
 
     const handlePause = useCallback(() => {
+        autoPausedRef.current = false;
         frozenPositionRef.current = position;
         pauseTracking();
         if (timerRef.current) {
@@ -880,7 +894,10 @@ export default function RunningPage() {
     }, [pauseTracking, position]);
 
     const handleResume = useCallback(() => {
+        autoPausedRef.current = false;
         frozenPositionRef.current = null;
+        // 정지 직전의 낮은 속도 샘플이 남아 있으면 재개 직후 다시 자동 정지된다
+        speedSamplesRef.current = [];
         resumeTracking();
         startTimeRef.current = Date.now();
         isPausedRef.current = false;
@@ -1096,6 +1113,7 @@ export default function RunningPage() {
                 if (!isPausedRef.current && !isPausingRef.current) {
                     isPausingRef.current = true;
                     handlePause();
+                    autoPausedRef.current = true;
                     showToast("자동으로 일시정지됨");
                 }
             }, REQUIRED_STILLNESS_MS);
@@ -1113,6 +1131,40 @@ export default function RunningPage() {
         profile.autoPause,
         runTuning,
     ]);
+
+    // Auto-resume: 자동 일시정지 중에는 거리 누적 없이 가벼운 watch로 움직임만 감지
+    const handleResumeRef = useRef(handleResume);
+    handleResumeRef.current = handleResume;
+    useEffect(() => {
+        if (!isPaused || !autoPausedRef.current || !navigator.geolocation) return;
+
+        const resumeSpeedMs = runTuning.autoPauseResumeSpeedMs;
+        let anchor: LatLng | null = null;
+        let speedSamples: number[] = [];
+        const watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                if (!autoPausedRef.current || finishedRef.current) return;
+                if (!Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 40) return;
+                const here = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+                if (!anchor) anchor = here;
+                if (Number.isFinite(pos.coords.speed)) {
+                    speedSamples = [...speedSamples, pos.coords.speed as number].slice(-AUTO_RESUME_SPEED_SAMPLES);
+                }
+                if (!shouldAutoResume({
+                    speedSamples,
+                    displacementKm: calcDistance(anchor, here),
+                    accuracyMeters: pos.coords.accuracy,
+                    resumeSpeedMs,
+                })) return;
+                autoPausedRef.current = false;
+                handleResumeRef.current();
+                showToast("움직임을 감지해 다시 기록해요");
+            },
+            () => {},
+            {enableHighAccuracy: true, maximumAge: 1000, timeout: 30000},
+        );
+        return () => navigator.geolocation.clearWatch(watchId);
+    }, [isPaused, runTuning.autoPauseResumeSpeedMs, showToast]);
 
     // 음성 안내: 매 1km 스플릿 + 직전 구간 대비 코칭
     useEffect(() => {
@@ -1647,6 +1699,8 @@ export default function RunningPage() {
                         <SheetActionGrid
                             secondaryLabel="계속 달리기"
                             onSecondary={() => {
+                                if (completionReason)
+                                    dismissedCompletionsRef.current.add(completionReason);
                                 arrivedRef.current = false;
                                 setArrived(false);
                                 setCompletionReason(null);

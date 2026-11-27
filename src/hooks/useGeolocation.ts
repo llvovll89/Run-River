@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ActivityType, LatLng, TrackPoint } from "@/types";
+import { evaluateDistanceSample } from "@/lib/gpsFilter";
 
 interface GeolocationState {
   position: LatLng | null;
@@ -86,17 +87,6 @@ export function useGeolocation(): UseGeolocationReturn {
     setTrackPoints((prev) => [...prev, point]);
   }, []);
 
-  const isValidDistancePoint = useCallback((distanceKm: number, deltaSeconds: number, accuracyMeters: number): boolean => {
-    if (distanceKm < 0.001) return false;
-    if (distanceKm > 0.05) return false;
-    if (!Number.isFinite(accuracyMeters) || accuracyMeters > 40) return false;
-    if (deltaSeconds <= 0) return false;
-
-    const speedKmh = (distanceKm / deltaSeconds) * 3600;
-    const maxSpeed = activityTypeRef.current === "running" ? 25 : 9;
-    return speedKmh <= maxSpeed;
-  }, []);
-
   const startWatch = useCallback(() => {
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
@@ -176,7 +166,18 @@ export function useGeolocation(): UseGeolocationReturn {
           const deltaSeconds = (currentTs - lastTimestampRef.current) / 1000;
           const accuracyMeters = pos.coords.accuracy ?? Number.POSITIVE_INFINITY;
 
-          if (isValidDistancePoint(dist, deltaSeconds, accuracyMeters)) {
+          const decision = evaluateDistanceSample({
+            distanceKm: dist,
+            deltaSeconds,
+            accuracyMeters,
+            activityType: activityTypeRef.current,
+          });
+
+          if (decision === "reanchor") {
+            // 오래된 기준점에서 비현실적으로 먼 점: 거리는 더하지 않고 기준점만 옮긴다
+            lastPositionRef.current = newPos;
+            lastTimestampRef.current = currentTs;
+          } else if (decision === "accept") {
             totalDistanceRef.current += dist;
             setTotalDistance(totalDistanceRef.current);
             appendTrackPoint({
