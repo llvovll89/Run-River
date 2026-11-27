@@ -1,6 +1,30 @@
 # 🏃 Run-River 개발 진행 리포트
 
-## 다음 세션 이어하기 메모 — 2026-11-26
+## 다음 세션 이어하기 메모 — 2026-11-27
+
+- 현재 브랜치: `main`. 마지막 완료 커밋: `a850326`.
+- [PR #23](https://github.com/llvovll89/Run-River/pull/23): 새 브랜드 로고. 이름은 Run River 유지(온길·Trailine 후보와 비교 후 사용자 선택).
+  - 심볼: 주황 출발점에서 시작한 GPS 경로 한 줄이 8° 기울어진 R을 그림. 볼이 기둥에 닿지 않는 '열린 틈'이 기억점
+  - 탐색: A 스위치백 트레일(작은 크기에서 S로 읽혀 탈락), B 보폭+봉우리(흔한 삼각형 조합이라 탈락), C 경로 R을 4회 다듬어 선택
+  - 워드마크: Pretendard Bold를 8° 기울인 윤곽선(`public/brand/wordmark.svg`, CSS mask)
+  - 컬러: River Navy `#16294A`, Trailhead Orange `#F25C1F`(출발점 전용), Mist `#F4F6F9`, Night `#0B1220`, Slate `#5B6B82`
+  - 아이콘: 웹 any·마스커블, apple-touch, favicon, iOS 1024(Capacitor 기본 아이콘이었음), Android 일반·원형·적응형(배경 `#16294A`, 예전 아이콘이었음) 전부 교체. 원본은 `scripts/brand-icon.mjs`, `npm run icons`로 재생성
+  - 홈 브랜드 버튼은 유리 테두리 없이 아이콘 타일 44px, 다크 지도에서는 얇은 테두리
+  - 심볼·워드마크 SVG, 생성 스크립트(`generate_brand.py`, fonttools 필요), 사용 규칙: `docs/brand/`
+- 심볼을 바꾸면 `Brand.tsx`·`scripts/brand-icon.mjs`·`docs/brand/generate_brand.py` 세 곳을 함께 고친다.
+- 검증: 로컬 `tsc`·`test:unit` 20·`next build`, iPhone 13 라이트·다크·PC 스크린샷. CI web(`test:offline` 포함)·android·ios 통과. 작업 환경에서는 Playwright 브라우저 버전 불일치로 `test:offline`을 직접 돌리지 못함.
+
+### 다음 작업 후보
+
+1. 실기기 홈 화면 아이콘 확인: iPhone은 홈 화면에서 지우고 다시 추가해야 새 아이콘이 보임
+2. 앱스토어 등록·상표 출원 전 KIPRIS·USPTO·WIPO 도형 상표 검색 (아직 안 함)
+3. 실제 계정으로 회원가입(인증 메일 → `/auth/callback` 복귀)·기록 업로드 실기기 확인
+4. 통계·설정 화면(로그인 필요) 디자인 세부 점검
+5. 라이트 테마 iOS 상태바 남색 띠의 실기기 인상 확인
+
+---
+
+## 이전 이어하기 메모 — 2026-11-26
 
 - 현재 브랜치: `main`. 마지막 완료 커밋: `af50183`. 운영 배포 확인 완료, 사용자가 iPhone에서 동작 확인함.
 - [PR #18](https://github.com/llvovll89/Run-River/pull/18): 약한 신호에서 PWA 흰 화면. 원인은 렌더링을 막는 외부 CDN Pretendard CSS → 폰트를 `public/fonts`에 포함하고 서비스 워커로 사전 저장. 저장 안 한 화면(통계·설정·로그인)은 오프라인 시 안내 HTML.
