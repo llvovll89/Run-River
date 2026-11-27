@@ -54,6 +54,11 @@ after(async () => { server?.kill(); await new Promise((resolve) => proxy?.close(
 
 async function prepare(browserType) {
     const browser = await browserType.launch({args: browserType === chromium ? ["--enable-unsafe-swiftshader"] : []});
+    // A failure before the caller's try/finally must still close the browser, or the test process never exits.
+    try { return await openControlledPage(browser); } catch (error) { await browser.close(); throw error; }
+}
+
+async function openControlledPage(browser) {
     const context = await browser.newContext({
         ...devices["iPhone 13"], defaultBrowserType: undefined,
         reducedMotion: "reduce",
@@ -110,6 +115,9 @@ for (const [name, type] of [["Chromium", chromium], ["WebKit", webkit]]) {
     test(`${name}: offline GPS, tab restart, paused recovery, durable guest result`, {timeout: 120000}, async () => {
         const {browser, context, page} = await prepare(type);
         try {
+            // The first install's clients.claim() is not an update: no reload, no update toast.
+            await page.waitForTimeout(1000);
+            assert.equal(await page.evaluate(() => performance.getEntriesByType("navigation")[0].type), "navigate");
             await page.screenshot({path: `output/playwright/home-${name}.png`});
             assert.ok(await page.evaluate(() => document.body.scrollHeight <= window.innerHeight + 1));
             const goalToggle = page.locator('[aria-controls="home-goal-options"]');
