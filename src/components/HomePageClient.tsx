@@ -274,7 +274,7 @@ export default function Home() {
         };
     }, [endPoint]);
 
-    // 도보 경로 페치 (OSRM)
+    // 도보 경로 페치 (OSRM — FOSSGIS routed-foot)
     useEffect(() => {
         if (!startPoint || !endPoint || pageMode !== "map") {
             setRoute((prev) => ({...prev, info: null, error: false, loading: false}));
@@ -287,7 +287,9 @@ export default function Home() {
         const timeout = setTimeout(() => controller.abort(), ROUTE_FETCH_TIMEOUT_MS);
 
         fetch(
-            `https://router.project-osrm.org/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`,
+            // OSRM 데모 서버는 car 프로필만 운영해 foot을 요청해도 자동차 경로·시간이 나온다 → FOSSGIS 도보 전용 인스턴스 사용
+            // (이 인스턴스는 URL의 프로필 자리를 무시하고 도보로만 계산한다)
+            `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`,
             {signal: controller.signal},
         )
             .then((r) => r.json())

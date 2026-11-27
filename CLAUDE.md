@@ -16,7 +16,7 @@ npm run start    # 프로덕션 실행
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 NEXT_PUBLIC_KAKAO_MAP_KEY
-NEXT_PUBLIC_TMAP_KEY   # optional — T-Map 보행자 경로
+NEXT_PUBLIC_TMAP_KEY   # optional — T-Map 보행자 경로 (미구현, 현재 미사용)
 ```
 
 ---
@@ -124,10 +124,8 @@ getPaceZone(pace, activityType): { label, color }
 - 거리 목표: `totalDistance >= config.goalDistance`
 - 시간 목표: `elapsed >= config.goalTime * 60`
 
-**경로 계산 우선순위:**
-1. T-Map 보행자 경로 (`NEXT_PUBLIC_TMAP_KEY` 있을 때)
-2. OSRM `/foot` 엔드포인트 (fallback)
-- T-Map 좌표 순서: `startX/startY = lng/lat` (주의)
+**경로 계산:** FOSSGIS 도보 전용 OSRM (`routing.openstreetmap.de/routed-foot`, 10초 timeout). OSRM 데모 서버(`router.project-osrm.org`)는 car 프로필만 운영해 foot 요청에도 자동차 경로가 나오므로 쓰지 않음
+- T-Map 보행자 경로는 아직 미구현 (`NEXT_PUBLIC_TMAP_KEY` 미사용). 구현 시 좌표 순서 `startX/startY = lng/lat` 주의
 
 **GPS 노이즈 필터 (`lib/gpsFilter.ts`):** 정확도 40m 초과·0.001km 이하 이동 무시, 기준점 대비 속도 상한(러닝 25km/h, 그 외 9km/h) 초과 무시. 기준점이 30초 넘게 오래됐는데 거부되면 거리 없이 기준점만 옮김(신호 끊김 후 누적 멈춤 방지)
 

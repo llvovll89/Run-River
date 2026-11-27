@@ -28,6 +28,7 @@ create table if not exists public.running_records (
 );
 
 alter table public.running_records add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.running_records alter column user_id set default auth.uid();
 alter table public.running_records add column if not exists gps_distance_km_raw double precision;
 alter table public.running_records add column if not exists gap_adjustment_distance_km double precision;
 alter table public.running_records add column if not exists gap_adjustment_seconds double precision;
@@ -61,7 +62,7 @@ create policy "running_records_insert_own"
   on public.running_records
   for insert
   to authenticated
-  with check (coalesce(user_id, auth.uid()) = auth.uid());
+  with check (user_id = auth.uid());
 
 create policy "running_records_update_own"
   on public.running_records
@@ -153,48 +154,6 @@ create policy "user_profiles_update_own"
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
--- legacy claim RPC -----------------------------------------------------------
-create or replace function public.count_unclaimed_legacy_records()
-returns integer
-language sql
-security definer
-set search_path = public
-as $$
-  select count(*)::integer
-  from public.running_records
-  where user_id is null;
-$$;
-
-create or replace function public.claim_legacy_records(limit_count integer default 200)
-returns integer
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  claimed_count integer := 0;
-begin
-  if auth.uid() is null then
-    raise exception 'authenticated user required';
-  end if;
-
-  with target as (
-    select id
-    from public.running_records
-    where user_id is null
-    order by created_at asc
-    limit greatest(limit_count, 0)
-    for update skip locked
-  )
-  update public.running_records rr
-  set user_id = auth.uid()
-  from target
-  where rr.id = target.id;
-
-  get diagnostics claimed_count = row_count;
-  return claimed_count;
-end;
-$$;
-
-grant execute on function public.count_unclaimed_legacy_records() to authenticated;
-grant execute on function public.claim_legacy_records(integer) to authenticated;
+-- legacy claim RPC는 20261127070000_remove_legacy_claim.sql에서 제거
+drop function if exists public.claim_legacy_records(integer);
+drop function if exists public.count_unclaimed_legacy_records();
