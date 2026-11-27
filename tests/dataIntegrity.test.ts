@@ -10,7 +10,7 @@ test("login redirect keeps same-origin paths", () => {
 });
 
 test("login redirect blocks paths the URL parser resolves to another host", () => {
-    for (const value of ["//evil.com", "/\\evil.com", "/\t/evil.com", "/\\/evil.com", "https://evil.com", "evil.com", "javascript:alert(1)"]) {
+    for (const value of ["//evil.com", "/\\evil.com", "/\t/evil.com", "/\\/evil.com", "https://evil.com", "evil.com", "javascript:alert(1)", "/.//evil.com", "/%2e//evil.com", "/./\\evil.com"]) {
         assert.equal(sanitizeNextPath(value), "/", JSON.stringify(value));
     }
 });

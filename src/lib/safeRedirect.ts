@@ -9,7 +9,10 @@ export function sanitizeNextPath(raw: string | null): string {
     try {
         const parsed = new URL(value, PROBE_ORIGIN);
         if (parsed.origin !== PROBE_ORIGIN) return "/";
-        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        // `/.//evil.com`은 정규화 후 `//evil.com`(프로토콜 상대 URL)이 되므로 결과도 다시 확인한다
+        if (path.startsWith("//") || path.startsWith("/\\")) return "/";
+        return path;
     } catch {
         return "/";
     }
