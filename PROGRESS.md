@@ -1,6 +1,42 @@
 # 🏃 Run-River 개발 진행 리포트
 
-## 다음 세션 이어하기 메모 — 2026-11-27
+## 다음 세션 이어하기 메모 — 2026-11-27 (오후: 전체 코드리뷰 반영)
+
+- 현재 브랜치: `main`. 마지막 완료 커밋: `ee84fce` (#28).
+- 전체 코드(약 16k줄)를 4개 영역(GPS·러닝 / 기록 저장·인증 / 홈·경로 / 지도·PWA)으로 나눠 리뷰하고, 확인된 버그를 심각도 순으로 PR 5개에 나눠 반영했다.
+- [PR #25](https://github.com/llvovll89/Run-River/pull/25) GPS·러닝 핵심
+  - GPS가 잠깐 끊긴 뒤 거리 누적이 영구히 멈추던 문제: 기준점 대비 고정 50m 상한 제거, 경과 시간 기반 속도(러닝 25km/h·그 외 9km/h)로만 판정. 기준점이 30초 넘게 오래됐는데 거부되면 거리 없이 기준점만 이동 (`src/lib/gpsFilter.ts`)
+  - 완료 시트 "계속 달리기" 직후 1초 만에 완료가 다시 뜨던 문제: 넘긴 사유를 `dismissedCompletionsRef`에 기록
+  - 자동 일시정지 후 자동 재개가 없던 문제(기본값 ON): 자동 정지 중에만 별도 watch로 움직임 감지 → 자동 재개. 수동 일시정지는 제외
+- [PR #26](https://github.com/llvovll89/Run-River/pull/26) 보안·데이터
+  - 로그인 `next` 오픈 리다이렉트(`/%09/evil.com`, `/\evil.com`, `/.//evil.com`): URL 파싱으로 같은 출처만 허용 (`src/lib/safeRedirect.ts`, callback·auth·middleware 공통)
+  - 오프라인 기록이 업로드한 날짜로 저장되던 문제: payload에 `created_at`(운동 종료 시각 `finishedAt`) 포함
+  - 웹에서 하이킹 시작이 복구할 운동(`rr_active_run`)을 덮어쓰던 문제
+  - 지역 지도 저장 실패·취소 후에도 worker가 계속 받던 문제 (내부 AbortController)
+  - 날짜를 UTC로 묶던 문제: `dayKey()`(Asia/Seoul)로 주간·월간 차트·연속 일수·배지·CSV, 서버 컴포넌트 시각 표시 `timeZone: Asia/Seoul`
+- [PR #27](https://github.com/llvovll89/Run-River/pull/27) 중간 항목
+  - 홈 경로: 지점 변경 시 이전 경로 비움, 초기화 시 로딩 고착 해제, 10초 timeout, 늦게 온 역지오코딩 무시
+  - **도보 경로 서버 교체**: OSRM 데모(`router.project-osrm.org`)는 foot 요청에도 자동차 결과(시청→광화문 1,422m·131초) → FOSSGIS `routing.openstreetmap.de/routed-foot`(1,182m·945초). 무료·키 불필요, 이용 조건: 초당 1회·대량 사용 금지·출처 표기, 가용성 보장 없음(DEMO)
+  - 경로 이탈 판정을 꼭짓점 → 선분 거리로, 재개 시 Wake Lock 재획득, 로그아웃 시 `userProfile`·`runTuningV1` 삭제, 웹 지도 목록이 `getAll()`로 지도 바이트까지 읽던 문제(`getAllKeys()` + `rr_map_meta_*`)
+  - `claim_legacy_records`·`count_unclaimed_legacy_records` 제거, insert 정책 `user_id = auth.uid()`, `user_id` 기본값 `auth.uid()`. **Supabase에 마이그레이션 `20261127070000_remove_legacy_claim.sql` 적용 완료**(사용자 실행, 주인 없는 기록 0건 확인)
+  - `.claude/settings.local.json` git 추적 해제 + `.gitignore`
+- [PR #28](https://github.com/llvovll89/Run-River/pull/28) 낮은 항목: GPX 다중 `<trkseg>`·트랙 이름 우선, 평균 페이스를 총 시간/총 거리로, 지도 저장 후 목록 기록 실패 시 IDB 롤백, SW 설치 실패 시 부분 캐시 삭제, MapLibre 전역 protocol 팩 해제, 러닝 화면 언마운트 정리 분리, 인터벌 진행 상태 복구 스냅샷 저장, 경로 결과에 "© OpenStreetMap 기여자 · FOSSGIS · 지도 수정" 출처 표기
+- [PR #29](https://github.com/llvovll89/Run-River/pull/29) CI: android job이 Robolectric jar를 Maven Central에서 받다가 429로 반복 실패 → `~/.m2/repository/org/robolectric` 캐시. 그래도 실패하면 빈 커밋 push로 재실행(로컬 gh 토큰은 `gh run rerun` 403)
+- 검증: `tsc`, `test:unit` 30, `test:offline` 5(Chromium·WebKit), `maps-browser`·`mobile-browser` 3, `next build`, CI web·android·ios 통과. GPX 파서는 xmldom 스크립트로 확인. GPS·자동 재개는 실기기 검증 전.
+- 문서: `CLAUDE.md`의 GPS 노이즈 필터·자동 일시정지/재개·완료 시트·경로 계산(T-Map 미구현) 설명 갱신.
+- 주의: `.claude/settings.local.json`이 브랜치 전환·`reset --hard`·pull 중 두 번 지워져 세션 스냅샷(15:27)에서 복구함. 이제 main에서도 ignore라 재발하지 않음. 그 이후 추가된 권한 규칙이 있었다면 빠졌을 수 있음.
+
+### 다음 작업 후보
+
+1. iPhone 실기기 확인: 터널·고가 밑 통과 후 거리 증가, 목표 달성 → "계속 달리기", 신호등 자동 일시정지 → 자동 재개, 도보 경로 시간이 걷기 속도로 나오는지
+2. 인터벌 카운트다운을 벽시계 기반으로 (화면 꺼짐 동안 tick이 멈춰 전환이 늦어짐)
+3. 네이티브(Swift/Java) 운동에 목표·도착 감지 추가 (안내 문구는 지원한다고 되어 있음)
+4. 서비스로 키울 경우 경로 서버를 T-Map 보행자 API 또는 자체 OSRM으로 (FOSSGIS는 상업 이용 조건 미확인·가용성 보장 없음)
+5. 오전 메모의 남은 후보: 실기기 홈 화면 아이콘, 상표 검색, 실제 회원가입·업로드 확인, 통계·설정 디자인 점검
+
+---
+
+## 이전 이어하기 메모 — 2026-11-27 (오전: 브랜드 로고)
 
 - 현재 브랜치: `main`. 마지막 완료 커밋: `a850326`.
 - [PR #23](https://github.com/llvovll89/Run-River/pull/23): 새 브랜드 로고. 이름은 Run River 유지(온길·Trailine 후보와 비교 후 사용자 선택).
