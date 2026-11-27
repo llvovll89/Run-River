@@ -2,6 +2,7 @@
 
 import type {RunningRecord} from "@/types";
 import {activityLabel} from "@/lib/activities";
+import {dayKey} from "@/lib/utils";
 
 export function ExportButton({records}: {records: RunningRecord[]}) {
     function handleExport() {
@@ -10,7 +11,7 @@ export function ExportButton({records}: {records: RunningRecord[]}) {
         const rows = records
             .map((r) =>
                 [
-                    r.created_at.slice(0, 10),
+                    dayKey(r.created_at),
                     activityLabel(r.activity_type),
                     r.distance_km.toFixed(2),
                     r.duration_seconds,

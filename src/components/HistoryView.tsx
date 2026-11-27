@@ -6,6 +6,7 @@ import {
     formatDateShort,
     formatTime,
     calcCaloriesByPace,
+    dayKey,
 } from "@/lib/utils";
 import Link from "next/link";
 import type {RunningRecord} from "@/types";
@@ -27,17 +28,13 @@ function calcCurrentStreak(records: RunningRecord[]): number {
     if (records.length === 0) return 0;
 
     const uniqueDays = Array.from(
-        new Set(records.map((record) => record.created_at.slice(0, 10))),
+        new Set(records.map((record) => dayKey(record.created_at))),
     ).sort((a, b) => b.localeCompare(a));
 
     if (uniqueDays.length === 0) return 0;
 
-    const today = new Date();
-    const todayDateOnly = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate(),
-    );
+    // 서버 컴포넌트에서도 KST 기준 "오늘"을 쓴다
+    const todayDateOnly = parseDayLocal(dayKey(new Date()));
     const latestDate = parseDayLocal(uniqueDays[0]);
     const latestDiffDays = Math.floor(
         (todayDateOnly.getTime() - latestDate.getTime()) / 86400000,
@@ -62,7 +59,7 @@ function calcCurrentStreak(records: RunningRecord[]): number {
 
 export default function HistoryView({records, fetchError, weightKg}: {records: RunningRecord[]; fetchError: string; weightKg: number}) {
     const totalDist = records.reduce((s, r) => s + r.distance_km, 0);
-    const totalDays = new Set(records.map((r) => r.created_at.slice(0, 10)))
+    const totalDays = new Set(records.map((r) => dayKey(r.created_at)))
         .size;
     const avgPace =
         records.length > 0

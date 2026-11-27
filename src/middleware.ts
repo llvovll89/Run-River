@@ -1,14 +1,8 @@
 import {NextResponse, type NextRequest} from "next/server";
 import {hasAuthCookie, updateSession} from "./lib/supabaseMiddleware";
+import {sanitizeNextPath} from "./lib/safeRedirect";
 
 const AUTH_REQUIRED_ROUTES = ["/history", "/settings"];
-
-function sanitizeNextPath(raw: string | null): string {
-    if (!raw) return "/";
-    const value = raw.trim();
-    if (!value.startsWith("/") || value.startsWith("//")) return "/";
-    return value;
-}
 
 function isAuthRequiredRoute(pathname: string) {
     return AUTH_REQUIRED_ROUTES.some(

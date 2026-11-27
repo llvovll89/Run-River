@@ -6,7 +6,7 @@ import {parseGpx, saveHikingCourse, readHikingCourse, clearHikingCourse, type Hi
 import {hasNativeRun, NativeRun} from "@/lib/nativeRun";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
 import {useOfflineMapPack} from "@/hooks/useOfflineMapPack";
-import {navigatePublic} from "@/lib/runStorage";
+import {navigatePublic, readActiveRun} from "@/lib/runStorage";
 import ScreenHeader from "@/components/ScreenHeader";
 import AppNavigation from "@/components/AppNavigation";
 import TintedButton from "@/components/TintedButton";
@@ -28,6 +28,10 @@ export default function HikingPage() {
     useEffect(() => {
         try { setCourse(readHikingCourse()); } catch (error) { setError(error instanceof Error ? error.message : "코스를 읽지 못했어요."); }
         if (hasNativeRun()) void NativeRun.snapshot().then(({run}) => setActive(Boolean(run))).catch(() => {});
+        else {
+            // 웹: 복구할 운동이 남아 있으면 새 하이킹이 그 기록을 덮어쓰지 않도록 시작을 막는다
+            try { setActive(Boolean(readActiveRun())); } catch { setActive(true); }
+        }
         setReady(true);
     }, []);
     async function importCourse(file: File) {
@@ -52,6 +56,7 @@ export default function HikingPage() {
     async function start() {
         setBusy(true); setError(""); setStartError("");
         try {
+            if (!hasNativeRun() && readActiveRun()) { navigatePublic("/running"); return; }
             if (!navigator.geolocation) throw new Error("이 기기는 GPS 기록을 지원하지 않아요.");
             const startPoint = await new Promise<LatLng>((resolve, reject) => navigator.geolocation.getCurrentPosition(fix => {
                 if (fix.coords.accuracy > 40) { reject(new Error("GPS 정확도가 낮아요. 하늘이 보이는 곳에서 다시 시도해주세요.")); return; }
