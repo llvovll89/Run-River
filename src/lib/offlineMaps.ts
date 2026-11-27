@@ -260,7 +260,12 @@ export async function downloadAreaMap(bounds: Bounds, name: string, onProgress: 
     const id = `area-${crypto.randomUUID()}`;
     const pack = await describe(new PMTiles(new FileSource(new File([archive], id))), id, name, archive.byteLength);
     await transaction("readwrite", store => store.put({id, data: archive.buffer}), "areas");
-    writeAreaIndex([pack, ...areaIndex()]);
+    try { writeAreaIndex([pack, ...areaIndex()]); }
+    catch {
+        // 목록에 없으면 화면에서 지울 방법이 없으므로 방금 넣은 바이트도 되돌린다
+        await transaction("readwrite", store => store.delete(id), "areas").catch(() => {});
+        throw new Error("기기 저장 공간이 부족해 지도를 저장하지 못했어요. 공간을 확보한 뒤 다시 시도해주세요.");
+    }
     selectOfflineMap(id);
     await navigator.storage?.persist?.().catch(() => false);
     return pack;

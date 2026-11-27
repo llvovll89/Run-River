@@ -154,6 +154,7 @@ export default function MapLibreTrailMap(props: EngineProps) {
         setLoaded(false); setError("");
         fittedOverlay.current = undefined;
         fittedCourse.current = undefined;
+        let protocolKey: string | null = null;
         void (async () => {
             try {
                 const archive = base === "pack" && pack ? await openOfflineMap(pack.id) : null;
@@ -164,7 +165,7 @@ export default function MapLibreTrailMap(props: EngineProps) {
                 protocol ??= new Protocol();
                 maplibregl.setWorkerUrl("/map-runtime/maplibre-gl-worker.mjs");
                 maplibregl.addProtocol("pmtiles", protocol.tile);
-                if (archive) protocol.add(archive);
+                if (archive) { protocol.add(archive); protocolKey = archive.source.getKey(); }
                 const start = initialCenter.current;
                 const inside = start && (!pack || contains(pack, start));
                 const style = archive && pack ? (pack.schema === "openmaptiles" ? omtPackStyle : packStyle)(`pmtiles://${archive.source.getKey()}`, pack.bounds, pack.maxZoom, dark)
@@ -238,6 +239,8 @@ export default function MapLibreTrailMap(props: EngineProps) {
             Object.values(markers.current).forEach(marker => marker?.remove());
             markers.current = {};
             mapRef.current?.remove(); mapRef.current = null;
+            // 전역 protocol이 연 팩(ArrayBuffer 전체)을 계속 붙잡지 않게 해제한다
+            if (protocolKey) protocol?.tiles.delete(protocolKey);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pack?.id, base, dark]);

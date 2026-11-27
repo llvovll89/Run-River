@@ -23,11 +23,12 @@ export function parseGpx(xml: string, fallbackName = "나의 산행 코스"): Hi
     if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("외부 정의가 포함된 GPX는 사용할 수 없어요.");
     const document = new DOMParser().parseFromString(xml, "application/xml");
     if (document.getElementsByTagName("parsererror").length || document.documentElement.localName !== "gpx") throw new Error("올바른 GPX 파일을 선택해주세요.");
-    const segments = document.getElementsByTagNameNS("*", "trkseg");
+    // 트랙 하나가 일시정지 등으로 <trkseg> 여러 개로 나뉜 파일(Garmin 등)도 이어서 쓴다. 트랙이 있으면 경로(<rte>)보다 우선
+    const tracks = document.getElementsByTagNameNS("*", "trk");
     const routes = document.getElementsByTagNameNS("*", "rte");
-    if (segments.length + routes.length !== 1) throw new Error("하나의 연속된 트랙 또는 경로가 담긴 GPX를 사용해주세요.");
-    const container = segments[0] ?? routes[0];
-    const elements = container.getElementsByTagNameNS("*", segments.length ? "trkpt" : "rtept");
+    if (tracks.length > 1 || (tracks.length === 0 && routes.length !== 1)) throw new Error("하나의 트랙 또는 경로가 담긴 GPX를 사용해주세요.");
+    const container = tracks[0] ?? routes[0];
+    const elements = container.getElementsByTagNameNS("*", tracks.length ? "trkpt" : "rtept");
     if (elements.length < 2 || elements.length > 10000) throw new Error("코스는 2~10,000개의 지점을 포함해야 해요.");
     const points = Array.from(elements, element => {
         const latitude = element.getAttribute("lat"), longitude = element.getAttribute("lon");
@@ -36,7 +37,9 @@ export function parseGpx(xml: string, fallbackName = "나의 산행 코스"): Hi
         if (!valid(point)) throw new Error("코스에 올바르지 않은 좌표가 있어요.");
         return point;
     });
-    const name = document.getElementsByTagNameNS("*", "name")[0]?.textContent?.trim() || fallbackName;
+    // 문서 첫 <name>은 작성자·웨이포인트 이름일 수 있어 트랙/경로 자신의 이름 → 메타데이터 이름 순으로 찾는다
+    const childName = (parent: Element | null | undefined) => parent ? Array.from(parent.childNodes).find((node): node is Element => node.nodeType === 1 && (node as Element).localName === "name")?.textContent?.trim() : undefined;
+    const name = childName(container) || childName(document.getElementsByTagNameNS("*", "metadata")[0]) || fallbackName;
     return {name: name.slice(0, 80), points};
 }
 
