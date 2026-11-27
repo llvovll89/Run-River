@@ -782,6 +782,7 @@ export default function RunningPage() {
                 gap_adjustment_count: adjustedGapCount,
                 gap_adjustment_auto_enabled: profile.autoApplyGapAdjustment,
                 duration_seconds: finalElapsed,
+                finishedAt: Date.now(),
                 pace: calcPace(effectiveDistance, finalElapsed),
                 activity_type: config.activityType,
                 pathPoints,

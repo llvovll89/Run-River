@@ -102,6 +102,7 @@ export async function saveRunningRecord(record: {
     altitude_end_m?: number | null;
     elevation_gain_m?: number | null;
     elevation_loss_m?: number | null;
+    created_at?: string;
 }) {
     assertEnv();
     const supabase = getClient();

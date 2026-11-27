@@ -3,15 +3,9 @@
 import {useEffect, useState} from "react";
 import {useRouter} from "next/navigation";
 import {getSupabaseBrowserClient} from "@/lib/supabaseClient";
+import {sanitizeNextPath} from "@/lib/safeRedirect";
 
 type AuthMode = "login" | "signup";
-
-function sanitizeNextPath(raw: string | null): string {
-    if (!raw) return "/";
-    const value = raw.trim();
-    if (!value.startsWith("/") || value.startsWith("//")) return "/";
-    return value;
-}
 
 function toKoreanAuthError(rawMessage: string, mode: AuthMode): string {
     const message = rawMessage.toLowerCase();

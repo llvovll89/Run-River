@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import type { RunningRecord } from "@/types";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { formatDuration, formatPace, calcPace } from "@/lib/utils";
+import { formatDuration, formatPace, calcPace, dayKey } from "@/lib/utils";
 
 interface Props {
   records: RunningRecord[];
@@ -20,7 +20,7 @@ function getLast7Days(): { date: string; label: string }[] {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
     return {
-      date: d.toISOString().slice(0, 10),
+      date: dayKey(d),
       label: ["일", "월", "화", "수", "목", "금", "토"][d.getDay()],
     };
   });
@@ -32,9 +32,10 @@ function getCurrentMonthDays(): { date: string; label: string }[] {
   const month = now.getMonth();
   const today = now.getDate();
   return Array.from({ length: today }, (_, i) => {
-    const d = new Date(year, month, i + 1);
+    // 정오 기준으로 만들어 시간대 변환 시 날짜가 넘어가지 않게 한다
+    const d = new Date(year, month, i + 1, 12);
     return {
-      date: d.toISOString().slice(0, 10),
+      date: dayKey(d),
       label: String(i + 1),
     };
   });
@@ -57,7 +58,7 @@ export default function WeeklyChart({ records }: Props) {
   const days = getLast7Days();
   const weekData = days.map(({ date, label }) => {
     const km = records
-      .filter((r) => r.created_at.slice(0, 10) === date)
+      .filter((r) => dayKey(r.created_at) === date)
       .reduce((s, r) => s + r.distance_km, 0);
     return { label, km: parseFloat(km.toFixed(2)) };
   });
@@ -65,18 +66,15 @@ export default function WeeklyChart({ records }: Props) {
   const monthDays = getCurrentMonthDays();
   const monthData = monthDays.map(({ date, label }) => {
     const km = records
-      .filter((r) => r.created_at.slice(0, 10) === date)
+      .filter((r) => dayKey(r.created_at) === date)
       .reduce((s, r) => s + r.distance_km, 0);
     return { label, km: parseFloat(km.toFixed(2)) };
   });
 
   const weekTotal = weekData.reduce((s, d) => s + d.km, 0);
   const monthTotal = monthData.reduce((s, d) => s + d.km, 0);
-  const monthRecords = records.filter((r) => {
-    const now = new Date();
-    const d = new Date(r.created_at);
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  });
+  const currentMonth = dayKey(new Date()).slice(0, 7);
+  const monthRecords = records.filter((r) => dayKey(r.created_at).slice(0, 7) === currentMonth);
   const monthAvgPace =
     monthRecords.length > 0
       ? calcPace(

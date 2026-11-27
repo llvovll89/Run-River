@@ -1,15 +1,27 @@
+// 서비스 기준 시간대: 서버 컴포넌트(UTC)와 브라우저가 같은 날짜로 묶도록 명시한다
+export const APP_TIME_ZONE = "Asia/Seoul";
+
+const dayKeyFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+// KST 기준 "YYYY-MM-DD" — created_at(UTC ISO)을 slice(0, 10)으로 자르면 오전 9시 이전 기록이 전날로 묶인다
+export function dayKey(value: Date | string): string {
+  return dayKeyFormatter.format(typeof value === "string" ? new Date(value) : value);
+}
+
 export function formatDateFull(date: Date): string {
   return date.toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric", weekday: "short",
+    year: "numeric", month: "long", day: "numeric", weekday: "short", timeZone: APP_TIME_ZONE,
   });
 }
 
 export function formatDateShort(date: Date): string {
-  return date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" });
+  return date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short", timeZone: APP_TIME_ZONE });
 }
 
 export function formatTime(date: Date): string {
-  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: APP_TIME_ZONE });
 }
 
 export function formatDuration(seconds: number): string {

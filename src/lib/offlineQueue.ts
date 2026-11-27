@@ -23,6 +23,7 @@ export interface SaveRecordPayload {
   altitude_end_m?: number | null;
   elevation_gain_m?: number | null;
   elevation_loss_m?: number | null;
+  created_at?: string;
 }
 
 export interface PendingRecord {
